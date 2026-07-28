@@ -15,6 +15,26 @@ Diese Datei ist für jedes Arbeitspaket verbindlich.
 - Kein Secret in Code, Commit, Testdaten, Screenshot oder Log.
 - Jede Änderung benötigt passende Tests.
 
+## Lokale Entwicklungsdienste ohne Docker
+
+Für Umgebungen ohne Docker (z. B. Distrobox/Bazzite-Setups ohne systemd als
+PID 1) steht `scripts/dev-services.sh` bereit, um PostgreSQL und Redis/Valkey
+manuell zu starten, zu stoppen und deren Status zu prüfen:
+
+```bash
+./scripts/dev-services.sh start
+./scripts/dev-services.sh status
+./scripts/dev-services.sh stop
+```
+
+Voraussetzung: PostgreSQL und Valkey (Redis-kompatibel) sind lokal installiert
+und `PGDATA` wurde bereits via `initdb` initialisiert. Agenten und
+Entwickler, die lokale Datenbank-Setups einrichten oder Migrationen ausführen,
+sollen dieses Skript nutzen bzw. erweitern, statt eigene Ad-hoc-Startbefehle
+zu erfinden. Docker Compose bleibt der bevorzugte Weg für alle Umgebungen, in
+denen Docker verfügbar ist; dieses Skript ist ausschließlich der Fallback für
+Docker-lose lokale Entwicklungsumgebungen.
+
 ## Standardablauf
 
 1. `git checkout main && git pull --ff-only`
