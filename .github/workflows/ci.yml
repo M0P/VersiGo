@@ -57,8 +57,8 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma Client
         run: pnpm exec prisma generate --schema prisma/schema.prisma
