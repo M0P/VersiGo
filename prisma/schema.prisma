@@ -1,0 +1,217 @@
+// Insura – Prisma Schema
+// AP2 Scope: nur technische Kernstrukturen.
+// Fachliche Feature-Slices ergaenzen eigene Modelle in spaeteren
+// Arbeitspaketen, ohne dieses Kern-Schema fachlich zu erweitern.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Mandantentrennung -----------------------------------------------------
+
+model Household {
+  id               String   @id @default(uuid())
+  name             String
+  defaultCurrency  String   @default("EUR")
+  createdAt        DateTime @default(now())
+  archivedAt       DateTime?
+
+  memberships             HouseholdMembership[]
+  objectShares            ObjectShare[]
+  integrationSettings     HouseholdIntegrationSetting[]
+  featureFlags            HouseholdFeatureFlag[]
+
+  @@map("households")
+}
+
+// --- Identitaet (externe OIDC-Subjekt-Referenz) -----------------------------
+//
+// oidcSubject ist gemaess OIDC-Spezifikation nur innerhalb eines Issuers
+// eindeutig ("sub" ist issuer-scoped). Zwei unterschiedliche Provider
+// koennen denselben Subject-Wert vergeben. Die Eindeutigkeit wird daher
+// ausschliesslich ueber die Kombination (oidcIssuer, oidcSubject)
+// hergestellt, niemals ueber oidcSubject allein.
+//
+// HINWEIS Migration: Bestandsdaten aus der ersten AP2-Migration hatten
+// keinen oidcIssuer. Die Migration befuellt diese Datensaetze mit dem
+// Platzhalter 'unknown'. Vor dem produktiven OIDC-Rollout muss ein
+// Datenmigrationsskript diese Platzhalter durch den tatsaechlichen
+// Issuer ersetzen.
+
+model User {
+  id           String   @id @default(uuid())
+  oidcIssuer   String
+  oidcSubject  String
+  email        String   @unique
+  displayName  String
+  locale       String   @default("de-DE")
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime @default(now())
+
+  memberships  HouseholdMembership[]
+  auditEvents  AuditEvent[]
+
+  @@unique([oidcIssuer, oidcSubject])
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+// --- Rollenbasis auf Household-Ebene ----------------------------------------
+
+model HouseholdMembership {
+  id          String   @id @default(uuid())
+  householdId String
+  userId      String
+  role        HouseholdRole
+  createdAt   DateTime @default(now())
+
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sourceShares ObjectShare[] @relation("SourceMembership")
+  targetShares ObjectShare[] @relation("TargetMembership")
+
+  @@unique([householdId, userId])
+  @@index([householdId])
+  @@index([userId])
+  @@map("household_memberships")
+}
+
+enum HouseholdRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// --- Objektbezogene Freigaben (technische Grundlage) ------------------------
+//
+// sourceUserId und targetUserId werden NICHT direkt gegen users referenziert,
+// sondern ueber zusammengesetzte Fremdschluessel gegen
+// household_memberships(householdId, userId). Damit erzwingt die Datenbank,
+// dass beide beteiligten Nutzer tatsaechlich aktive Mitglieder desselben
+// Households sind. Eine Freigabe ausserhalb der Household-Grenze ist auf
+// Datenbankebene unmoeglich, nicht nur ueber Anwendungslogik geprueft.
+
+model ObjectShare {
+  id            String   @id @default(uuid())
+  householdId   String
+  sourceUserId  String
+  targetUserId  String
+  scopeType     ObjectShareScopeType
+  scopeRef      String?
+  permission    ObjectSharePermission
+  createdAt     DateTime @default(now())
+
+  household        Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  sourceMembership  HouseholdMembership @relation("SourceMembership", fields: [householdId, sourceUserId], references: [householdId, userId], onDelete: Cascade)
+
+  targetMembership  HouseholdMembership @relation("TargetMembership", fields: [householdId, targetUserId], references: [householdId, userId], onDelete: Cascade)
+
+  @@index([householdId])
+  @@index([sourceUserId])
+  @@index([targetUserId])
+  @@map("object_shares")
+}
+
+enum ObjectShareScopeType {
+  INSURANCE
+  DOCUMENT
+  CATEGORY
+  ALL_OWNED
+}
+
+enum ObjectSharePermission {
+  READ
+  WRITE
+}
+
+// --- Settings-Store fuer Integrationen und Feature-Flags --------------------
+//
+// Globale und Household-spezifische Werte werden in getrennten Modellen
+// gefuehrt statt ueber ein optionales householdId-Feld mit zusaetzlichem
+// scopeKey-Unterscheidungsmerkmal. Das schliesst eine versehentliche
+// Kollision zwischen Household-Settings und globalen Settings beim
+// Vergessen eines Scope-Feldes von vornherein aus.
+
+model GlobalIntegrationSetting {
+  id             String   @id @default(uuid())
+  key            String   @unique
+  valueEncrypted String?
+  valuePlain     String?
+  isSecret       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("global_integration_settings")
+}
+
+model HouseholdIntegrationSetting {
+  id             String   @id @default(uuid())
+  householdId    String
+  key            String
+  valueEncrypted String?
+  valuePlain     String?
+  isSecret       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  household      Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, key])
+  @@index([householdId])
+  @@map("household_integration_settings")
+}
+
+model GlobalFeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("global_feature_flags")
+}
+
+model HouseholdFeatureFlag {
+  id          String   @id @default(uuid())
+  householdId String
+  key         String
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, key])
+  @@index([householdId])
+  @@map("household_feature_flags")
+}
+
+// --- Audit-Event-Grundstruktur ----------------------------------------------
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  actorUserId String?
+  entityType String
+  entityId   String
+  action     String
+  diffJson   Json?
+  createdAt  DateTime @default(now())
+
+  actorUser  User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@map("audit_events")
+}

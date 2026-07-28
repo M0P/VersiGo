@@ -10,6 +10,35 @@ jobs:
   verify:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_DB: insura_ci
+          POSTGRES_USER: insura_ci
+          POSTGRES_PASSWORD: insura_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U insura_ci -d insura_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://insura_ci:insura_ci@localhost:5432/insura_ci
+      REDIS_URL: redis://localhost:6379
+      SETTINGS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,8 +57,14 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm exec prisma generate --schema prisma/schema.prisma
+
+      - name: Apply Prisma migrations
+        run: pnpm exec prisma migrate deploy --schema prisma/schema.prisma
 
       - name: Lint
         run: pnpm lint

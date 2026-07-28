@@ -2,7 +2,7 @@
   "name": "insura",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@11.10.0",
+  "packageManager": "pnpm@11.17.0+sha512.cca3cea332ad254bb84145f966d19f4879615210346fc92c79a047f23a0d7b3cca3c3792f0076ba1f1831d277efbcf0a9119b31a9a60eca7fb3d6231f331ef72",
   "engines": {
     "node": "24.x"
   },
@@ -21,8 +21,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
+    "@prisma/client": "^6.19.3",
     "@types/node": "^24.0.0",
     "eslint": "^9.9.0",
+    "prisma": "^6.19.3",
     "turbo": "^2.0.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.0.0"
