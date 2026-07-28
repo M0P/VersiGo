@@ -1,0 +1,161 @@
+// Insura – Prisma Schema
+// AP2 Scope: nur technische Kernstrukturen.
+// Fachliche Feature-Slices ergaenzen eigene Modelle in spaeteren
+// Arbeitspaketen, ohne dieses Kern-Schema fachlich zu erweitern.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Mandantentrennung -----------------------------------------------------
+
+model Household {
+  id               String   @id @default(uuid())
+  name             String
+  defaultCurrency  String   @default("EUR")
+  createdAt        DateTime @default(now())
+  archivedAt       DateTime?
+
+  memberships      HouseholdMembership[]
+  integrationSettings IntegrationSetting[]
+  featureFlags     FeatureFlag[]
+
+  @@map("households")
+}
+
+// --- Identitaet (externe OIDC-Subjekt-Referenz) -----------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  oidcSubject  String   @unique
+  email        String   @unique
+  displayName  String
+  locale       String   @default("de-DE")
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime @default(now())
+
+  memberships  HouseholdMembership[]
+  sourceShares ObjectShare[] @relation("SourceUser")
+  targetShares ObjectShare[] @relation("TargetUser")
+  auditEvents  AuditEvent[]
+
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+// --- Rollenbasis auf Household-Ebene ----------------------------------------
+
+model HouseholdMembership {
+  id          String   @id @default(uuid())
+  householdId String
+  userId      String
+  role        HouseholdRole
+  createdAt   DateTime @default(now())
+
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@index([householdId])
+  @@index([userId])
+  @@map("household_memberships")
+}
+
+enum HouseholdRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// --- Objektbezogene Freigaben (technische Grundlage) ------------------------
+
+model ObjectShare {
+  id            String   @id @default(uuid())
+  sourceUserId  String
+  targetUserId  String
+  scopeType     ObjectShareScopeType
+  scopeRef      String?
+  permission    ObjectSharePermission
+  createdAt     DateTime @default(now())
+
+  sourceUser    User @relation("SourceUser", fields: [sourceUserId], references: [id], onDelete: Cascade)
+  targetUser    User @relation("TargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@index([sourceUserId])
+  @@index([targetUserId])
+  @@map("object_shares")
+}
+
+enum ObjectShareScopeType {
+  INSURANCE
+  DOCUMENT
+  CATEGORY
+  ALL_OWNED
+}
+
+enum ObjectSharePermission {
+  READ
+  WRITE
+}
+
+// --- Settings-Store fuer Integrationen und Feature-Flags --------------------
+
+model IntegrationSetting {
+  id             String   @id @default(uuid())
+  householdId    String?
+  key            String
+  valueEncrypted String?
+  valuePlain     String?
+  isSecret       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  household      Household? @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, key])
+  @@index([householdId])
+  @@map("integration_settings")
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  householdId String?
+  key         String
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household   Household? @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, key])
+  @@index([householdId])
+  @@map("feature_flags")
+}
+
+// --- Audit-Event-Grundstruktur ----------------------------------------------
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  actorUserId String?
+  entityType String
+  entityId   String
+  action     String
+  diffJson   Json?
+  createdAt  DateTime @default(now())
+
+  actorUser  User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@map("audit_events")
+}

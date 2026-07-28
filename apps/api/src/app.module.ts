@@ -1,4 +1,12 @@
 import { Module } from '@nestjs/common';
+import {
+  ConfigFoundationModule,
+  DatabaseModule,
+  HealthFoundationModule,
+  CapabilityFlagsModule,
+  EncryptionModule,
+  QueueFoundationModule,
+} from '@insura/foundation';
 import { AdminSettingsModule } from './features/admin-settings/admin-settings.module';
 import { AiAssistModule } from './features/ai-assist/ai-assist.module';
 import { AuditModule } from './features/audit/audit.module';
@@ -11,6 +19,15 @@ import { PortalConnectorsModule } from './features/portal-connectors/portal-conn
 
 @Module({
   imports: [
+    // Technische Foundations zuerst, global verfuegbar
+    ConfigFoundationModule,
+    DatabaseModule,
+    EncryptionModule,
+    CapabilityFlagsModule,
+    QueueFoundationModule,
+    HealthFoundationModule,
+
+    // Fachliche Feature-Slices (weiterhin leer bis zu ihrem jeweiligen AP)
     IdentityModule,
     PolicyRegistryModule,
     DocumentsModule,

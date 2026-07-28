@@ -1,25 +1,23 @@
 {
-  "name": "@insura/api",
+  "name": "@insura/worker",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "nest start --watch",
+    "dev": "ts-node-dev --respawn src/main.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "start": "node dist/main.js",
-    "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@insura/foundation": "workspace:*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
-    "@nestjs/platform-express": "^11.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.7",
-    "vitest": "^2.1.8"
+    "ts-node-dev": "^2.0.0"
   }
 }
