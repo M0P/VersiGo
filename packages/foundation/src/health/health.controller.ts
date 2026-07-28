@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { DatabaseService } from '../database';
+import { RedisHealthService } from '../redis-health';
 import { CapabilityFlagsService } from '../capabilities';
 
 /**
@@ -12,6 +13,7 @@ import { CapabilityFlagsService } from '../capabilities';
 export class HealthController {
   constructor(
     private readonly db: DatabaseService,
+    private readonly redisHealth: RedisHealthService,
     private readonly capabilities: CapabilityFlagsService,
   ) {}
 
@@ -24,13 +26,20 @@ export class HealthController {
   async ready(): Promise<{
     status: 'ready' | 'degraded';
     database: 'up' | 'down';
+    redis: 'up' | 'down';
     capabilities: Record<string, boolean>;
   }> {
-    const databaseHealthy = await this.db.isHealthy();
+    const [databaseHealthy, redisHealthy] = await Promise.all([
+      this.db.isHealthy(),
+      this.redisHealth.isHealthy(),
+    ]);
+
+    const allHealthy = databaseHealthy && redisHealthy;
 
     return {
-      status: databaseHealthy ? 'ready' : 'degraded',
+      status: allHealthy ? 'ready' : 'degraded',
       database: databaseHealthy ? 'up' : 'down',
+      redis: redisHealthy ? 'up' : 'down',
       capabilities: this.capabilities.snapshot(),
     };
   }

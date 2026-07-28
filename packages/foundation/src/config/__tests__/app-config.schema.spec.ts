@@ -40,4 +40,15 @@ describe('parseAppConfig', () => {
     const config = parseAppConfig(baseEnv);
     expect(config.NODE_ENV).toBe('development');
   });
+
+  it('wirft einen Fehler bei ungueltigem Boolean-String statt stillschweigend false zu setzen', () => {
+    const env = { ...baseEnv, AI_ENABLED: 'flase' };
+    expect(() => parseAppConfig(env)).toThrow(/AI_ENABLED/);
+  });
+
+  it('akzeptiert Boolean-Strings case-insensitive', () => {
+    const env = { ...baseEnv, AI_ENABLED: 'TRUE' };
+    const config = parseAppConfig(env);
+    expect(config.AI_ENABLED).toBe(true);
+  });
 });

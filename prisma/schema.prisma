@@ -21,9 +21,10 @@ model Household {
   createdAt        DateTime @default(now())
   archivedAt       DateTime?
 
-  memberships      HouseholdMembership[]
-  integrationSettings IntegrationSetting[]
-  featureFlags     FeatureFlag[]
+  memberships          HouseholdMembership[]
+  objectShares          ObjectShare[]
+  integrationSettings   IntegrationSetting[]
+  featureFlags          FeatureFlag[]
 
   @@map("households")
 }
@@ -78,9 +79,16 @@ enum HouseholdRole {
 }
 
 // --- Objektbezogene Freigaben (technische Grundlage) ------------------------
+//
+// householdId ist Pflichtfeld: Freigaben sind ausschliesslich innerhalb
+// desselben Households gueltig. Anwendungsseitige Services muessen beim
+// Erzeugen einer Freigabe pruefen, dass sourceUser und targetUser aktive
+// Mitglieder dieses Households sind (Business-Logik folgt in spaeteren
+// Arbeitspaketen, hier nur die technische Grundstruktur).
 
 model ObjectShare {
   id            String   @id @default(uuid())
+  householdId   String
   sourceUserId  String
   targetUserId  String
   scopeType     ObjectShareScopeType
@@ -88,9 +96,11 @@ model ObjectShare {
   permission    ObjectSharePermission
   createdAt     DateTime @default(now())
 
+  household     Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   sourceUser    User @relation("SourceUser", fields: [sourceUserId], references: [id], onDelete: Cascade)
   targetUser    User @relation("TargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
 
+  @@index([householdId])
   @@index([sourceUserId])
   @@index([targetUserId])
   @@map("object_shares")
@@ -109,10 +119,16 @@ enum ObjectSharePermission {
 }
 
 // --- Settings-Store fuer Integrationen und Feature-Flags --------------------
+//
+// scopeKey ist NICHT nullable: PostgreSQL behandelt NULL-Werte in
+// Unique-Constraints als paarweise verschieden, wodurch mehrere globale
+// Eintraege mit demselben key entstehen koennten. Globale Werte nutzen
+// den festen Wert "global" statt householdId=NULL.
 
 model IntegrationSetting {
   id             String   @id @default(uuid())
   householdId    String?
+  scopeKey       String   @default("global")
   key            String
   valueEncrypted String?
   valuePlain     String?
@@ -122,7 +138,7 @@ model IntegrationSetting {
 
   household      Household? @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
-  @@unique([householdId, key])
+  @@unique([scopeKey, key])
   @@index([householdId])
   @@map("integration_settings")
 }
@@ -130,6 +146,7 @@ model IntegrationSetting {
 model FeatureFlag {
   id          String   @id @default(uuid())
   householdId String?
+  scopeKey    String   @default("global")
   key         String
   enabled     Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -137,7 +154,7 @@ model FeatureFlag {
 
   household   Household? @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
-  @@unique([householdId, key])
+  @@unique([scopeKey, key])
   @@index([householdId])
   @@map("feature_flags")
 }
