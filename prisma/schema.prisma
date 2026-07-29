@@ -320,15 +320,21 @@ model PolicyCostEntry {
 }
 
 model PolicyDocument {
-  id           String   @id @default(uuid())
-  policyId     String
-  storageType  DocumentStorageType
-  fileName     String
-  mimeType     String?
-  checksum     String?
-  storageRef   String?
-  documentDate DateTime?
-  category     String?
+  id               String               @id @default(uuid())
+  policyId         String
+  storageType      DocumentStorageType  @default(INTERNAL)
+  fileName         String
+  mimeType         String?
+  fileSize         Int?
+  checksum         String?
+  storageRef       String?
+  documentDate     DateTime?
+  category         String?
+  documentVersion  Int                  @default(1)
+  supersededBy     String?
+  createdByUserId  String?
+  uploadedAt       DateTime             @default(now())
+  archivedAt       DateTime?
 
   policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
 
