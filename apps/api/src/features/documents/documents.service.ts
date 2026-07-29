@@ -19,7 +19,7 @@ const ALLOWED_MIME_TYPES = [
   'text/csv',
 ];
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+export const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
@@ -88,11 +88,14 @@ export class DocumentsService {
     try {
       await fs.mkdir(this.storagePath, { recursive: true });
     } catch (err) {
-      this.logger.warn(`Storage path creation failed: ${(err as Error).message}`);
+      this.logger.error(`Storage path creation failed: ${(err as Error).message}`);
+      throw err;
     }
   }
 
   private async storeFile(policyId: string, documentId: string, buffer: Buffer): Promise<string> {
+    this.assertValidId(policyId, 'policyId');
+    this.assertValidId(documentId, 'documentId');
     const dir = this.resolveSafePath(policyId, documentId);
     await fs.mkdir(dir, { recursive: true });
     const filePath = path.join(dir, documentId);
@@ -144,6 +147,10 @@ export class DocumentsService {
           createdByUserId: userId,
         },
       });
+    }).catch((err) => {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`upload document (phase 1) failed: ${err.message}`, err.stack);
+      throw err;
     });
 
     let storageRef: string;
@@ -179,6 +186,9 @@ export class DocumentsService {
       });
 
       return updated;
+    }).catch((err) => {
+      this.logger.error(`upload document (phase 2) failed: ${err.message}`, err.stack);
+      throw err;
     });
   }
 
@@ -246,6 +256,10 @@ export class DocumentsService {
       });
 
       return document;
+    }).catch((err) => {
+      if (err instanceof NotFoundException) throw err;
+      this.logger.error(`update document ${docId} failed: ${err.message}`, err.stack);
+      throw err;
     });
   }
 
@@ -277,6 +291,10 @@ export class DocumentsService {
       });
 
       return { success: true };
+    }).catch((err) => {
+      if (err instanceof NotFoundException) throw err;
+      this.logger.error(`remove document ${docId} failed: ${err.message}`, err.stack);
+      throw err;
     });
   }
 }

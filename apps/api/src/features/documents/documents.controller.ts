@@ -19,7 +19,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { HouseholdRole } from '@prisma/client';
 import { Response } from 'express';
 import * as fs from 'fs';
-import { DocumentsService } from './documents.service';
+import { DocumentsService, MAX_FILE_SIZE } from './documents.service';
 import type { UploadedFile } from './documents.types';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
@@ -48,7 +48,7 @@ export class DocumentsController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 20 * 1024 * 1024 }),
+          new MaxFileSizeValidator({ maxSize: MAX_FILE_SIZE }),
         ],
       }),
     )
@@ -135,6 +135,7 @@ export class DocumentsController {
         'Content-Type': document.mimeType || 'application/octet-stream',
         'Content-Disposition': `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
         'Content-Length': stat.size.toString(),
+        'Content-Security-Policy': "default-src 'none'",
       });
 
       const stream = fs.createReadStream(filePath);
