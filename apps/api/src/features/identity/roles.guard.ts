@@ -49,7 +49,6 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Rolle reicht fuer diese Aktion nicht aus');
     }
 
-    request.householdMembership = membership;
     return true;
   }
 }

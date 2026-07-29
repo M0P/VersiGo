@@ -51,6 +51,12 @@ export const appConfigSchema = z.object({
   SETTINGS_ENCRYPTION_KEY: z
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, 'SETTINGS_ENCRYPTION_KEY muss ein 32-Byte-Hex-String (64 Zeichen) sein'),
+
+  SESSION_SECRET: z
+    .string()
+    .min(32, 'SESSION_SECRET muss mindestens 32 Zeichen lang sein'),
+
+  OIDC_CALLBACK_URL: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof appConfigSchema>;

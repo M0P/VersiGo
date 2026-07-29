@@ -17,7 +17,8 @@ export class HouseholdMembershipGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const user: AuthenticatedUser = request.user;
-    const householdId: string | undefined = request.params?.householdId;
+    const householdId: string | undefined =
+      request.params?.householdId ?? request.body?.householdId;
 
     if (!householdId) return true;
     if (!user) throw new ForbiddenException('Nicht authentifiziert');

@@ -9,52 +9,42 @@ type MembershipRecord = {
   role: HouseholdRole;
 };
 
-type FakeDb = {
-  client: {
-    householdMembership: {
-      findUnique: ReturnType<typeof vi.fn>;
-    };
+function createMockDb(memberships: MembershipRecord[]) {
+  return {
     user: {
-      findUnique: ReturnType<typeof vi.fn>;
-      upsert: ReturnType<typeof vi.fn>;
-    };
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+    },
+    householdMembership: {
+      findUnique: vi.fn(
+        ({ where }: { where: { householdId_userId: { householdId: string; userId: string } } }) =>
+          Promise.resolve(
+            memberships.find(
+              (m) =>
+                m.householdId === where.householdId_userId.householdId &&
+                m.userId === where.householdId_userId.userId,
+            ) ?? null,
+          ),
+      ),
+    },
   };
-};
+}
 
 describe('Household-Isolation (Integration)', () => {
-  let fakeDb: FakeDb;
-  let authService: AuthService;
-  let guard: HouseholdMembershipGuard;
-
   const householdA = 'household-aaaa';
   const householdB = 'household-bbbb';
   const userA = { id: 'user-aaaa', householdId: householdA, role: HouseholdRole.OWNER };
   const userB = { id: 'user-bbbb', householdId: householdB, role: HouseholdRole.OWNER };
+
+  let guard: HouseholdMembershipGuard;
 
   beforeEach(() => {
     const memberships: MembershipRecord[] = [
       { householdId: householdA, userId: userA.id, role: userA.role },
       { householdId: householdB, userId: userB.id, role: userB.role },
     ];
-
-    fakeDb = {
-      client: {
-        householdMembership: {
-          findUnique: vi.fn(({ where }: { where: { householdId_userId: { householdId: string; userId: string } } }) =>
-            Promise.resolve(
-              memberships.find(
-                (m) =>
-                  m.householdId === where.householdId_userId.householdId &&
-                  m.userId === where.householdId_userId.userId,
-              ) ?? null,
-            ),
-          ),
-        },
-        user: { findUnique: vi.fn(), upsert: vi.fn() },
-      },
-    };
-
-    authService = new AuthService(fakeDb as never);
+    const mockDb = createMockDb(memberships);
+    const authService = new AuthService(mockDb as never);
     guard = new HouseholdMembershipGuard(authService);
   });
 

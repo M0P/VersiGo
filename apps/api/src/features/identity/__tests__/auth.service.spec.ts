@@ -2,29 +2,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthService } from '../auth.service';
 import { UserStatus, HouseholdRole } from '@prisma/client';
 
-type DbMock = {
-  client: {
-    user: { upsert: ReturnType<typeof vi.fn> };
-    householdMembership: { findUnique: ReturnType<typeof vi.fn> };
+function createMockDb() {
+  return {
+    user: {
+      upsert: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    householdMembership: {
+      findUnique: vi.fn(),
+    },
   };
-};
+}
+
+type MockDb = ReturnType<typeof createMockDb>;
 
 describe('AuthService.upsertFromOidcClaims', () => {
-  let dbMock: DbMock;
+  let mockDb: MockDb;
   let service: AuthService;
 
   beforeEach(() => {
-    dbMock = {
-      client: {
-        user: { upsert: vi.fn() },
-        householdMembership: { findUnique: vi.fn() },
-      },
-    };
-    service = new AuthService(dbMock as never);
+    mockDb = createMockDb();
+    service = new AuthService(mockDb as never);
   });
 
   it('upserted User anhand (oidcIssuer, oidcSubject), niemals oidcSubject allein', async () => {
-    dbMock.client.user.upsert.mockResolvedValue({
+    mockDb.user.upsert.mockResolvedValue({
       id: 'user-1',
       email: 'test@example.com',
       displayName: 'Test User',
@@ -40,7 +42,7 @@ describe('AuthService.upsertFromOidcClaims', () => {
       locale: 'de-DE',
     });
 
-    expect(dbMock.client.user.upsert).toHaveBeenCalledWith(
+    expect(mockDb.user.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           oidcIssuer_oidcSubject: {
@@ -53,7 +55,7 @@ describe('AuthService.upsertFromOidcClaims', () => {
   });
 
   it('mappt Memberships aus dem User-Ergebnis korrekt', async () => {
-    dbMock.client.user.upsert.mockResolvedValue({
+    mockDb.user.upsert.mockResolvedValue({
       id: 'user-1',
       email: 'test@example.com',
       displayName: 'Test User',
@@ -79,7 +81,7 @@ describe('AuthService.upsertFromOidcClaims', () => {
   });
 
   it('gleiches oidcSubject bei unterschiedlichem Issuer erzeugt getrennte Lookups', async () => {
-    dbMock.client.user.upsert.mockResolvedValue({
+    mockDb.user.upsert.mockResolvedValue({
       id: 'user-2',
       email: 'other@example.com',
       displayName: 'Other User',
@@ -92,10 +94,18 @@ describe('AuthService.upsertFromOidcClaims', () => {
       oidcSubject: 'sub-123',
       email: 'other@example.com',
       displayName: 'Other User',
-      locale: 'de-DE',
+      locale: 'en-US',
     });
 
-    const callArg = dbMock.client.user.upsert.mock.calls[0][0];
-    expect(callArg.where.oidcIssuer_oidcSubject.oidcIssuer).toBe('https://issuer-b.example.com');
+    expect(mockDb.user.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          oidcIssuer_oidcSubject: {
+            oidcIssuer: 'https://issuer-b.example.com',
+            oidcSubject: 'sub-123',
+          },
+        },
+      }),
+    );
   });
 });

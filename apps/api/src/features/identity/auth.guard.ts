@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { UserStatus } from '@prisma/client';
 import { AuthService } from './auth.service';
 
 export const PUBLIC_ROUTE_KEY = 'isPublicRoute';
@@ -34,7 +35,7 @@ export class SessionAuthGuard implements CanActivate {
     }
 
     const user = await this.authService.findById(userId);
-    if (!user || user.status === 'DISABLED') {
+    if (!user || user.status === UserStatus.DISABLED) {
       throw new UnauthorizedException('Benutzer nicht aktiv');
     }
 

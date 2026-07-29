@@ -7,6 +7,7 @@ const baseEnv = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/insura',
   REDIS_URL: 'redis://localhost:6379',
   SETTINGS_ENCRYPTION_KEY: validKey,
+  SESSION_SECRET: 'a'.repeat(32),
 };
 
 describe('parseAppConfig', () => {

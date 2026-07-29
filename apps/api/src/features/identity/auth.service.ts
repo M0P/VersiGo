@@ -18,71 +18,14 @@ export interface AuthenticatedUser {
   memberships: { householdId: string; role: HouseholdRole }[];
 }
 
-type MembershipRecord = {
-  householdId: string;
-  role: HouseholdRole;
-};
-
-type UserRecord = {
-  id: string;
-  email: string;
-  displayName: string;
-  status: UserStatus;
-  memberships: MembershipRecord[];
-};
-
-type HouseholdMembershipRecord = {
-  householdId: string;
-  userId: string;
-  role: HouseholdRole;
-};
-
-type IdentityDbShape = {
-  user?: {
-    upsert: (args: unknown) => Promise<UserRecord>;
-    findUnique: (args: unknown) => Promise<UserRecord | null>;
-  };
-  householdMembership?: {
-    findUnique: (args: unknown) => Promise<HouseholdMembershipRecord | null>;
-  };
-  client?: {
-    user?: {
-      upsert: (args: unknown) => Promise<UserRecord>;
-      findUnique: (args: unknown) => Promise<UserRecord | null>;
-    };
-    householdMembership?: {
-      findUnique: (args: unknown) => Promise<HouseholdMembershipRecord | null>;
-    };
-  };
-};
-
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly dbShape: IdentityDbShape;
 
-  constructor(private readonly db: DatabaseService) {
-    this.dbShape = this.db as unknown as IdentityDbShape;
-  }
-
-  private get userRepo() {
-    const repo = this.dbShape.user ?? this.dbShape.client?.user;
-    if (!repo) {
-      throw new Error('Identity user repository nicht verfügbar');
-    }
-    return repo;
-  }
-
-  private get membershipRepo() {
-    const repo = this.dbShape.householdMembership ?? this.dbShape.client?.householdMembership;
-    if (!repo) {
-      throw new Error('Identity householdMembership repository nicht verfügbar');
-    }
-    return repo;
-  }
+  constructor(private readonly db: DatabaseService) {}
 
   async upsertFromOidcClaims(input: OidcClaimsInput): Promise<AuthenticatedUser> {
-    const user = await this.userRepo.upsert({
+    const user = await this.db.user.upsert({
       where: {
         oidcIssuer_oidcSubject: {
           oidcIssuer: input.oidcIssuer,
@@ -113,21 +56,24 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       status: user.status,
-      memberships: user.memberships.map((m: MembershipRecord) => ({
+      memberships: user.memberships.map((m) => ({
         householdId: m.householdId,
         role: m.role,
       })),
     };
   }
 
-  async getMembership(userId: string, householdId: string): Promise<HouseholdMembershipRecord | null> {
-    return this.membershipRepo.findUnique({
+  async getMembership(
+    userId: string,
+    householdId: string,
+  ): Promise<{ householdId: string; userId: string; role: HouseholdRole } | null> {
+    return this.db.householdMembership.findUnique({
       where: { householdId_userId: { householdId, userId } },
     });
   }
 
   async findById(userId: string): Promise<AuthenticatedUser | null> {
-    const user = await this.userRepo.findUnique({
+    const user = await this.db.user.findUnique({
       where: { id: userId },
       include: { memberships: true },
     });
@@ -141,7 +87,7 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       status: user.status,
-      memberships: user.memberships.map((m: MembershipRecord) => ({
+      memberships: user.memberships.map((m) => ({
         householdId: m.householdId,
         role: m.role,
       })),
