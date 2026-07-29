@@ -1,5 +1,5 @@
 // Insura – Prisma Schema
-// AP2 Scope: nur technische Kernstrukturen.
+// AP3 Scope: Insurance Policy Registry + Kernstrukturen.
 // Fachliche Feature-Slices ergaenzen eigene Modelle in spaeteren
 // Arbeitspaketen, ohne dieses Kern-Schema fachlich zu erweitern.
 
@@ -25,6 +25,7 @@ model Household {
   objectShares            ObjectShare[]
   integrationSettings     HouseholdIntegrationSetting[]
   featureFlags            HouseholdFeatureFlag[]
+  policies                InsurancePolicy[]
 
   @@map("households")
 }
@@ -53,8 +54,9 @@ model User {
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime @default(now())
 
-  memberships  HouseholdMembership[]
-  auditEvents  AuditEvent[]
+  memberships   HouseholdMembership[]
+  auditEvents   AuditEvent[]
+  ownedPolicies InsurancePolicy[]
 
   @@unique([oidcIssuer, oidcSubject])
   @@map("users")
@@ -214,4 +216,151 @@ model AuditEvent {
   @@index([entityType, entityId])
   @@index([actorUserId])
   @@map("audit_events")
+}
+
+// --- AP-03: Policy-Registry (Versicherungsverwaltung) ------------------------
+
+model InsurancePolicy {
+  id                   String              @id @default(uuid())
+  householdId          String
+  ownerUserId          String
+  type                 InsurancePolicyType
+  insurerName          String
+  insurerPortalUrl     String?
+  contractNumber       String
+  tariffName           String?
+  status               PolicyStatus        @default(ACTIVE)
+  startDate            DateTime
+  endDate              DateTime?
+  renewalDate          DateTime?
+  noticePeriod         Int?
+  paymentFrequency     PaymentFrequency?
+  premiumAmount        Decimal?
+  deductibleAmount     Decimal?
+  coverageSummaryShort String?
+  source               PolicySource        @default(MANUAL)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  archivedAt           DateTime?
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  ownerUser User      @relation(fields: [ownerUserId], references: [id])
+
+  coveredPersons CoveredPerson[]
+  costEntries    PolicyCostEntry[]
+  documents      PolicyDocument[]
+  portalLinks    PortalAccountLink[]
+
+  @@index([householdId])
+  @@index([ownerUserId])
+  @@map("insurance_policies")
+}
+
+enum InsurancePolicyType {
+  HAFTPFLICHT
+  HAUSRAT
+  RECHTSSCHUTZ
+  KFZ
+  WOHNGEBAEUDE
+  UNFALL
+  LEBEN
+  BERUFSUNFAEHIGKEIT
+  SONSTIGE
+}
+
+enum PolicyStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  ARCHIVED
+}
+
+enum PaymentFrequency {
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUAL
+  ANNUAL
+}
+
+enum PolicySource {
+  MANUAL
+  AI_EXTRACTED
+  IMPORTED
+}
+
+model CoveredPerson {
+  id           String   @id @default(uuid())
+  policyId     String
+  personName   String
+  relationType String
+  birthDate    DateTime?
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@map("covered_persons")
+}
+
+model PolicyCostEntry {
+  id            String           @id @default(uuid())
+  policyId      String
+  validFrom     DateTime
+  validTo       DateTime?
+  grossAmount   Decimal
+  netAmount     Decimal?
+  frequency     PaymentFrequency
+  bookingSource String?
+  note          String?
+  createdAt     DateTime         @default(now())
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@map("policy_cost_entries")
+}
+
+model PolicyDocument {
+  id           String   @id @default(uuid())
+  policyId     String
+  storageType  DocumentStorageType
+  fileName     String
+  mimeType     String?
+  checksum     String?
+  storageRef   String?
+  documentDate DateTime?
+  category     String?
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@map("policy_documents")
+}
+
+enum DocumentStorageType {
+  INTERNAL
+  PAPERLESS_LINK
+}
+
+model PortalAccountLink {
+  id                String      @id @default(uuid())
+  policyId          String
+  providerKey       String
+  portalUrl         String?
+  usernameHint      String?
+  mailboxCapability Boolean     @default(false)
+  lastSyncAt        DateTime?
+  syncStatus        SyncStatus @default(PENDING)
+  createdAt         DateTime    @default(now())
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@map("portal_account_links")
+}
+
+enum SyncStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  DISABLED
 }
