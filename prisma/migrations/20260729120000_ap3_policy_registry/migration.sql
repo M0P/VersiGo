@@ -97,7 +97,7 @@ CREATE TABLE "portal_account_links" (
     "usernameHint" TEXT,
     "mailboxCapability" BOOLEAN NOT NULL DEFAULT false,
     "lastSyncAt" TIMESTAMP(3),
-    "syncStatus" "SyncStatus",
+    "syncStatus" "SyncStatus" DEFAULT 'PENDING',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "portal_account_links_pkey" PRIMARY KEY ("id")

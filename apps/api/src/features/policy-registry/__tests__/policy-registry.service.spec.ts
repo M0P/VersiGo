@@ -3,33 +3,21 @@ import { PolicyRegistryService } from '../policy-registry.service';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 function createMockDb() {
-  return {
-    householdMembership: {
-      findUnique: vi.fn(),
-    },
-    insurancePolicy: {
-      create: vi.fn(),
-      findMany: vi.fn(),
-      findFirst: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-    coveredPerson: {
-      create: vi.fn(),
-      findFirst: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-    portalAccountLink: {
-      create: vi.fn(),
-      findFirst: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
-    },
-    auditEvent: {
-      create: vi.fn(),
-    },
+  const db: Record<string, unknown> & {
+    householdMembership: { findUnique: ReturnType<typeof vi.fn> };
+    insurancePolicy: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+    coveredPerson: { create: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+    portalAccountLink: { create: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+    auditEvent: { create: ReturnType<typeof vi.fn> };
+  } = {
+    householdMembership: { findUnique: vi.fn() },
+    insurancePolicy: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    coveredPerson: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    portalAccountLink: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    auditEvent: { create: vi.fn() },
   };
+  db.$transaction = vi.fn((cb: (tx: typeof db) => unknown) => cb(db));
+  return db;
 }
 
 type MockDb = ReturnType<typeof createMockDb>;

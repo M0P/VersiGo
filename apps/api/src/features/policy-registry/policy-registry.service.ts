@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { DatabaseService } from '@insura/foundation';
 import { CreatePolicyDto, UpdatePolicyDto, CreateCoveredPersonDto, UpdateCoveredPersonDto, CreatePortalAccountLinkDto, UpdatePortalAccountLinkDto } from './dto/policy-registry.dto';
 
 @Injectable()
 export class PolicyRegistryService {
+  private readonly logger = new Logger(PolicyRegistryService.name);
+
   constructor(private readonly db: DatabaseService) {}
 
   private async assertHouseholdAccess(householdId: string, userId: string): Promise<void> {
@@ -18,45 +20,50 @@ export class PolicyRegistryService {
   async create(householdId: string, userId: string, dto: CreatePolicyDto) {
     await this.assertHouseholdAccess(householdId, userId);
 
-    const policy = await this.db.insurancePolicy.create({
-      data: {
-        householdId,
-        ownerUserId: userId,
-        type: dto.type,
-        insurerName: dto.insurerName,
-        insurerPortalUrl: dto.insurerPortalUrl,
-        contractNumber: dto.contractNumber,
-        tariffName: dto.tariffName,
-        status: dto.status ?? 'ACTIVE',
-        startDate: new Date(dto.startDate),
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-        renewalDate: dto.renewalDate ? new Date(dto.renewalDate) : undefined,
-        noticePeriod: dto.noticePeriod,
-        paymentFrequency: dto.paymentFrequency,
-        premiumAmount: dto.premiumAmount,
-        deductibleAmount: dto.deductibleAmount,
-        coverageSummaryShort: dto.coverageSummaryShort,
-        source: dto.source ?? 'MANUAL',
-      },
-      include: {
-        coveredPersons: true,
-        costEntries: true,
-        documents: true,
-        portalLinks: true,
-      },
-    });
+    return this.db.$transaction(async (tx) => {
+      const policy = await tx.insurancePolicy.create({
+        data: {
+          householdId,
+          ownerUserId: userId,
+          type: dto.type,
+          insurerName: dto.insurerName,
+          insurerPortalUrl: dto.insurerPortalUrl,
+          contractNumber: dto.contractNumber,
+          tariffName: dto.tariffName,
+          status: dto.status ?? 'ACTIVE',
+          startDate: new Date(dto.startDate),
+          endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+          renewalDate: dto.renewalDate ? new Date(dto.renewalDate) : undefined,
+          noticePeriod: dto.noticePeriod,
+          paymentFrequency: dto.paymentFrequency,
+          premiumAmount: dto.premiumAmount,
+          deductibleAmount: dto.deductibleAmount,
+          coverageSummaryShort: dto.coverageSummaryShort,
+          source: dto.source ?? 'MANUAL',
+        },
+        include: {
+          coveredPersons: true,
+          costEntries: true,
+          documents: true,
+          portalLinks: true,
+        },
+      });
 
-    await this.db.auditEvent.create({
-      data: {
-        actorUserId: userId,
-        entityType: 'InsurancePolicy',
-        entityId: policy.id,
-        action: 'CREATE',
-        diffJson: { householdId, type: dto.type, insurerName: dto.insurerName },
-      },
-    });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'InsurancePolicy',
+          entityId: policy.id,
+          action: 'CREATE',
+          diffJson: { householdId, type: dto.type, insurerName: dto.insurerName },
+        },
+      });
 
-    return policy;
+      return policy;
+    }).catch((err) => {
+      this.logger.error(`create policy failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   async findAll(householdId: string, userId: string) {
@@ -103,44 +110,49 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
-    const policy = await this.db.insurancePolicy.update({
-      where: { id: policyId },
-      data: {
-        type: dto.type,
-        insurerName: dto.insurerName,
-        insurerPortalUrl: dto.insurerPortalUrl,
-        contractNumber: dto.contractNumber,
-        tariffName: dto.tariffName,
-        status: dto.status,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate !== undefined ? (dto.endDate ? new Date(dto.endDate) : null) : undefined,
-        renewalDate: dto.renewalDate !== undefined ? (dto.renewalDate ? new Date(dto.renewalDate) : null) : undefined,
-        noticePeriod: dto.noticePeriod,
-        paymentFrequency: dto.paymentFrequency,
-        premiumAmount: dto.premiumAmount,
-        deductibleAmount: dto.deductibleAmount,
-        coverageSummaryShort: dto.coverageSummaryShort,
-        source: dto.source,
-      },
-      include: {
-        coveredPersons: true,
-        costEntries: true,
-        documents: true,
-        portalLinks: true,
-      },
-    });
+    return this.db.$transaction(async (tx) => {
+      const policy = await tx.insurancePolicy.update({
+        where: { id: policyId },
+        data: {
+          type: dto.type,
+          insurerName: dto.insurerName,
+          insurerPortalUrl: dto.insurerPortalUrl,
+          contractNumber: dto.contractNumber,
+          tariffName: dto.tariffName,
+          status: dto.status,
+          startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+          endDate: dto.endDate !== undefined ? (dto.endDate ? new Date(dto.endDate) : null) : undefined,
+          renewalDate: dto.renewalDate !== undefined ? (dto.renewalDate ? new Date(dto.renewalDate) : null) : undefined,
+          noticePeriod: dto.noticePeriod,
+          paymentFrequency: dto.paymentFrequency,
+          premiumAmount: dto.premiumAmount,
+          deductibleAmount: dto.deductibleAmount,
+          coverageSummaryShort: dto.coverageSummaryShort,
+          source: dto.source,
+        },
+        include: {
+          coveredPersons: true,
+          costEntries: true,
+          documents: true,
+          portalLinks: true,
+        },
+      });
 
-    await this.db.auditEvent.create({
-      data: {
-        actorUserId: userId,
-        entityType: 'InsurancePolicy',
-        entityId: policyId,
-        action: 'UPDATE',
-        diffJson: { ...dto },
-      },
-    });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'InsurancePolicy',
+          entityId: policyId,
+          action: 'UPDATE',
+          diffJson: { ...dto },
+        },
+      });
 
-    return policy;
+      return policy;
+    }).catch((err) => {
+      this.logger.error(`update policy ${policyId} failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   async remove(householdId: string, userId: string, policyId: string) {
@@ -154,22 +166,27 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
-    await this.db.insurancePolicy.update({
-      where: { id: policyId },
-      data: { archivedAt: new Date() },
-    });
+    return this.db.$transaction(async (tx) => {
+      await tx.insurancePolicy.update({
+        where: { id: policyId },
+        data: { archivedAt: new Date() },
+      });
 
-    await this.db.auditEvent.create({
-      data: {
-        actorUserId: userId,
-        entityType: 'InsurancePolicy',
-        entityId: policyId,
-        action: 'ARCHIVE',
-        diffJson: { archivedAt: new Date().toISOString() },
-      },
-    });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'InsurancePolicy',
+          entityId: policyId,
+          action: 'ARCHIVE',
+          diffJson: { archivedAt: new Date().toISOString() },
+        },
+      });
 
-    return { success: true };
+      return { success: true };
+    }).catch((err) => {
+      this.logger.error(`remove policy ${policyId} failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   async hardDelete(householdId: string, userId: string, policyId: string) {
@@ -183,21 +200,26 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
-    await this.db.insurancePolicy.delete({
-      where: { id: policyId },
-    });
+    return this.db.$transaction(async (tx) => {
+      await tx.insurancePolicy.delete({
+        where: { id: policyId },
+      });
 
-    await this.db.auditEvent.create({
-      data: {
-        actorUserId: userId,
-        entityType: 'InsurancePolicy',
-        entityId: policyId,
-        action: 'DELETE',
-        diffJson: {},
-      },
-    });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'InsurancePolicy',
+          entityId: policyId,
+          action: 'DELETE',
+          diffJson: {},
+        },
+      });
 
-    return { success: true };
+      return { success: true };
+    }).catch((err) => {
+      this.logger.error(`hardDelete policy ${policyId} failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   // Covered Persons
@@ -213,26 +235,31 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
-    const person = await this.db.coveredPerson.create({
-      data: {
-        policyId,
-        personName: dto.personName,
-        relationType: dto.relationType,
-        birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
-      },
-    });
+    return this.db.$transaction(async (tx) => {
+      const person = await tx.coveredPerson.create({
+        data: {
+          policyId,
+          personName: dto.personName,
+          relationType: dto.relationType,
+          birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
+        },
+      });
 
-    await this.db.auditEvent.create({
-      data: {
-        actorUserId: userId,
-        entityType: 'CoveredPerson',
-        entityId: person.id,
-        action: 'CREATE',
-        diffJson: { policyId, personName: dto.personName },
-      },
-    });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'CoveredPerson',
+          entityId: person.id,
+          action: 'CREATE',
+          diffJson: { policyId, personName: dto.personName },
+        },
+      });
 
-    return person;
+      return person;
+    }).catch((err) => {
+      this.logger.error(`addCoveredPerson failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   async updateCoveredPerson(householdId: string, userId: string, policyId: string, personId: string, dto: UpdateCoveredPersonDto) {
@@ -254,26 +281,31 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherte Person nicht gefunden');
     }
 
-    const person = await this.db.coveredPerson.update({
-      where: { id: personId },
-      data: {
-        personName: dto.personName,
-        relationType: dto.relationType,
-        birthDate: dto.birthDate !== undefined ? (dto.birthDate ? new Date(dto.birthDate) : null) : undefined,
-      },
-    });
+    return this.db.$transaction(async (tx) => {
+      const person = await tx.coveredPerson.update({
+        where: { id: personId },
+        data: {
+          personName: dto.personName,
+          relationType: dto.relationType,
+          birthDate: dto.birthDate !== undefined ? (dto.birthDate ? new Date(dto.birthDate) : null) : undefined,
+        },
+      });
 
-    await this.db.auditEvent.create({
-      data: {
-        actorUserId: userId,
-        entityType: 'CoveredPerson',
-        entityId: personId,
-        action: 'UPDATE',
-        diffJson: { ...dto },
-      },
-    });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'CoveredPerson',
+          entityId: personId,
+          action: 'UPDATE',
+          diffJson: { ...dto },
+        },
+      });
 
-    return person;
+      return person;
+    }).catch((err) => {
+      this.logger.error(`updateCoveredPerson ${personId} failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   async removeCoveredPerson(householdId: string, userId: string, policyId: string, personId: string) {
@@ -295,11 +327,24 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherte Person nicht gefunden');
     }
 
-    await this.db.coveredPerson.delete({
-      where: { id: personId },
-    });
+    return this.db.$transaction(async (tx) => {
+      await tx.coveredPerson.delete({ where: { id: personId } });
 
-    return { success: true };
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'CoveredPerson',
+          entityId: personId,
+          action: 'DELETE',
+          diffJson: { policyId },
+        },
+      });
+
+      return { success: true };
+    }).catch((err) => {
+      this.logger.error(`removeCoveredPerson ${personId} failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   // Portal Account Links
@@ -315,28 +360,33 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
-    const link = await this.db.portalAccountLink.create({
-      data: {
-        policyId,
-        providerKey: dto.providerKey,
-        portalUrl: dto.portalUrl,
-        usernameHint: dto.usernameHint,
-        mailboxCapability: dto.mailboxCapability ?? false,
-        syncStatus: dto.syncStatus ?? 'PENDING',
-      },
-    });
+    return this.db.$transaction(async (tx) => {
+      const link = await tx.portalAccountLink.create({
+        data: {
+          policyId,
+          providerKey: dto.providerKey,
+          portalUrl: dto.portalUrl,
+          usernameHint: dto.usernameHint,
+          mailboxCapability: dto.mailboxCapability ?? false,
+          syncStatus: dto.syncStatus ?? 'PENDING',
+        },
+      });
 
-    await this.db.auditEvent.create({
-      data: {
-        actorUserId: userId,
-        entityType: 'PortalAccountLink',
-        entityId: link.id,
-        action: 'CREATE',
-        diffJson: { policyId, providerKey: dto.providerKey },
-      },
-    });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'PortalAccountLink',
+          entityId: link.id,
+          action: 'CREATE',
+          diffJson: { policyId, providerKey: dto.providerKey },
+        },
+      });
 
-    return link;
+      return link;
+    }).catch((err) => {
+      this.logger.error(`createPortalLink failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   async updatePortalLink(householdId: string, userId: string, policyId: string, linkId: string, dto: UpdatePortalAccountLinkDto) {
@@ -358,28 +408,33 @@ export class PolicyRegistryService {
       throw new NotFoundException('Portal-Link nicht gefunden');
     }
 
-    const link = await this.db.portalAccountLink.update({
-      where: { id: linkId },
-      data: {
-        providerKey: dto.providerKey,
-        portalUrl: dto.portalUrl,
-        usernameHint: dto.usernameHint,
-        mailboxCapability: dto.mailboxCapability,
-        syncStatus: dto.syncStatus,
-      },
-    });
+    return this.db.$transaction(async (tx) => {
+      const link = await tx.portalAccountLink.update({
+        where: { id: linkId },
+        data: {
+          providerKey: dto.providerKey,
+          portalUrl: dto.portalUrl,
+          usernameHint: dto.usernameHint,
+          mailboxCapability: dto.mailboxCapability,
+          syncStatus: dto.syncStatus,
+        },
+      });
 
-    await this.db.auditEvent.create({
-      data: {
-        actorUserId: userId,
-        entityType: 'PortalAccountLink',
-        entityId: linkId,
-        action: 'UPDATE',
-        diffJson: { ...dto },
-      },
-    });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'PortalAccountLink',
+          entityId: linkId,
+          action: 'UPDATE',
+          diffJson: { ...dto },
+        },
+      });
 
-    return link;
+      return link;
+    }).catch((err) => {
+      this.logger.error(`updatePortalLink ${linkId} failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 
   async removePortalLink(householdId: string, userId: string, policyId: string, linkId: string) {
@@ -401,10 +456,23 @@ export class PolicyRegistryService {
       throw new NotFoundException('Portal-Link nicht gefunden');
     }
 
-    await this.db.portalAccountLink.delete({
-      where: { id: linkId },
-    });
+    return this.db.$transaction(async (tx) => {
+      await tx.portalAccountLink.delete({ where: { id: linkId } });
 
-    return { success: true };
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'PortalAccountLink',
+          entityId: linkId,
+          action: 'DELETE',
+          diffJson: { policyId },
+        },
+      });
+
+      return { success: true };
+    }).catch((err) => {
+      this.logger.error(`removePortalLink ${linkId} failed: ${err.message}`, err.stack);
+      throw err;
+    });
   }
 }

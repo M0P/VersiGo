@@ -1,5 +1,5 @@
 // Insura – Prisma Schema
-// AP2 Scope: nur technische Kernstrukturen.
+// AP3 Scope: Insurance Policy Registry + Kernstrukturen.
 // Fachliche Feature-Slices ergaenzen eigene Modelle in spaeteren
 // Arbeitspaketen, ohne dieses Kern-Schema fachlich zu erweitern.
 
@@ -349,7 +349,7 @@ model PortalAccountLink {
   usernameHint      String?
   mailboxCapability Boolean     @default(false)
   lastSyncAt        DateTime?
-  syncStatus        SyncStatus?
+  syncStatus        SyncStatus @default(PENDING)
   createdAt         DateTime    @default(now())
 
   policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)

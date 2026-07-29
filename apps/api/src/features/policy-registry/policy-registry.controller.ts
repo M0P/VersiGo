@@ -78,6 +78,16 @@ export class PolicyRegistryController {
     return this.service.remove(householdId, user.id, policyId);
   }
 
+  @Delete(':policyId/hard')
+  @Roles(HouseholdRole.OWNER)
+  async hardDelete(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.hardDelete(householdId, user.id, policyId);
+  }
+
   // Covered Persons
 
   @Post(':policyId/covered-persons')

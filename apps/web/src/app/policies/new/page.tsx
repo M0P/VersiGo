@@ -28,6 +28,7 @@ export default function NewPolicyPage(): ReactElement {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
+      if (res.status === 401) { window.location.href = '/login'; return; }
       if (!res.ok) throw new Error('Fehler beim Erstellen');
       window.location.href = '/policies';
     } catch {

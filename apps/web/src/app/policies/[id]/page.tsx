@@ -37,10 +37,11 @@ export default function PolicyDetailPage(): ReactElement {
   useEffect(() => {
     fetch(`${API_BASE}/households/default/policies/${policyId}`, { credentials: 'include' })
       .then((res) => {
+        if (res.status === 401) { window.location.href = '/login'; return Promise.resolve(null); }
         if (!res.ok) throw new Error('Nicht gefunden');
         return res.json();
       })
-      .then(setPolicy)
+      .then((data) => { if (data) setPolicy(data); })
       .catch(() => setPolicy(null))
       .finally(() => setLoading(false));
   }, [policyId]);
