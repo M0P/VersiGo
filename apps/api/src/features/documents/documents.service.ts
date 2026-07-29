@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
+import { DatabaseService, AppConfigService } from '@insura/foundation';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -20,14 +20,33 @@ const ALLOWED_MIME_TYPES = [
 ];
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
   private readonly storagePath: string;
 
-  constructor(private readonly db: DatabaseService) {
-    this.storagePath = process.env.DOCUMENTS_STORAGE_PATH || './uploads';
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly config: AppConfigService,
+  ) {
+    this.storagePath = config.get('DOCUMENTS_STORAGE_PATH');
+  }
+
+  private assertValidId(id: string, label: string): void {
+    if (!UUID_REGEX.test(id)) {
+      throw new BadRequestException(`${label} ist keine gueltige UUID`);
+    }
+  }
+
+  private resolveSafePath(...segments: string[]): string {
+    const resolved = path.resolve(this.storagePath, ...segments);
+    const root = path.resolve(this.storagePath);
+    if (!resolved.startsWith(root)) {
+      throw new ForbiddenException('Ungueltiger Pfad');
+    }
+    return resolved;
   }
 
   private async assertHouseholdAccess(householdId: string, userId: string): Promise<void> {
@@ -68,13 +87,13 @@ export class DocumentsService {
   private async ensureStoragePath(): Promise<void> {
     try {
       await fs.mkdir(this.storagePath, { recursive: true });
-    } catch {
-      // directory exists
+    } catch (err) {
+      this.logger.warn(`Storage path creation failed: ${(err as Error).message}`);
     }
   }
 
   private async storeFile(policyId: string, documentId: string, buffer: Buffer): Promise<string> {
-    const dir = path.join(this.storagePath, policyId, documentId);
+    const dir = this.resolveSafePath(policyId, documentId);
     await fs.mkdir(dir, { recursive: true });
     const filePath = path.join(dir, documentId);
     await fs.writeFile(filePath, buffer);
@@ -82,7 +101,9 @@ export class DocumentsService {
   }
 
   async getFilePath(policyId: string, documentId: string): Promise<string> {
-    return path.join(this.storagePath, policyId, documentId, documentId);
+    this.assertValidId(policyId, 'policyId');
+    this.assertValidId(documentId, 'documentId');
+    return this.resolveSafePath(policyId, documentId, documentId);
   }
 
   async upload(
@@ -97,6 +118,8 @@ export class DocumentsService {
 
     const checksum = this.computeChecksum(file.buffer);
 
+    await this.ensureStoragePath();
+
     return this.db.$transaction(async (tx) => {
       const existing = await tx.policyDocument.findFirst({
         where: { policyId, checksum, archivedAt: null },
@@ -105,8 +128,6 @@ export class DocumentsService {
       if (existing) {
         throw new BadRequestException('Ein Dokument mit derselben Prüfsumme existiert bereits');
       }
-
-      await this.ensureStoragePath();
 
       const document = await tx.policyDocument.create({
         data: {

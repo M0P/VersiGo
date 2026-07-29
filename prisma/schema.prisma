@@ -54,9 +54,10 @@ model User {
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime @default(now())
 
-  memberships   HouseholdMembership[]
-  auditEvents   AuditEvent[]
-  ownedPolicies InsurancePolicy[]
+  memberships      HouseholdMembership[]
+  auditEvents      AuditEvent[]
+  ownedPolicies    InsurancePolicy[]
+  createdDocuments PolicyDocument[]
 
   @@unique([oidcIssuer, oidcSubject])
   @@map("users")
@@ -336,9 +337,11 @@ model PolicyDocument {
   uploadedAt       DateTime             @default(now())
   archivedAt       DateTime?
 
-  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  policy      InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  createdBy   User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([policyId])
+  @@index([policyId, checksum])
   @@map("policy_documents")
 }
 

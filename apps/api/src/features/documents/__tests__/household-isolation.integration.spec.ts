@@ -3,6 +3,11 @@ import { DocumentsService } from '../documents.service';
 import { ForbiddenException } from '@nestjs/common';
 import type { UploadedFile } from '../documents.types';
 
+vi.mock('fs/promises', () => ({
+  mkdir: vi.fn().mockResolvedValue(undefined),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+}));
+
 function createMockDb() {
   const db: Record<string, unknown> & {
     householdMembership: { findUnique: ReturnType<typeof vi.fn> };
@@ -17,6 +22,15 @@ function createMockDb() {
   };
   db.$transaction = vi.fn((cb: (tx: typeof db) => unknown) => cb(db));
   return db;
+}
+
+function createMockConfig() {
+  return {
+    get: vi.fn((key: string) => {
+      if (key === 'DOCUMENTS_STORAGE_PATH') return '/tmp/uploads';
+      return undefined;
+    }),
+  };
 }
 
 type MembershipCheck = {
@@ -62,7 +76,7 @@ describe('Documents Household-Isolation (Integration)', () => {
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new DocumentsService(mockDb as never);
+    service = new DocumentsService(mockDb as never, createMockConfig() as never);
   });
 
   it('User A laedt Dokument in Household A hoch (erlaubt)', async () => {
