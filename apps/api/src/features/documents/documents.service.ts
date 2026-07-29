@@ -115,12 +115,13 @@ export class DocumentsService {
   ) {
     await this.assertPolicyAccess(householdId, userId, policyId);
     this.validateFile(file);
+    this.assertValidId(policyId, 'policyId');
 
     const checksum = this.computeChecksum(file.buffer);
 
     await this.ensureStoragePath();
 
-    return this.db.$transaction(async (tx) => {
+    const document = await this.db.$transaction(async (tx) => {
       const existing = await tx.policyDocument.findFirst({
         where: { policyId, checksum, archivedAt: null },
       });
@@ -129,7 +130,7 @@ export class DocumentsService {
         throw new BadRequestException('Ein Dokument mit derselben Prüfsumme existiert bereits');
       }
 
-      const document = await tx.policyDocument.create({
+      return tx.policyDocument.create({
         data: {
           policyId,
           storageType: 'INTERNAL',
@@ -143,10 +144,18 @@ export class DocumentsService {
           createdByUserId: userId,
         },
       });
+    });
 
-      const storageRef = await this.storeFile(policyId, document.id, file.buffer);
+    let storageRef: string;
+    try {
+      storageRef = await this.storeFile(policyId, document.id, file.buffer);
+    } catch (err) {
+      await this.db.policyDocument.delete({ where: { id: document.id } }).catch(() => {});
+      throw err;
+    }
 
-      await tx.policyDocument.update({
+    return this.db.$transaction(async (tx) => {
+      const updated = await tx.policyDocument.update({
         where: { id: document.id },
         data: { storageRef },
       });
@@ -169,11 +178,7 @@ export class DocumentsService {
         },
       });
 
-      return tx.policyDocument.findUnique({ where: { id: document.id } });
-    }).catch((err) => {
-      if (err instanceof BadRequestException) throw err;
-      this.logger.error(`upload document failed: ${err.message}`, err.stack);
-      throw err;
+      return updated;
     });
   }
 
@@ -241,10 +246,6 @@ export class DocumentsService {
       });
 
       return document;
-    }).catch((err) => {
-      if (err instanceof NotFoundException) throw err;
-      this.logger.error(`update document ${docId} failed: ${err.message}`, err.stack);
-      throw err;
     });
   }
 
@@ -276,10 +277,6 @@ export class DocumentsService {
       });
 
       return { success: true };
-    }).catch((err) => {
-      if (err instanceof NotFoundException) throw err;
-      this.logger.error(`remove document ${docId} failed: ${err.message}`, err.stack);
-      throw err;
     });
   }
 }

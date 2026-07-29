@@ -12,12 +12,12 @@ function createMockDb() {
   const db: Record<string, unknown> & {
     householdMembership: { findUnique: ReturnType<typeof vi.fn> };
     insurancePolicy: { findFirst: ReturnType<typeof vi.fn> };
-    policyDocument: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+    policyDocument: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
     auditEvent: { create: ReturnType<typeof vi.fn> };
   } = {
     householdMembership: { findUnique: vi.fn() },
     insurancePolicy: { findFirst: vi.fn() },
-    policyDocument: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    policyDocument: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
     auditEvent: { create: vi.fn() },
   };
   db.$transaction = vi.fn((cb: (tx: typeof db) => unknown) => cb(db));
@@ -50,10 +50,10 @@ const mockFile: UploadedFile = {
 describe('DocumentsService', () => {
   let mockDb: MockDb;
   let service: DocumentsService;
-  const householdId = 'household-1';
-  const userId = 'user-1';
-  const policyId = 'policy-1';
-  const docId = 'doc-1';
+  const householdId = '11111111-1111-4111-1111-111111111111';
+  const userId = '22222222-2222-4222-2222-222222222222';
+  const policyId = '33333333-3333-4333-3333-333333333333';
+  const docId = '44444444-4444-4444-4444-444444444444';
 
   beforeEach(() => {
     mockDb = createMockDb();
@@ -78,13 +78,10 @@ describe('DocumentsService', () => {
       });
       mockDb.policyDocument.update.mockResolvedValue({
         id: docId,
-        storageRef: '/tmp/uploads/policy-1/doc-1/doc-1',
-      });
-      mockDb.policyDocument.findUnique.mockResolvedValue({
-        id: docId,
         policyId,
         fileName: 'test.pdf',
         mimeType: 'application/pdf',
+        storageRef: '/tmp/uploads/policy-1/doc-1/doc-1',
       });
 
       const result = await service.upload(householdId, userId, policyId, mockFile, { category: 'vertrag' });

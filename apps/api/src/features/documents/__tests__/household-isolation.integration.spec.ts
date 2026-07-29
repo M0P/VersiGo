@@ -12,12 +12,12 @@ function createMockDb() {
   const db: Record<string, unknown> & {
     householdMembership: { findUnique: ReturnType<typeof vi.fn> };
     insurancePolicy: { findFirst: ReturnType<typeof vi.fn> };
-    policyDocument: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+    policyDocument: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
     auditEvent: { create: ReturnType<typeof vi.fn> };
   } = {
     householdMembership: { findUnique: vi.fn() },
     insurancePolicy: { findFirst: vi.fn() },
-    policyDocument: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    policyDocument: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
     auditEvent: { create: vi.fn() },
   };
   db.$transaction = vi.fn((cb: (tx: typeof db) => unknown) => cb(db));
@@ -52,13 +52,13 @@ const mockFile: UploadedFile = {
 };
 
 describe('Documents Household-Isolation (Integration)', () => {
-  const householdA = 'household-aaaa';
-  const householdB = 'household-bbbb';
-  const policyInA = 'policy-in-a';
-  const policyInB = 'policy-in-b';
-  const docInA = 'doc-in-a';
-  const userA = { id: 'user-aaaa' };
-  const userB = { id: 'user-bbbb' };
+  const householdA = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
+  const householdB = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
+  const policyInA = 'cccccccc-cccc-4ccc-cccc-cccccccccccc';
+  const policyInB = 'dddddddd-dddd-4ddd-dddd-dddddddddddd';
+  const docInA = 'eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee';
+  const userA = { id: '11111111-1111-4111-1111-111111111111' };
+  const userB = { id: '22222222-2222-4222-2222-222222222222' };
 
   let mockDb: ReturnType<typeof createMockDb>;
   let service: DocumentsService;
@@ -89,8 +89,7 @@ describe('Documents Household-Isolation (Integration)', () => {
       checksum: 'abc', storageType: 'INTERNAL',
       documentVersion: 1, createdByUserId: userA.id,
     });
-    mockDb.policyDocument.update.mockResolvedValue({ id: docInA, storageRef: '/tmp/path' });
-    mockDb.policyDocument.findUnique.mockResolvedValue({ id: docInA, fileName: 'test.pdf' });
+    mockDb.policyDocument.update.mockResolvedValue({ id: docInA, policyId: policyInA, fileName: 'test.pdf', storageRef: '/tmp/path' });
 
     const result = await service.upload(householdA, userA.id, policyInA, mockFile, {});
 

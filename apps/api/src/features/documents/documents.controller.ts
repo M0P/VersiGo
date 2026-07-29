@@ -102,11 +102,12 @@ export class DocumentsController {
       });
 
       const stream = fs.createReadStream(filePath);
-      stream.pipe(res);
       stream.on('error', (err) => {
         this.logger.error(`download stream error for doc ${docId}: ${err.message}`);
+        stream.destroy();
         if (!res.headersSent) res.status(500).end();
       });
+      stream.pipe(res);
     } catch (err) {
       if (err instanceof NotFoundException) throw err;
       this.logger.error(`download failed for doc ${docId}: ${(err as Error).message}`);
@@ -137,11 +138,12 @@ export class DocumentsController {
       });
 
       const stream = fs.createReadStream(filePath);
-      stream.pipe(res);
       stream.on('error', (err) => {
         this.logger.error(`preview stream error for doc ${docId}: ${err.message}`);
+        stream.destroy();
         if (!res.headersSent) res.status(500).end();
       });
+      stream.pipe(res);
     } catch (err) {
       if (err instanceof NotFoundException) throw err;
       this.logger.error(`preview failed for doc ${docId}: ${(err as Error).message}`);
