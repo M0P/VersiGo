@@ -177,4 +177,20 @@ describe('DocumentsController', () => {
       controller.download(householdId, policyId, docId, mockUser, res),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it('download erzeugt ReadStream und piped an Response', async () => {
+    const service = createMockService();
+    const controller = new DocumentsController(service as never);
+    service.findOne.mockResolvedValue({ id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' });
+    service.getFilePath.mockResolvedValue('/tmp/test.pdf');
+    const res = createMockRes();
+
+    await controller.download(householdId, policyId, docId, mockUser, res);
+
+    const { createReadStream } = await import('fs');
+    expect(createReadStream).toHaveBeenCalledWith('/tmp/test.pdf');
+    expect(res.set).toHaveBeenCalledWith(
+      expect.objectContaining({ 'Content-Disposition': expect.stringContaining('attachment') }),
+    );
+  });
 });

@@ -39,7 +39,7 @@ export const appConfigSchema = z.object({
 
   STORAGE_ENABLED: booleanFromEnv.default(false),
 
-  DOCUMENTS_STORAGE_PATH: z.string().default('./uploads'),
+  DOCUMENTS_STORAGE_PATH: z.string().min(1).default('./uploads'),
 
   OIDC_ENABLED: booleanFromEnv.default(false),
   OIDC_ISSUER_URL: z.string().optional(),

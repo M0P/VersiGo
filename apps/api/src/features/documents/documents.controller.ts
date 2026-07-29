@@ -40,7 +40,7 @@ export class DocumentsController {
 
   @Post()
   @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE } }))
   async upload(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -79,6 +79,45 @@ export class DocumentsController {
     return this.service.findOne(householdId, user.id, policyId, docId);
   }
 
+  private async streamFile(
+    householdId: string,
+    userId: string,
+    policyId: string,
+    docId: string,
+    disposition: 'inline' | 'attachment',
+    res: Response,
+  ) {
+    try {
+      const document = await this.service.findOne(householdId, userId, policyId, docId);
+      const filePath = await this.service.getFilePath(householdId, userId, policyId, docId);
+
+      const safeName = this.sanitizeFilename(document.fileName);
+      const stat = await fs.promises.stat(filePath);
+
+      const headers: Record<string, string> = {
+        'Content-Type': document.mimeType || 'application/octet-stream',
+        'Content-Disposition': `${disposition}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
+        'Content-Length': stat.size.toString(),
+      };
+      if (disposition === 'inline') {
+        headers['Content-Security-Policy'] = "default-src 'none'";
+      }
+      res.set(headers);
+
+      const stream = fs.createReadStream(filePath);
+      stream.on('error', (err) => {
+        this.logger.error(`${disposition} stream error for doc ${docId}: ${err.message}`);
+        stream.destroy();
+        if (!res.headersSent) res.status(500).end();
+      });
+      stream.pipe(res);
+    } catch (err) {
+      if (err instanceof NotFoundException) throw err;
+      this.logger.error(`${disposition} failed for doc ${docId}: ${(err as Error).message}`);
+      throw err;
+    }
+  }
+
   @Get(':docId/download')
   @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
   async download(
@@ -88,31 +127,7 @@ export class DocumentsController {
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
   ) {
-    try {
-      const document = await this.service.findOne(householdId, user.id, policyId, docId);
-      const filePath = await this.service.getFilePath(policyId, docId);
-
-      const safeName = this.sanitizeFilename(document.fileName);
-      const stat = await fs.promises.stat(filePath);
-
-      res.set({
-        'Content-Type': document.mimeType || 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
-        'Content-Length': stat.size.toString(),
-      });
-
-      const stream = fs.createReadStream(filePath);
-      stream.on('error', (err) => {
-        this.logger.error(`download stream error for doc ${docId}: ${err.message}`);
-        stream.destroy();
-        if (!res.headersSent) res.status(500).end();
-      });
-      stream.pipe(res);
-    } catch (err) {
-      if (err instanceof NotFoundException) throw err;
-      this.logger.error(`download failed for doc ${docId}: ${(err as Error).message}`);
-      throw err;
-    }
+    return this.streamFile(householdId, user.id, policyId, docId, 'attachment', res);
   }
 
   @Get(':docId/preview')
@@ -124,32 +139,7 @@ export class DocumentsController {
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
   ) {
-    try {
-      const document = await this.service.findOne(householdId, user.id, policyId, docId);
-      const filePath = await this.service.getFilePath(policyId, docId);
-
-      const safeName = this.sanitizeFilename(document.fileName);
-      const stat = await fs.promises.stat(filePath);
-
-      res.set({
-        'Content-Type': document.mimeType || 'application/octet-stream',
-        'Content-Disposition': `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
-        'Content-Length': stat.size.toString(),
-        'Content-Security-Policy': "default-src 'none'",
-      });
-
-      const stream = fs.createReadStream(filePath);
-      stream.on('error', (err) => {
-        this.logger.error(`preview stream error for doc ${docId}: ${err.message}`);
-        stream.destroy();
-        if (!res.headersSent) res.status(500).end();
-      });
-      stream.pipe(res);
-    } catch (err) {
-      if (err instanceof NotFoundException) throw err;
-      this.logger.error(`preview failed for doc ${docId}: ${(err as Error).message}`);
-      throw err;
-    }
+    return this.streamFile(householdId, user.id, policyId, docId, 'inline', res);
   }
 
   @Patch(':docId')

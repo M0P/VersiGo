@@ -76,7 +76,7 @@ export class DocumentsService {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      throw new BadRequestException('Datei überschreitet das maximale Limit von 20 MB');
+      throw new BadRequestException(`Datei überschreitet das maximale Limit von ${MAX_FILE_SIZE / 1024 / 1024} MB`);
     }
   }
 
@@ -103,7 +103,8 @@ export class DocumentsService {
     return filePath;
   }
 
-  async getFilePath(policyId: string, documentId: string): Promise<string> {
+  async getFilePath(householdId: string, userId: string, policyId: string, documentId: string): Promise<string> {
+    await this.assertPolicyAccess(householdId, userId, policyId);
     this.assertValidId(policyId, 'policyId');
     this.assertValidId(documentId, 'documentId');
     return this.resolveSafePath(policyId, documentId, documentId);
@@ -118,7 +119,6 @@ export class DocumentsService {
   ) {
     await this.assertPolicyAccess(householdId, userId, policyId);
     this.validateFile(file);
-    this.assertValidId(policyId, 'policyId');
 
     const checksum = this.computeChecksum(file.buffer);
 
@@ -266,7 +266,7 @@ export class DocumentsService {
   async remove(householdId: string, userId: string, policyId: string, docId: string) {
     await this.assertPolicyAccess(householdId, userId, policyId);
 
-    return this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       const existing = await tx.policyDocument.findFirst({
         where: { id: docId, policyId, archivedAt: null },
       });
@@ -296,5 +296,17 @@ export class DocumentsService {
       this.logger.error(`remove document ${docId} failed: ${err.message}`, err.stack);
       throw err;
     });
+
+    const filePath = this.resolveSafePath(policyId, docId, docId);
+    try {
+      await fs.unlink(filePath);
+    } catch (err) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code !== 'ENOENT') {
+        this.logger.error(`remove disk file ${filePath} failed: ${nodeErr.message}`);
+      }
+    }
+
+    return result;
   }
 }

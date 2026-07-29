@@ -6,6 +6,7 @@ import type { UploadedFile } from '../documents.types';
 vi.mock('fs/promises', () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
   writeFile: vi.fn().mockResolvedValue(undefined),
+  unlink: vi.fn().mockResolvedValue(undefined),
 }));
 
 function createMockDb() {
@@ -205,7 +206,7 @@ describe('DocumentsService', () => {
   });
 
   describe('remove', () => {
-    it('archiviert ein Dokument und protokolliert Audit', async () => {
+    it('archiviert ein Dokument, loescht Datei von Platte und protokolliert Audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue({ id: docId, policyId, archivedAt: null });
@@ -221,6 +222,11 @@ describe('DocumentsService', () => {
             action: 'ARCHIVE',
           }),
         }),
+      );
+
+      const { unlink } = await import('fs/promises');
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(policyId),
       );
     });
 

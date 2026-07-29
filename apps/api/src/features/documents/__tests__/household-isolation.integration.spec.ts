@@ -110,9 +110,6 @@ describe('Documents Household-Isolation (Integration)', () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
-    mockDb.insurancePolicy.findFirst.mockResolvedValue({
-      id: policyInA, householdId: householdA,
-    });
 
     await expect(
       service.findAll(householdA, userB.id, policyInA),
@@ -123,9 +120,6 @@ describe('Documents Household-Isolation (Integration)', () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
-    mockDb.insurancePolicy.findFirst.mockResolvedValue({
-      id: policyInA, householdId: householdA,
-    });
 
     await expect(
       service.findOne(householdA, userB.id, policyInA, docInA),
@@ -136,9 +130,6 @@ describe('Documents Household-Isolation (Integration)', () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
-    mockDb.insurancePolicy.findFirst.mockResolvedValue({
-      id: policyInA, householdId: householdA,
-    });
 
     await expect(
       service.updateMetadata(householdA, userB.id, policyInA, docInA, { category: 'geheim' }),
@@ -149,12 +140,19 @@ describe('Documents Household-Isolation (Integration)', () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
-    mockDb.insurancePolicy.findFirst.mockResolvedValue({
-      id: policyInA, householdId: householdA,
-    });
 
     await expect(
       service.remove(householdA, userB.id, policyInA, docInA),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('User B kann keinen Dateipfad in Household A aufloesen (Isolation)', async () => {
+    setupMemberships([
+      { userId: userB.id, householdId: householdB, role: 'OWNER' },
+    ]);
+
+    await expect(
+      service.getFilePath(householdA, userB.id, policyInA, docInA),
     ).rejects.toThrow(ForbiddenException);
   });
 });
