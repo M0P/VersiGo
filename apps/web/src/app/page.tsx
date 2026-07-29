@@ -1,3 +1,4 @@
-export default function Page(): JSX.Element {
+import type { ReactElement } from 'react';
+export default function Page(): ReactElement {
   return <main>Insura scaffold</main>;
 }

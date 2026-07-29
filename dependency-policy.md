@@ -19,3 +19,19 @@ Monatlicher Review via `pnpm outdated -r` und `pnpm audit`. Ergebnisse werden im
 | React | 19.1.0 | offiziell freigegeben mit Next 16 |
 | PostgreSQL | 16.4 | Docker Official Image |
 | Redis | 7.4 | Docker Official Image |
+
+## AP-02-identity-access: neu geprüfte Abhängigkeiten
+
+| Paket | Version | Letztes Release | Security Advisories | Bus-Faktor / Wartung | Lizenz | Ergebnis |
+|---|---|---|---|---|---|---|
+| openid-client | ^6.8.0 | Apr 2026 (6.8.4) | keine offenen kritischen (Snyk-geprüft) | panva, sehr aktiv, 821+ abhängige Projekte | MIT | Zugelassen |
+| @nestjs/passport | ^11.0.5 | Feb 2026 | keine | NestJS-Core-Team, offizielles Modul | MIT | Zugelassen |
+| passport | ^0.7.0 | aktiv gepflegt | keine kritischen | jaredhanson + Community, sehr weite Verbreitung | MIT | Zugelassen |
+| express-session | ^1.19.0 | Jan 2026 | keine offenen (Snyk-geprüft) | expressjs-Organisation | MIT | Zugelassen |
+| cookie-parser | ^1.4.7 | aktiv gepflegt | keine | expressjs-Organisation | MIT | Zugelassen |
+| class-validator | ^0.14.1 | aktiv gepflegt, weite Verbreitung | keine kritischen | typestack, weite Verbreitung | MIT | Zugelassen |
+| class-transformer | ^0.5.1 | aktiv gepflegt | keine kritischen | typestack | MIT | Zugelassen |
+
+### Explizit verworfene Kandidaten
+- **passport-openidconnect** (jaredhanson): letztes Release Feb 2024 (>12 Monate), geringere Aktivität als openid-client. Nicht zugelassen.
+- **passport-jwt**: letztes Release >4 Jahre zurück, kein aktiver Bus-Faktor sichtbar. Nicht zugelassen; JWT-Validierung erfolgt bei Bedarf über @nestjs/jwt.

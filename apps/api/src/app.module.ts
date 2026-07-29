@@ -27,7 +27,7 @@ import { PortalConnectorsModule } from './features/portal-connectors/portal-conn
     QueueFoundationModule,
     HealthFoundationModule,
 
-    // Fachliche Feature-Slices (weiterhin leer bis zu ihrem jeweiligen AP)
+    // Fachliche Feature-Slices
     IdentityModule,
     PolicyRegistryModule,
     DocumentsModule,
