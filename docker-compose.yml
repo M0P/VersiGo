@@ -1,6 +1,9 @@
 services:
+  # ============================================================
+  # Database
+  # ============================================================
   db:
-    image: postgres:16.4-alpine
+    image: docker.io/postgres:16.4-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB muss gesetzt sein}
@@ -15,9 +18,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
+  # ============================================================
+  # Redis (Queue / Cache)
+  # ============================================================
   redis:
-    image: redis:7.4-alpine
+    image: docker.io/redis:7.4-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
     volumes:
@@ -29,10 +36,146 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
+  # ============================================================
+  # Database Migration (one-shot convenience)
+  # ============================================================
+  migration:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: insura:latest
+    entrypoint: []
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL muss gesetzt sein}
+      NODE_ENV: ${NODE_ENV:-production}
+    command: ["node", "-e", "\
+      const { execSync } = require('child_process'); \
+      process.stdout.write('Database is ready.\\n'); \
+      process.stdout.write('Running migrations...\\n'); \
+      execSync('npx prisma migrate deploy', { stdio: 'inherit' }); \
+      process.stdout.write('Migrations complete.\\n'); \
+      process.exit(0);"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - insura-internal
+
+  # ============================================================
+  # API (NestJS Backend)
+  # ============================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: insura:latest
+    restart: unless-stopped
+    environment:
+      APP_PORT: "3001"
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL muss gesetzt sein}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL muss gesetzt sein}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET muss gesetzt sein}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY muss gesetzt sein}
+      STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
+      DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
+      OIDC_ENABLED: "${OIDC_ENABLED:-false}"
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_CALLBACK_URL: ${OIDC_CALLBACK_URL:-}
+      AI_ENABLED: "${AI_ENABLED:-false}"
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      PAPERLESS_ENABLED: "${PAPERLESS_ENABLED:-false}"
+      PAPERLESS_URL: ${PAPERLESS_URL:-}
+      PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-}
+    command: ["node", "apps/api/dist/apps/api/src/main.js"]
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    volumes:
+      - uploads-data:/data/uploads
+    networks:
+      - insura-internal
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', r => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # Worker (BullMQ Background Jobs)
+  # ============================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: insura:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL muss gesetzt sein}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL muss gesetzt sein}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET muss gesetzt sein}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY muss gesetzt sein}
+      STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
+      DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
+      AI_ENABLED: "${AI_ENABLED:-false}"
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+    command: ["node", "apps/worker/dist/apps/worker/src/main.js"]
+    volumes:
+      - uploads-data:/data/uploads
+    networks:
+      - insura-internal
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ============================================================
+  # Web (Next.js Frontend)
+  # ============================================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+    image: insura:latest
+    restart: unless-stopped
+    entrypoint: ["pnpm", "run", "docker-start"]
+    working_dir: /app/apps/web
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: "3000"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    networks:
+      - insura-internal
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => { process.exit(r.statusCode >= 200 && r.statusCode < 400 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # Storage (MinIO) – optional, via profile "storage"
+  # ============================================================
   storage:
     profiles: ["storage"]
-    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    image: docker.io/minio/minio:RELEASE.2025-04-08T15-41-24Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -42,6 +185,12 @@ services:
       - minio-data:/data
     networks:
       - insura-internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 networks:
   insura-internal:
@@ -51,3 +200,4 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+  uploads-data:

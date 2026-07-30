@@ -8,7 +8,7 @@ import {
 import type { Request, Response } from 'express';
 import { CurrentUser } from './current-user.decorator';
 import { AuthenticatedUser } from './auth.service';
-import { Public } from './auth.guard';
+import { Public } from '@insura/foundation';
 import { OidcStrategy } from './oidc.strategy';
 
 type SessionRequest = Request & {

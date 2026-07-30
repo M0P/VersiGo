@@ -1,0 +1,72 @@
+# Docker Compose Test Stack
+# Runs all quality checks inside isolated containers.
+# Usage: docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test
+
+services:
+  # Reuse the production images for dependencies
+  test-db:
+    image: docker.io/postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: insura_test
+      POSTGRES_USER: insura
+      POSTGRES_PASSWORD: insura_test
+    volumes:
+      - test-postgres-data:/var/lib/postgresql/data
+    networks:
+      - test-insura-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insura -d insura_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  test-redis:
+    image: docker.io/redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "no"]
+    networks:
+      - test-insura-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Test runner: executes all quality checks
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    image: insura-test:latest
+    environment:
+      DATABASE_URL: postgresql://insura:insura_test@test-db:5432/insura_test
+      REDIS_URL: redis://test-redis:6379
+      NODE_ENV: test
+      CI: "true"
+    command: >
+      sh -c "
+        echo 'Database is ready.' &&
+        echo 'Running Prisma migration check...' &&
+        npx prisma migrate deploy &&
+        echo 'Running lint...' &&
+        pnpm run lint 2>&1 &&
+        echo 'Running typecheck...' &&
+        pnpm run typecheck 2>&1 &&
+        echo 'Running tests...' &&
+        pnpm run test 2>&1 &&
+        echo 'All checks passed!'
+      "
+    networks:
+      - test-insura-internal
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+
+networks:
+  test-insura-internal:
+    driver: bridge
+
+volumes:
+  test-postgres-data:

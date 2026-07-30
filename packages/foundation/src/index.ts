@@ -6,3 +6,4 @@ export * from './capabilities';
 export * from './encryption';
 export * from './queue';
 export * from './ai';
+export * from './auth';

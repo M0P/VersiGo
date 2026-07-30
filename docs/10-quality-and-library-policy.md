@@ -20,6 +20,16 @@ Eine Bibliothek darf nur verwendet werden, wenn mindestens eine Bedingung erfül
 - Geplanter Maintenance-Review monatlich
 - Verbot transitive Altlasten bewusst einzuschleusen
 
+## Container- und Basisimage-Policy
+- Basisimages: Offizielle Docker-Images von Node.js, PostgreSQL, Redis und MinIO.
+- Image-Versionen werden explizit und eingefroren (kein `latest`-Tag außer in lokalen Overrides).
+- Multi-Stage-Builds minimieren Final-Image-Größe.
+- `node:24-alpine` als Basis für Node.js-Container.
+- Alpine-basierte Images für PostgreSQL und Redis.
+- MinIO-Image mit festem Datums-Tag.
+- Laufzeitcontainer verwenden Non-Root-User.
+- Regelmäßige Security-Scans der Basisimages (Dependabot o. Ä.).
+
 ## Empfohlene Kandidaten zur Prüfung bei Projektstart
 - Node.js LTS
 - NestJS

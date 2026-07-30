@@ -15,25 +15,39 @@ Diese Datei ist für jedes Arbeitspaket verbindlich.
 - Kein Secret in Code, Commit, Testdaten, Screenshot oder Log.
 - Jede Änderung benötigt passende Tests.
 
-## Lokale Entwicklungsdienste ohne Docker
+## Docker Compose ist die primäre Umgebung
 
-Für Umgebungen ohne Docker (z. B. Distrobox/Bazzite-Setups ohne systemd als
-PID 1) steht `scripts/dev-services.sh` bereit, um PostgreSQL und Redis/Valkey
-manuell zu starten, zu stoppen und deren Status zu prüfen:
+**Docker Compose ist die verbindliche Entwicklungs-, Test- und CI-Umgebung.**  
+Alle Prüfungen (Lint, Typecheck, Unit-Tests, Integrationstests, Smoke-Tests, Migrationen, Build) müssen über Docker Compose in Containern ausgeführt werden. Der Host darf ausschließlich Docker/Compose bereitstellen; Node, pnpm, PostgreSQL und Redis laufen in Containern.
+
+**Kanonischer Testbefehl:**
 
 ```bash
-./scripts/dev-services.sh start
-./scripts/dev-services.sh status
-./scripts/dev-services.sh stop
+docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test
 ```
 
-Voraussetzung: PostgreSQL und Valkey (Redis-kompatibel) sind lokal installiert
-und `PGDATA` wurde bereits via `initdb` initialisiert. Agenten und
-Entwickler, die lokale Datenbank-Setups einrichten oder Migrationen ausführen,
-sollen dieses Skript nutzen bzw. erweitern, statt eigene Ad-hoc-Startbefehle
-zu erfinden. Docker Compose bleibt der bevorzugte Weg für alle Umgebungen, in
-denen Docker verfügbar ist; dieses Skript ist ausschließlich der Fallback für
-Docker-lose lokale Entwicklungsumgebungen.
+**Kanonischer Smoke-Test (Laufzeitstack):**
+
+```bash
+./scripts/compose-smoke-test.sh --build
+```
+
+### Docker-Freier Fallback (nicht für CI/Release)
+
+Für lesenden Zugriff oder minimale Code-Änderungen ohne Docker:
+
+```bash
+# Voraussetzung: Node.js 24, pnpm, PostgreSQL, Redis lokal installiert
+pnpm install
+pnpm run build
+pnpm run dev
+```
+
+Dieser Modus ersetzt **nicht** den Docker-Compose-Testpfad. CI, Merge- und Release-Verifikation erfolgen ausschließlich über Docker Compose.
+
+## Required Future-Feature Contract
+
+> Jeder Feature-Slice muss aus einem frischen Clone mit `docker compose up --build` lauffähig bleiben. Neue Runtime-Abhängigkeiten, Dienste, Umgebungsvariablen, Migrationen, Queues, Volumes, Ports, Health Checks oder Testanforderungen werden im selben Slice in Compose, Compose-Testsystem, `.env.example`, CI und Dokumentation ergänzt. Die vollständige Freigabe-Verifikation erfolgt über Docker Compose.
 
 ## Standardablauf
 
@@ -41,9 +55,9 @@ Docker-lose lokale Entwicklungsumgebungen.
 2. Branch anlegen und pushen.
 3. Betroffene Dateien, Design und Risiken im PR beschreiben.
 4. Implementieren, formatieren, linten, testen und dokumentieren.
-5. Aktuellen `main` integrieren, vollständige Tests erneut ausführen.
+5. Aktuellen `main` integrieren, vollständige Tests im Docker-Compose-Container erneut ausführen.
 6. Pull Request mit Checkliste öffnen.
-7. Erst nach erfolgreichem unabhängigen Review und grüner CI mergen lassen.
+7. Erst nach erfolgreichem unabhängigen Review und grüner CI-Compose-Pipeline mergen lassen.
 
 ## Pflichtausgabe des Modells
 

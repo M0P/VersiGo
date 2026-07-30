@@ -1,74 +1,188 @@
-name: ci
+name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COMPOSE_FILE: docker-compose.test.yml
+  COMPOSE_PROJECT_NAME: insura-ci
 
 jobs:
-  verify:
+  compose-test:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16.4-alpine
-        env:
-          POSTGRES_DB: insura_ci
-          POSTGRES_USER: insura_ci
-          POSTGRES_PASSWORD: insura_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U insura_ci -d insura_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7.4-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgresql://insura_ci:insura_ci@localhost:5432/insura_ci
-      REDIS_URL: redis://localhost:6379
-      SETTINGS_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
+      - name: Validate Compose configuration
+        run: docker compose config
 
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Build test image
+        run: docker compose build test
 
-      - name: Install dependencies (frozen lockfile)
-        run: pnpm install --frozen-lockfile
+      - name: Run quality checks
+        run: |
+          docker compose up --build --abort-on-container-exit --exit-code-from test 2>&1 || {
+            echo "=== Test container logs ==="
+            docker compose logs test
+            echo "=== Database logs ==="
+            docker compose logs test-db
+            docker compose down --volumes --remove-orphans
+            exit 1
+          }
 
-      - name: Generate Prisma Client
-        run: pnpm exec prisma generate --schema prisma/schema.prisma
+      - name: Cleanup
+        if: always()
+        run: docker compose down --volumes --remove-orphans
 
-      - name: Apply Prisma migrations
-        run: pnpm exec prisma migrate deploy --schema prisma/schema.prisma
+  compose-smoke:
+    runs-on: ubuntu-latest
+    needs: [compose-test]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Lint
-        run: pnpm lint
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Typecheck
-        run: pnpm typecheck
+      - name: Copy environment file
+        run: cp .env.example .env
 
-      - name: Tests
-        run: pnpm test
+      - name: Build production images
+        run: docker compose build api web worker
+
+      - name: Start services
+        run: docker compose up -d db redis
+
+      - name: Wait for database
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T db pg_isready -U insura -d insura -t 5 >/dev/null 2>&1; then
+              echo "Database is ready"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Database not ready"
+              docker compose logs db
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Wait for Redis
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+              echo "Redis is ready"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Redis not ready"
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Run migration
+        run: docker compose run --rm migration
+
+      - name: Start API
+        run: docker compose up -d api
+
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001/health >/dev/null 2>&1; then
+              echo "API is healthy"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "API not healthy"
+              docker compose logs api
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Wait for API readiness
+        run: |
+          for i in $(seq 1 15); do
+            status=$(curl -sf http://localhost:3001/ready | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+            if [ "$status" = "ready" ]; then
+              echo "API is ready"
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "API not ready"
+              curl -s http://localhost:3001/ready || true
+              docker compose logs api
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Start Web
+        run: docker compose up -d web
+
+      - name: Wait for Web
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/ >/dev/null 2>&1; then
+              echo "Web is available"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Web not available"
+              docker compose logs web
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Smoke tests
+        run: |
+          echo "=== Smoke Tests ==="
+
+          echo "1. API health endpoint"
+          HEALTH=$(curl -sf http://localhost:3001/health)
+          echo "Response: $HEALTH"
+          echo "$HEALTH" | grep -q '"ok"' || { echo "FAILED"; exit 1; }
+          echo "PASS"
+
+          echo "2. API readiness endpoint"
+          READY=$(curl -sf http://localhost:3001/ready)
+          echo "Response: $READY"
+          echo "$READY" | grep -q '"ready"' || { echo "FAILED"; exit 1; }
+          echo "PASS"
+
+          echo "3. Web availability (accepts 2xx/3xx redirects)"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/)
+          echo "HTTP Status: $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
+            echo "PASS"
+          else
+            echo "FAILED"
+            exit 1
+          fi
+
+          echo "4. Database-backed request"
+          DB_STATUS=$(echo "$READY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('database',''))")
+          echo "Database status: $DB_STATUS"
+          [ "$DB_STATUS" = "up" ] || { echo "FAILED"; exit 1; }
+          echo "PASS"
+
+          echo "=== All smoke tests passed ==="
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down --volumes --remove-orphans
