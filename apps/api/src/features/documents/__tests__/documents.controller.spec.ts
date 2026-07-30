@@ -32,6 +32,7 @@ type ServiceLike = {
   remove: ReturnType<typeof vi.fn>;
   getFilePath: ReturnType<typeof vi.fn>;
   getDocumentAndPath: ReturnType<typeof vi.fn>;
+  sanitizeFilename: ReturnType<typeof vi.fn>;
 };
 
 function createMockService(): ServiceLike {
@@ -43,6 +44,7 @@ function createMockService(): ServiceLike {
     remove: vi.fn(),
     getFilePath: vi.fn(),
     getDocumentAndPath: vi.fn(),
+    sanitizeFilename: vi.fn((name: string) => name),
   };
 }
 
