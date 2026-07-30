@@ -247,10 +247,12 @@ model InsurancePolicy {
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   ownerUser User      @relation(fields: [ownerUserId], references: [id])
 
-  coveredPersons CoveredPerson[]
-  costEntries    PolicyCostEntry[]
-  documents      PolicyDocument[]
-  portalLinks    PortalAccountLink[]
+  coveredPersons     CoveredPerson[]
+  costEntries        PolicyCostEntry[]
+  documents          PolicyDocument[]
+  portalLinks        PortalAccountLink[]
+  aiExtractionJobs   AiExtractionJob[]
+  aiCoverageSummaries AiCoverageSummary[]
 
   @@index([householdId])
   @@index([ownerUserId])
@@ -334,7 +336,8 @@ model PolicyDocument {
   documentVersion  Int                  @default(1)
   createdByUserId  String?
   uploadedAt       DateTime             @default(now())
-  archivedAt       DateTime?
+  aiProcessingExcluded Boolean     @default(false)
+  archivedAt           DateTime?
 
   policy      InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
   createdBy   User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -371,4 +374,52 @@ enum SyncStatus {
   ACTIVE
   ERROR
   DISABLED
+}
+
+// --- AP-09: AI Assist (optionale AI-Provider-Adapter) ------------------------
+
+enum AiJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+model AiExtractionJob {
+  id                 String       @id @default(uuid())
+  policyId           String
+  providerKey        String
+  model              String?
+  status             AiJobStatus  @default(PENDING)
+  inputDocumentRef   String?
+  extractedFieldsJson Json?
+  confidenceJson     Json?
+  errorMessage       String?
+  retryCount         Int          @default(0)
+  maxRetries         Int          @default(3)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  completedAt        DateTime?
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@index([status])
+  @@map("ai_extraction_jobs")
+}
+
+model AiCoverageSummary {
+  id                   String   @id @default(uuid())
+  policyId             String
+  providerKey          String
+  model                String?
+  summaryMarkdown      String
+  sourceDocumentRefsJson Json?
+  createdAt            DateTime @default(now())
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+  @@map("ai_coverage_summaries")
 }

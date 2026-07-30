@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import {
   ConfigFoundationModule,
   DatabaseModule,
@@ -6,12 +7,11 @@ import {
   CapabilityFlagsModule,
   QueueFoundationModule,
 } from '@insura/foundation';
+import { AiExtractionProcessor } from './ai-extraction.processor';
 
 /**
  * Worker-Wurzelmodul. Bindet ausschliesslich technische Foundations ein.
- * Fachliche Job-Module werden von den jeweiligen Feature-Slices in
- * spaeteren Arbeitspaketen ergaenzt (z. B. AiAssistJobsModule,
- * PortalSyncJobsModule), nicht hier zentral.
+ * Fachliche Job-Module werden von den jeweiligen Feature-Slices ergaenzt.
  */
 @Module({
   imports: [
@@ -20,6 +20,12 @@ import {
     EncryptionModule,
     CapabilityFlagsModule,
     QueueFoundationModule,
+
+    // AI-Extraktions-Queue (muss mit API-Queue-Namen uebereinstimmen)
+    BullModule.registerQueue({
+      name: 'ai-extraction',
+    }),
   ],
+  providers: [AiExtractionProcessor],
 })
 export class WorkerModule {}

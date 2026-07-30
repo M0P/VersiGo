@@ -14,5 +14,12 @@ export default tseslint.config(
         ecmaFeatures: { jsx: true },
       },
     },
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', {
+        args: 'after-used',
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+      }],
+    },
   },
 );

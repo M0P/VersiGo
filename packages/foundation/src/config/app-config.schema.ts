@@ -47,6 +47,14 @@ export const appConfigSchema = z.object({
   OIDC_CLIENT_SECRET: z.string().optional(),
 
   AI_ENABLED: booleanFromEnv.default(false),
+  AI_PROVIDER: z.enum(['ollama', 'openai-compat']).default('ollama'),
+  AI_OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
+  AI_OLLAMA_MODEL: z.string().default('llama3'),
+  AI_OPENAI_COMPAT_BASE_URL: z.string().optional(),
+  AI_OPENAI_COMPAT_API_KEY: z.string().optional(),
+  AI_OPENAI_COMPAT_MODEL: z.string().default('gpt-4o-mini'),
+  AI_EXTRACTION_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
+  AI_MAX_RETRIES: z.coerce.number().int().min(0).default(3),
 
   PAPERLESS_ENABLED: booleanFromEnv.default(false),
   PAPERLESS_URL: z.string().optional(),
