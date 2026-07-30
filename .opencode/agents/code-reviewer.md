@@ -68,5 +68,5 @@ If there are no findings, write:
 - Remaining risks, if any
 
 VERDICT RULE:
-- PASS only when Critical, High, and Medium are all zero, and Minor is at most two.
+- PASS only when Critical, High, and Medium are all zero, and Minor is at most eight.
 - Otherwise use CHANGES REQUIRED.

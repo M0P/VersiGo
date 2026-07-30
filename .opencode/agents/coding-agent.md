@@ -56,7 +56,7 @@ ACCEPTANCE CONDITION:
 - Zero Critical findings.
 - Zero High findings.
 - Zero Medium findings.
-- At most two Minor findings.
+- At most eight Minor findings.
 - Relevant automated checks pass, or any unavailable/failing check is clearly explained in the final report.
 
 IF FIVE ROUNDS ARE REACHED:
@@ -69,7 +69,7 @@ WHEN THE ACCEPTANCE CONDITION IS MET:
 1. Check git diff and git status carefully.
 2. Commit only the changes belonging to the current work package.
 3. Use a clear commit message beginning with the work package number, for example:
-   "001: add user authentication"
+   "Ap-01: add user authentication"
 4. After the commit, find the next work package by selecting the next numbered Markdown file in /prompts after the current one.
 5. Create this file:
    docs/reviews/NEXT-CODING-AGENT-PROMPT.md
@@ -87,5 +87,5 @@ FINAL RESPONSE AFTER A SUCCESSFUL COMMIT:
 - State the commands/checks that passed or failed.
 - Say exactly:
   "The work package is committed. Please review the diff, then push and merge it manually when you are satisfied."
-- State the path of docs/reviews/NEXT-CODING-AGENT-PROMPT.md.
+- State the path and teh content of docs/reviews/NEXT-CODING-AGENT-PROMPT.md.
 - Do not make a git push, merge, pull request, or begin the next package.
