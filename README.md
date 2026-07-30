@@ -5,49 +5,34 @@ Softwarekonzept für eine private Haushalts-Versicherungsübersicht mit modulare
 ## Ziel
 Insura verwaltet Versicherungsverträge, Dokumente, Kostenhistorien, Portal-Links und optionale AI-gestützte Extraktion/Zusammenfassungen für Privathaushalte.
 
-## Schnellstart mit Docker Compose
+## Entwicklungssetup
 
-Starten Sie den kompletten Insura Stack mit einem einzigen Befehl:
-
-```bash
-docker compose up --build
-```
-
-Dies startet alle benötigten Dienste:
-- `web`: Next.js Frontend (Port 3000)
-- `api`: NestJS Backend (Port 3001)
-- `db`: PostgreSQL Datenbank
-- `redis`: Redis Queue/Cache
-- `storage`: MinIO Dateispeicher (optional)
+Da dieses Projekt in einer Distrobox-Umgebung ohne Docker läuft, sind spezielle Docker-Komponenten nicht relevant.
 
 ### Voraussetzungen
-- Docker und Docker Compose installiert
-- Port 3000 und 3001 sind frei
+- Node.js 24.x
+- pnpm 11.x
+- PostgreSQL 16.x (lokal installiert)
+- Redis 7.x (lokal installiert)
 
-### Erste Schritte
+### Lokale Entwicklung
+
 1. Klonen Sie das Repository
-2. Kopieren Sie `.env.example` nach `.env` und passen Sie die Einstellungen an
-3. Führen Sie `docker compose up --build` aus
-4. Öffnen Sie http://localhost:3000 im Browser
-
-### Wichtige Ports
-- Web Frontend: http://localhost:3000
-- API Backend: http://localhost:3001
-- PostgreSQL: localhost:5432
-- Redis: localhost:6379
-- MinIO Storage: http://localhost:9000 (Console: http://localhost:9001)
-
-### Datenpersistenz
-Daten werden in benannten Volumen gespeichert:
-- PostgreSQL Daten: `postgres-data`
-- Redis Daten: `redis-data`
-- MinIO Daten: `minio-data`
-
-### Reset der Entwicklungsumgebung
-Um alle Daten zurückzusetzen:
-```bash
-docker compose down -v
-```
+2. Installieren Sie Abhängigkeiten: `pnpm install`
+3. Erstellen Sie eine lokale PostgreSQL-Datenbank:
+   ```bash
+   createdb insura
+   ```
+4. Erstellen Sie eine lokale Redis-Instanz
+5. Kopieren Sie `.env.example` nach `.env` und passen Sie die Einstellungen an
+6. Führen Sie die Migration durch:
+   ```bash
+   pnpm --filter @insura/api exec prisma migrate dev
+   ```
+7. Starten Sie die Entwicklungsumgebung:
+   ```bash
+   pnpm run dev
+   ```
 
 ## Dokumente
 - `docs/01-product-vision.md`
