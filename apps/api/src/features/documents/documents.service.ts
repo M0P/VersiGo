@@ -26,12 +26,13 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export class DocumentsService {
   private readonly logger = new Logger(DocumentsService.name);
   private readonly storagePath: string;
+  private storagePathEnsured = false;
 
   constructor(
     private readonly db: DatabaseService,
     private readonly config: AppConfigService,
   ) {
-    this.storagePath = config.get('DOCUMENTS_STORAGE_PATH');
+    this.storagePath = path.resolve(config.get('DOCUMENTS_STORAGE_PATH'));
   }
 
   private assertValidId(id: string, label: string): void {
@@ -41,8 +42,8 @@ export class DocumentsService {
   }
 
   private resolveSafePath(...segments: string[]): string {
+    const root = path.resolve(this.storagePath) + path.sep;
     const resolved = path.resolve(this.storagePath, ...segments);
-    const root = path.resolve(this.storagePath);
     if (!resolved.startsWith(root)) {
       throw new ForbiddenException('Ungueltiger Pfad');
     }
@@ -78,6 +79,10 @@ export class DocumentsService {
     if (file.size > MAX_FILE_SIZE) {
       throw new BadRequestException(`Datei überschreitet das maximale Limit von ${MAX_FILE_SIZE / 1024 / 1024} MB`);
     }
+
+    if (file.originalname.length > 255) {
+      throw new BadRequestException('Dateiname ist zu lang (max. 255 Zeichen)');
+    }
   }
 
   private computeChecksum(buffer: Buffer): string {
@@ -85,8 +90,10 @@ export class DocumentsService {
   }
 
   private async ensureStoragePath(): Promise<void> {
+    if (this.storagePathEnsured) return;
     try {
       await fs.mkdir(this.storagePath, { recursive: true });
+      this.storagePathEnsured = true;
     } catch (err) {
       this.logger.error(`Storage path creation failed: ${(err as Error).message}`);
       throw err;
@@ -186,8 +193,9 @@ export class DocumentsService {
       });
 
       return updated;
-    }).catch((err) => {
+    }).catch(async (err) => {
       this.logger.error(`upload document (phase 2) failed: ${err.message}`, err.stack);
+      await fs.unlink(storageRef).catch(() => {});
       throw err;
     });
   }
@@ -245,13 +253,20 @@ export class DocumentsService {
         },
       });
 
+      const diff: Record<string, unknown> = { ...dto };
+      if (dto.documentDate !== undefined) {
+        diff.documentDate = dto.documentDate
+          ? new Date(dto.documentDate).toISOString()
+          : null;
+      }
+
       await tx.auditEvent.create({
         data: {
           actorUserId: userId,
           entityType: 'PolicyDocument',
           entityId: docId,
           action: 'UPDATE',
-          diffJson: { ...dto },
+          diffJson: diff,
         },
       });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DocumentsService } from '../documents.service';
+import { DocumentsService, MAX_FILE_SIZE } from '../documents.service';
 import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import type { UploadedFile } from '../documents.types';
 
@@ -135,6 +135,50 @@ describe('DocumentsService', () => {
         service.upload(householdId, userId, policyId, mockFile, {}),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('verweigert Upload bei zu grosser Datei', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+
+      const oversizedFile = { ...mockFile, size: MAX_FILE_SIZE + 1 };
+
+      await expect(
+        service.upload(householdId, userId, policyId, oversizedFile, {}),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('verweigert Upload bei zu langem Dateinamen', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+
+      const longNameFile = { ...mockFile, originalname: 'a'.repeat(256) };
+
+      await expect(
+        service.upload(householdId, userId, policyId, longNameFile, {}),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('raeumt bei fehlgeschlagenem storeFile auf', async () => {
+      const { writeFile } = await import('fs/promises');
+      (writeFile as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Disk full'));
+
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findFirst.mockResolvedValue(null);
+      mockDb.policyDocument.create.mockResolvedValue({
+        id: docId, policyId, fileName: 'test.pdf',
+        mimeType: 'application/pdf', fileSize: 12,
+        checksum: 'abc', storageType: 'INTERNAL',
+        documentVersion: 1, createdByUserId: userId,
+      });
+      mockDb.policyDocument.delete.mockResolvedValue(undefined);
+
+      await expect(
+        service.upload(householdId, userId, policyId, mockFile, {}),
+      ).rejects.toThrow('Disk full');
+
+      expect(mockDb.policyDocument.delete).toHaveBeenCalledWith({ where: { id: docId } });
+    });
   });
 
   describe('findAll', () => {
@@ -226,7 +270,7 @@ describe('DocumentsService', () => {
 
       const { unlink } = await import('fs/promises');
       expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(policyId),
+        expect.stringMatching(new RegExp(`/tmp/uploads/${policyId}/${docId}/${docId}$`)),
       );
     });
 
