@@ -42,6 +42,11 @@ services:
       - minio-data:/data
     networks:
       - insura-internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   api:
     build:
@@ -49,39 +54,39 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - POSTGRES_DB=${POSTGRES_DB:-insura}
-      - POSTGRES_USER=${POSTGRES_USER:-insura}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://insura:change-me@db:5432/insura}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - STORAGE_ENABLED=${STORAGE_ENABLED:-false}
-      - DOCUMENTS_STORAGE_PATH=${DOCUMENTS_STORAGE_PATH:-/app/uploads}
-      - S3_ENDPOINT=${S3_ENDPOINT:-http://storage:9000}
-      - S3_BUCKET=${S3_BUCKET:-insura}
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-change-me}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-change-me}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-change-me}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-change-me-change-me}
-      - OIDC_ENABLED=${OIDC_ENABLED:-false}
-      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-https://issuer.example.com}
-      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-insura}
-      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-change-me}
-      - OIDC_CALLBACK_URL=${OIDC_CALLBACK_URL:-http://localhost:3001/auth/callback}
-      - AI_ENABLED=${AI_ENABLED:-false}
-      - AI_PROVIDER=${AI_PROVIDER:-ollama}
-      - AI_OLLAMA_BASE_URL=${AI_OLLAMA_BASE_URL:-http://localhost:11434}
-      - AI_OLLAMA_MODEL=${AI_OLLAMA_MODEL:-llama3}
-      - AI_OPENAI_COMPAT_BASE_URL=${AI_OPENAI_COMPAT_BASE_URL:-https://api.example.com/v1}
-      - AI_OPENAI_COMPAT_API_KEY=${AI_OPENAI_COMPAT_API_KEY:-change-me}
-      - AI_OPENAI_COMPAT_MODEL=${AI_OPENAI_COMPAT_MODEL:-gpt-4o-mini}
-      - AI_EXTRACTION_TIMEOUT_MS=${AI_EXTRACTION_TIMEOUT_MS:-60000}
-      - AI_MAX_RETRIES=${AI_MAX_RETRIES:-3}
-      - PAPERLESS_ENABLED=${PAPERLESS_ENABLED:-false}
-      - PAPERLESS_BASE_URL=${PAPERLESS_BASE_URL:-https://paperless.example.com}
-      - PAPERLESS_API_TOKEN=${PAPERLESS_API_TOKEN:-change-me}
-      - SETTINGS_ENCRYPTION_KEY=${SETTINGS_ENCRYPTION_KEY:-change-me-64-char-hex-generate-with-openssl-rand-hex-32-cmd}
-      - SESSION_SECRET=${SESSION_SECRET:-change-me-generate-with-openssl-rand-hex-32-cmd}
+      NODE_ENV: ${NODE_ENV:-development}
+      POSTGRES_DB: ${POSTGRES_DB:-insura}
+      POSTGRES_USER: ${POSTGRES_USER:-insura}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://insura:change-me@db:5432/insura}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      STORAGE_ENABLED: ${STORAGE_ENABLED:-false}
+      DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/app/uploads}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://storage:9000}
+      S3_BUCKET: ${S3_BUCKET:-insura}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-change-me}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-change-me}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me-change-me}
+      OIDC_ENABLED: ${OIDC_ENABLED:-false}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-https://issuer.example.com}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-insura}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me}
+      OIDC_CALLBACK_URL: ${OIDC_CALLBACK_URL:-http://localhost:3001/auth/callback}
+      AI_ENABLED: ${AI_ENABLED:-false}
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      AI_OLLAMA_BASE_URL: ${AI_OLLAMA_BASE_URL:-http://localhost:11434}
+      AI_OLLAMA_MODEL: ${AI_OLLAMA_MODEL:-llama3}
+      AI_OPENAI_COMPAT_BASE_URL: ${AI_OPENAI_COMPAT_BASE_URL:-https://api.example.com/v1}
+      AI_OPENAI_COMPAT_API_KEY: ${AI_OPENAI_COMPAT_API_KEY:-change-me}
+      AI_OPENAI_COMPAT_MODEL: ${AI_OPENAI_COMPAT_MODEL:-gpt-4o-mini}
+      AI_EXTRACTION_TIMEOUT_MS: ${AI_EXTRACTION_TIMEOUT_MS:-60000}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-3}
+      PAPERLESS_ENABLED: ${PAPERLESS_ENABLED:-false}
+      PAPERLESS_BASE_URL: ${PAPERLESS_BASE_URL:-https://paperless.example.com}
+      PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-change-me}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-change-me-64-char-hex-generate-with-openssl-rand-hex-32-cmd}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-generate-with-openssl-rand-hex-32-cmd}
     depends_on:
       db:
         condition: service_healthy
@@ -129,14 +134,14 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - POSTGRES_DB=${POSTGRES_DB:-insura}
-      - POSTGRES_USER=${POSTGRES_USER:-insura}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://insura:change-me@db:5432/insura}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      - SETTINGS_ENCRYPTION_KEY=${SETTINGS_ENCRYPTION_KEY:-change-me-64-char-hex-generate-with-openssl-rand-hex-32-cmd}
-      - SESSION_SECRET=${SESSION_SECRET:-change-me-generate-with-openssl-rand-hex-32-cmd}
+      NODE_ENV: ${NODE_ENV:-development}
+      POSTGRES_DB: ${POSTGRES_DB:-insura}
+      POSTGRES_USER: ${POSTGRES_USER:-insura}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://insura:change-me@db:5432/insura}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-change-me-64-char-hex-generate-with-openssl-rand-hex-32-cmd}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-generate-with-openssl-rand-hex-32-cmd}
     depends_on:
       db:
         condition: service_healthy
