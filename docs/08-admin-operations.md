@@ -1,16 +1,107 @@
 # Admin und Betrieb
 
-## Docker-Compose Prinzipien
-- Möglichst wenige Pflichtvariablen.
-- Erststart-Assistent im Admin-UI für Basis-Setup.
-- Integrationen können nach dem Start vollständig im UI eingerichtet werden.
+## Docker Compose Betrieb
 
-## Minimale Umgebungsvariablen
-- `APP_BASE_URL`
-- `DATABASE_URL`
-- `REDIS_URL`
-- `BOOTSTRAP_ADMIN_EMAIL` oder OIDC Bootstrap-Regel
-- optional `STORAGE_ENDPOINT` bei S3
+### Voraussetzungen
+- Docker Engine 24+ oder Podman 5+ mit docker-compose-kompatiblem Wrapper
+- 4 GB+ RAM, 10 GB+ freier Speicher
+
+### Konfiguration
+
+Siehe `.env.example` für alle Konfigurationsvariablen. Erforderliche Variablen:
+
+| Variable | Beschreibung | Beispiel |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL-Verbindung | `postgresql://insura:pass@db:5432/insura` |
+| `REDIS_URL` | Redis-Verbindung | `redis://redis:6379` |
+| `SESSION_SECRET` | Session-Secret (min. 32 Zeichen) | `openssl rand -hex 32` |
+| `SETTINGS_ENCRYPTION_KEY` | AES-256-GCM Schlüssel (64 Hex-Zeichen) | `openssl rand -hex 32` |
+
+Optionale Variablen für OIDC, AI, Paperless-ngx, S3 sind in `.env.example` dokumentiert.
+
+### Health Checks
+
+| Endpoint | Typ | Beschreibung |
+|----------|-----|-------------|
+| `GET /health` | Liveness | Gibt `{"status":"ok"}` zurück |
+| `GET /ready` | Readiness | Prüft DB, Redis und Capabilities; gibt `{"status":"ready","database":"up","redis":"up","capabilities":{...}}` zurück |
+
+### Backup
+
+#### Datenbank
+```bash
+docker compose exec -T db pg_dump -U insura insura > backup_$(date +%Y%m%d).sql
+```
+
+#### Uploads
+```bash
+docker run --rm -v insura_uploads-data:/data -v $(pwd):/backup alpine tar czf /backup/uploads_$(date +%Y%m%d).tar.gz -C /data .
+```
+
+### Restore
+
+#### Datenbank
+```bash
+docker compose exec -T db psql -U insura -d insura < backup_20260101.sql
+```
+
+#### Uploads
+```bash
+docker run --rm -v insura_uploads-data:/data -v $(pwd):/backup alpine tar xzf /backup/uploads_20260101.tar.gz -C /data
+```
+
+### Migration
+
+Migrationen laufen automatisch beim Start des `migration`-Services, bevor API/Worker starten.
+
+Manuelles Ausführen:
+```bash
+docker compose run --rm migration
+```
+
+### Reset
+
+Alle Daten zurücksetzen (Entwicklung):
+```bash
+docker compose down -v
+```
+
+Danach `docker compose up --build` für einen frischen Start.
+
+### Troubleshooting
+
+#### API startet nicht
+```bash
+docker compose logs api
+# Prüfe Datenbankverbindung und Migrationsstatus
+```
+
+#### Datenbankverbindungsfehler
+```bash
+docker compose exec -T db pg_isready -U insura -d insura
+```
+
+#### Worker startet nicht
+```bash
+docker compose logs worker
+# Prüfe Redis-Verbindung
+```
+
+#### Volumes bereinigen
+```bash
+docker compose down -v
+# Entfernt postgres-data, redis-data, uploads-data, minio-data
+```
+
+### Upgrade
+
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
+
+Migrationen laufen automatisch über den `migration`-Service.
 
 ## Admin-UI Bereiche
 - Allgemein

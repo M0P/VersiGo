@@ -6,10 +6,8 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserStatus } from '@prisma/client';
+import { PUBLIC_ROUTE_KEY } from '@insura/foundation';
 import { AuthService } from './auth.service';
-
-export const PUBLIC_ROUTE_KEY = 'isPublicRoute';
-export const Public = () => Reflect.metadata(PUBLIC_ROUTE_KEY, true);
 
 // Global-Guard: verweigert jeden Request ohne gueltige Session, ausser die
 // Route ist explizit mit @Public() markiert (z. B. /auth/login, /health).

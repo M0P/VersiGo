@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { AppConfig, parseAppConfig } from './app-config.schema';
 
 /**
@@ -11,8 +11,8 @@ import { AppConfig, parseAppConfig } from './app-config.schema';
 export class AppConfigService {
   private readonly config: AppConfig;
 
-  constructor(env: Record<string, string | undefined> = process.env) {
-    this.config = parseAppConfig(env);
+  constructor(@Optional() env?: Record<string, string | undefined>) {
+    this.config = parseAppConfig(env ?? process.env);
   }
 
   get<K extends keyof AppConfig>(key: K): AppConfig[K] {

@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { Public } from '../auth/public.decorator';
 import { DatabaseService } from '../database';
 import { RedisHealthService } from '../redis-health';
 import { CapabilityFlagsService } from '../capabilities';
@@ -17,11 +18,13 @@ export class HealthController {
     private readonly capabilities: CapabilityFlagsService,
   ) {}
 
+  @Public()
   @Get('health')
   health(): { status: 'ok' } {
     return { status: 'ok' };
   }
 
+  @Public()
   @Get('ready')
   async ready(): Promise<{
     status: 'ready' | 'degraded';
