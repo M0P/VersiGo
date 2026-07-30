@@ -37,10 +37,29 @@
 - Für lokale Entwicklung ist HTTP ausreichend.
 
 ## Zugriffsschutz
-- OIDC Login
-- Lokale Fallback-Admin-Anmeldung nur für Bootstrap optional und standardmäßig deaktiviert
+- OIDC Login (optional, via `OIDC_ENABLED`)
+- Lokale Benutzername/Passwort-Anmeldung (optional, via `LOCAL_AUTH_ENABLED`)
+- Beide Authentifizierungsmethoden sind unabhängig konfigurierbar
+- Wenn keine Authentifizierungsmethode aktiviert ist, wird die Anwendung mit einem Konfigurationsfehler gestartet
 - CSRF-Schutz, sichere Cookies, Session Rotation
 - Mandantentrennung auf Household-Ebene plus objektbezogene Freigaben
+
+### Passwort-Handling (lokale Anmeldung)
+- Passwörter werden mit **bcrypt** (Kostenfaktor 12) gehasht, mit eingebautem, eindeutigem Salt pro Passwort
+- Plaintext-Passwörter werden niemals gespeichert, geloggt oder in API-Antworten ausgegeben
+- Der Login-Identifier wird vor dem Speichern normalisiert (lowercase, getrimmt), um case-insensitive Eindeutigkeit zu gewährleisten
+- Fehlgeschlagene Anmeldeversuche geben eine generische Fehlermeldung zurück, die nicht verrät, ob der Benutzername existiert
+
+### Brute-Force-Schutz
+- Fehlgeschlagene Login-Versuche werden pro IP-Adresse in Redis gezählt
+- Nach einer konfigurierbaren Anzahl von Versuchen (Standard: 5) innerhalb eines Zeitfensters (Standard: 15 Minuten) wird die IP vorübergehend gesperrt
+- Der Zähler wird nach erfolgreichem Login zurückgesetzt
+- Bei Redis-Ausfall wird der Zugriff nicht blockiert (Fail-Open)
+
+### Audit (lokale Anmeldung)
+- Erfolgreiche und fehlgeschlagene lokale Login-Versuche werden auditierbar erfasst
+- Sensitive Werte (Passwörter, Tokens, Session-IDs) werden nicht in Audit-Events geloggt
+- Bei fehlgeschlagenen Versuchen wird der Benutzername nicht im Audit-Log aufgezeichnet
 
 ## Datenschutz
 - AI-Nutzung nur nach expliziter Aktivierung.

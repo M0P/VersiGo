@@ -41,6 +41,10 @@ export const appConfigSchema = z.object({
 
   DOCUMENTS_STORAGE_PATH: z.string().min(1).default('./uploads'),
 
+  LOCAL_AUTH_ENABLED: booleanFromEnv.default(false),
+  LOCAL_AUTH_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900_000), // 15 minutes
+
   OIDC_ENABLED: booleanFromEnv.default(false),
   OIDC_ISSUER_URL: z.string().optional(),
   OIDC_CLIENT_ID: z.string().optional(),

@@ -16,6 +16,15 @@
 - displayName
 - locale
 - status
+- credential (optional 1:1 relation)
+
+### Credential
+- id
+- userId (FK -> users.id, unique, cascading delete)
+- identifier (unique, normalisiert: lowercase + getrimmt)
+- passwordHash (bcrypt, niemals Plaintext)
+- createdAt
+- updatedAt
 
 ### HouseholdMembership
 - householdId

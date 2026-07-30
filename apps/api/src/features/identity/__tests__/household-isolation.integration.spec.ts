@@ -27,6 +27,9 @@ function createMockDb(memberships: MembershipRecord[]) {
           ),
       ),
     },
+    auditEvent: {
+      create: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+    },
   };
 }
 
@@ -44,7 +47,7 @@ describe('Household-Isolation (Integration)', () => {
       { householdId: householdB, userId: userB.id, role: userB.role },
     ];
     const mockDb = createMockDb(memberships);
-    const authService = new AuthService(mockDb as never);
+    const authService = new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never);
     guard = new HouseholdMembershipGuard(authService);
   });
 
