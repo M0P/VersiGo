@@ -332,7 +332,6 @@ model PolicyDocument {
   documentDate     DateTime?
   category         String?
   documentVersion  Int                  @default(1)
-  supersededBy     String?
   createdByUserId  String?
   uploadedAt       DateTime             @default(now())
   archivedAt       DateTime?

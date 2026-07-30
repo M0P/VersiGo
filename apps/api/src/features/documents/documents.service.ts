@@ -206,7 +206,7 @@ export class DocumentsService {
           action: 'CREATE',
           diffJson: {
             policyId,
-            fileName: file.originalname,
+            fileName: this.sanitizeFilename(file.originalname),
             mimeType: file.mimetype,
             fileSize: file.size,
             checksum,
@@ -269,7 +269,7 @@ export class DocumentsService {
       const document = await tx.policyDocument.update({
         where: { id: docId },
         data: {
-          fileName: dto.fileName,
+          fileName: dto.fileName !== undefined ? this.sanitizeFilename(dto.fileName) : undefined,
           category: dto.category,
           documentDate: dto.documentDate !== undefined
             ? (dto.documentDate ? new Date(dto.documentDate) : null)
@@ -306,6 +306,8 @@ export class DocumentsService {
   async remove(householdId: string, userId: string, policyId: string, docId: string) {
     await this.assertPolicyAccess(householdId, userId, policyId);
 
+    const archivedAt = new Date();
+
     const result = await this.db.$transaction(async (tx) => {
       const existing = await tx.policyDocument.findFirst({
         where: { id: docId, policyId, archivedAt: null },
@@ -317,7 +319,7 @@ export class DocumentsService {
 
       await tx.policyDocument.update({
         where: { id: docId },
-        data: { archivedAt: new Date() },
+        data: { archivedAt },
       });
 
       await tx.auditEvent.create({
@@ -326,7 +328,7 @@ export class DocumentsService {
           entityType: 'PolicyDocument',
           entityId: docId,
           action: 'ARCHIVE',
-          diffJson: { archivedAt: new Date().toISOString() },
+          diffJson: { archivedAt: archivedAt.toISOString() },
         },
       });
 

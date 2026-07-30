@@ -88,7 +88,7 @@ describe('Documents Household-Isolation (Integration)', () => {
       id: docInA, policyId: policyInA, fileName: 'test.pdf',
       mimeType: 'application/pdf', fileSize: 12,
       checksum: 'abc', storageType: 'INTERNAL',
-      documentVersion: 1, createdByUserId: userA.id,
+      createdByUserId: userA.id,
     });
     mockDb.policyDocument.update.mockResolvedValue({ id: docInA, policyId: policyInA, fileName: 'test.pdf', storageRef: '/tmp/path' });
 

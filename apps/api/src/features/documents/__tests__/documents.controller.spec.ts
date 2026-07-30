@@ -206,7 +206,7 @@ describe('DocumentsController', () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     const fsMock = await import('fs');
-    (fsMock.promises.stat as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ENOENT'));
+    (fsMock.promises.stat as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('ENOENT'));
 
     service.getDocumentAndPath.mockResolvedValue({
       document: { id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' },

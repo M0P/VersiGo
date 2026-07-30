@@ -1,5 +1,4 @@
-import { IsString, IsOptional, IsDateString, IsEnum, MinLength } from 'class-validator';
-import { DocumentStorageType } from '@prisma/client';
+import { IsString, IsOptional, IsDateString, MinLength } from 'class-validator';
 
 export class UploadDocumentDto {
   @IsOptional()
@@ -26,8 +25,4 @@ export class UpdateDocumentMetadataDto {
   @IsOptional()
   @IsDateString()
   documentDate?: string;
-
-  @IsOptional()
-  @IsEnum(DocumentStorageType)
-  storageType?: DocumentStorageType;
 }

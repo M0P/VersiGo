@@ -74,7 +74,6 @@ describe('DocumentsService', () => {
         fileSize: 12,
         checksum: 'abc',
         storageType: 'INTERNAL',
-        documentVersion: 1,
         createdByUserId: userId,
       });
       mockDb.policyDocument.update.mockResolvedValue({
@@ -169,7 +168,7 @@ describe('DocumentsService', () => {
         id: docId, policyId, fileName: 'test.pdf',
         mimeType: 'application/pdf', fileSize: 12,
         checksum: 'abc', storageType: 'INTERNAL',
-        documentVersion: 1, createdByUserId: userId,
+        createdByUserId: userId,
       });
       mockDb.policyDocument.delete.mockResolvedValue(undefined);
 
@@ -194,7 +193,7 @@ describe('DocumentsService', () => {
 
       expect(result).toHaveLength(2);
       expect(mockDb.policyDocument.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { policyId, archivedAt: null } }),
+        expect.objectContaining({ where: { policyId, archivedAt: null }, take: 200 }),
       );
     });
   });
