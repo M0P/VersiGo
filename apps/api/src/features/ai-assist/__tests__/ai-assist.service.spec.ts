@@ -19,6 +19,24 @@ function createMockDb(): any {
     aiCoverageSummary: {
       create: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    $transaction: vi.fn().mockImplementation(async (cb: (tx: any) => Promise<any>) => {
+      const tx = createMockTx();
+      return cb(tx);
+    }),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createMockTx(): any {
+  return {
+    aiCoverageSummary: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
   };
 }
@@ -189,6 +207,151 @@ describe('AiAssistService', () => {
       const result = await service.summarize(householdId, userId, policyId);
 
       expect(result).toBeNull(); // NoOp adapter returns null
+    });
+
+    it('wirft ForbiddenException bei deaktiviertem AI', async () => {
+      const mockCapFlags = createMockCapabilityFlags(false);
+      const mockRegistry = createMockProviderRegistry();
+      const mockQueue = createMockQueue();
+
+      const disabledService = new AiAssistService(
+        mockDb as never,
+        mockRegistry as never,
+        mockCapFlags as never,
+        mockQueue as never,
+      );
+
+      await expect(
+        disabledService.summarize(householdId, userId, policyId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('wirft NotFoundException bei fehlender Policy', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.summarize(householdId, userId, policyId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('erstellt Zusammenfassung erfolgreich und bereinigt alte Eintraege via Transaktion', async () => {
+      // Verwende einen gemockten Adapter, der Daten zurueckgibt
+      const mockAdapter = {
+        providerKey: 'test-provider',
+        summarizeCoverage: vi.fn().mockResolvedValue({
+          summaryMarkdown: '# Test Zusammenfassung',
+          sourceDocumentRefs: ['doc-1', 'doc-2'],
+          model: 'test-model',
+        }),
+        extractContractFacts: vi.fn(),
+        healthCheck: vi.fn(),
+      };
+      const mockRegistry = { getAdapter: vi.fn().mockReturnValue(mockAdapter) };
+      const mockCapFlags = createMockCapabilityFlags(true);
+      const mockQueue = createMockQueue();
+
+      const svc = new AiAssistService(
+        mockDb as never,
+        mockRegistry as never,
+        mockCapFlags as never,
+        mockQueue as never,
+      );
+
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: 'doc-1', fileName: 'test.pdf', mimeType: 'application/pdf' },
+      ]);
+
+      // Simuliere 6 alte Zusammenfassungen (eine wird geloescht)
+      const oldSummaries = Array.from({ length: 6 }, (_, i) => ({ id: `old-${i + 1}` }));
+      const txMock = createMockTx();
+      txMock.aiCoverageSummary.findMany.mockResolvedValue(oldSummaries.slice(5)); // nach skip 5 bleibt 1
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockDb.$transaction.mockImplementation(async (cb: (tx: any) => Promise<any>) => cb(txMock));
+
+      const result = await svc.summarize(householdId, userId, policyId);
+
+      expect(result).not.toBeNull();
+      expect(result?.summaryMarkdown).toBe('# Test Zusammenfassung');
+      expect(txMock.aiCoverageSummary.create).toHaveBeenCalled();
+      // Pruefe, dass alte Eintraege bereinigt wurden
+      expect(txMock.aiCoverageSummary.deleteMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('getLatestSummaryWithSources', () => {
+    it('gibt Zusammenfassung mit aufgeloesten Quelldokumenten zurueck', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
+      mockDb.aiCoverageSummary.findFirst.mockResolvedValue({
+        id: 'summary-1',
+        policyId,
+        providerKey: 'ollama',
+        model: 'llama3',
+        summaryMarkdown: '# Test Zusammenfassung',
+        sourceDocumentRefsJson: ['doc-1', 'doc-2'],
+        createdAt: new Date('2025-01-01'),
+      });
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: 'doc-1', fileName: 'Versicherungsschein.pdf' },
+        { id: 'doc-2', fileName: 'Allgemeine Bedingungen.pdf' },
+      ]);
+
+      const result = await service.getLatestSummaryWithSources(householdId, userId, policyId);
+
+      expect(result.sourceDocuments).toHaveLength(2);
+      expect(result.sourceDocuments[0].fileName).toBe('Versicherungsschein.pdf');
+      expect(result.sourceDocuments[1].id).toBe('doc-2');
+      expect(result.providerKey).toBe('ollama');
+    });
+
+    it('gibt leere sourceDocuments bei fehlenden Referenzen zurueck', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
+      mockDb.aiCoverageSummary.findFirst.mockResolvedValue({
+        id: 'summary-1',
+        policyId,
+        providerKey: 'openai-compat',
+        model: 'gpt-4',
+        summaryMarkdown: '# Test',
+        sourceDocumentRefsJson: null,
+        createdAt: new Date('2025-01-01'),
+      });
+
+      const result = await service.getLatestSummaryWithSources(householdId, userId, policyId);
+
+      expect(result.sourceDocuments).toEqual([]);
+      expect(result.providerKey).toBe('openai-compat');
+    });
+
+    it('wirft NotFoundException bei fehlender Zusammenfassung', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
+      mockDb.aiCoverageSummary.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getLatestSummaryWithSources(householdId, userId, policyId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('resolved nur vorhandene Dokumente aus sourceDocumentRefs', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
+      mockDb.aiCoverageSummary.findFirst.mockResolvedValue({
+        id: 'summary-1',
+        policyId,
+        providerKey: 'ollama',
+        model: 'llama3',
+        summaryMarkdown: '# Test',
+        sourceDocumentRefsJson: ['doc-exists', 'doc-deleted'],
+        createdAt: new Date('2025-01-01'),
+      });
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: 'doc-exists', fileName: 'Vorhanden.pdf' },
+      ]);
+
+      const result = await service.getLatestSummaryWithSources(householdId, userId, policyId);
+
+      expect(result.sourceDocuments).toHaveLength(1);
+      expect(result.sourceDocuments[0].id).toBe('doc-exists');
     });
   });
 

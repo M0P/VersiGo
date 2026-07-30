@@ -134,6 +134,55 @@ export class AiAssistService {
   }
 
   /**
+   * Ruft die letzte Zusammenfassung einer Policy mit aufgeloesten Quelldokument-Informationen ab.
+   * Gibt die Zusammenfassung mit Dokumentnamen, Provider und Modell zurueck.
+   * Wirft NotFoundException, wenn keine Zusammenfassung existiert.
+   */
+  async getLatestSummaryWithSources(
+    householdId: string,
+    userId: string,
+    policyId: string,
+  ) {
+    await this.assertHouseholdAccess(householdId, userId);
+
+    const summary = await this.db.aiCoverageSummary.findFirst({
+      where: { policyId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!summary) {
+      throw new NotFoundException('Keine Zusammenfassung gefunden');
+    }
+
+    // Lese sourceDocumentRefs (Array von Dokument-IDs) und loese Namen auf
+    const sourceDocIds: string[] = Array.isArray(summary.sourceDocumentRefsJson)
+      ? (summary.sourceDocumentRefsJson as string[])
+      : [];
+
+    const documents = sourceDocIds.length > 0
+      ? await this.db.policyDocument.findMany({
+          where: { id: { in: sourceDocIds } },
+          select: { id: true, fileName: true },
+        })
+      : [];
+
+    const sourceDocuments = documents.map((d) => ({
+      id: d.id,
+      fileName: d.fileName,
+    }));
+
+    return {
+      id: summary.id,
+      policyId: summary.policyId,
+      providerKey: summary.providerKey,
+      model: summary.model,
+      summaryMarkdown: summary.summaryMarkdown,
+      sourceDocuments,
+      createdAt: summary.createdAt,
+    };
+  }
+
+  /**
    * Fuehrt eine synchrone Extraktion durch (fuer Tests / Debug).
    * Im Normalbetrieb asynchron ueber Jobs.
    */
@@ -222,43 +271,37 @@ export class AiAssistService {
     const result = await adapter.summarizeCoverage(documentContents, policyId);
     if (!result) return null;
 
-    // Speichere die Zusammenfassung
-    await this.db.aiCoverageSummary.create({
-      data: {
-        policyId,
-        providerKey: adapter.providerKey,
-        model: result.model,
-        summaryMarkdown: result.summaryMarkdown,
-        sourceDocumentRefsJson: result.sourceDocumentRefs,
-      },
+    // Speichere die Zusammenfassung (append-only, aber alte Eintraege
+    // werden begrenzt: maximal 5 Zusammenfassungen pro Policy)
+    await this.db.$transaction(async (tx) => {
+      await tx.aiCoverageSummary.create({
+        data: {
+          policyId,
+          providerKey: adapter.providerKey,
+          model: result.model,
+          summaryMarkdown: result.summaryMarkdown,
+          sourceDocumentRefsJson: result.sourceDocumentRefs,
+        },
+      });
+
+      // Entferne ueberzaehlige alte Zusammenfassungen, behalte nur die 5 neuesten
+      const summaries = await tx.aiCoverageSummary.findMany({
+        where: { policyId },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+        skip: 5, // die 5 neuesten behalten
+      });
+      if (summaries.length > 0) {
+        await tx.aiCoverageSummary.deleteMany({
+          where: { id: { in: summaries.map((s) => s.id) } },
+        });
+      }
     });
 
     return {
       summaryMarkdown: result.summaryMarkdown,
       model: result.model,
     };
-  }
-
-  /**
-   * Ruft die letzte Zusammenfassung einer Policy ab.
-   */
-  async getLatestSummary(
-    householdId: string,
-    userId: string,
-    policyId: string,
-  ) {
-    await this.assertHouseholdAccess(householdId, userId);
-
-    const summary = await this.db.aiCoverageSummary.findFirst({
-      where: { policyId },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!summary) {
-      throw new NotFoundException('Keine Zusammenfassung gefunden');
-    }
-
-    return summary;
   }
 
   /**
