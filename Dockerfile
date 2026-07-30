@@ -15,7 +15,10 @@ RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 WORKDIR /app
 
 COPY --from=base /app /app
+COPY docker/start.sh /app/start.sh
+
+RUN chmod +x /app/start.sh
 
 EXPOSE 3000 3001
 
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy --schema /app/prisma/schema.prisma && pnpm run dev"]
+CMD ["/app/start.sh"]
