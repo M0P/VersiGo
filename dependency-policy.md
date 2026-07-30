@@ -32,6 +32,13 @@ Monatlicher Review via `pnpm outdated -r` und `pnpm audit`. Ergebnisse werden im
 | class-validator | ^0.14.1 | aktiv gepflegt, weite Verbreitung | keine kritischen | typestack, weite Verbreitung | MIT | Zugelassen |
 | class-transformer | ^0.5.1 | aktiv gepflegt | keine kritischen | typestack | MIT | Zugelassen |
 
+## AP-08-paperless-ngx: neu geprüfte Abhängigkeiten
+
+| Paket | Version | Letztes Release | Security Advisories | Bus-Faktor / Wartung | Lizenz | Ergebnis |
+|---|---|---|---|---|---|---|
+| @nestjs/axios | ^4.0.1 | Apr 2026 | keine offenen kritischen | NestJS Core Team, offizielles Modul, aktiv | MIT | Zugelassen |
+| axios | ^1.18.1 | Apr 2026 | keine offenen kritischen (Snyk-geprüft) | Weite Verbreitung, aktiv, 30M+ wöchentl. Downloads | MIT | Transitiv zugelassen |
+
 ### Explizit verworfene Kandidaten
 - **passport-openidconnect** (jaredhanson): letztes Release Feb 2024 (>12 Monate), geringere Aktivität als openid-client. Nicht zugelassen.
 - **passport-jwt**: letztes Release >4 Jahre zurück, kein aktiver Bus-Faktor sichtbar. Nicht zugelassen; JWT-Validierung erfolgt bei Bedarf über @nestjs/jwt.

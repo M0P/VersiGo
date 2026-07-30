@@ -15,6 +15,7 @@ import { DocumentsModule } from './features/documents/documents.module';
 import { FamilySharingModule } from './features/family-sharing/family-sharing.module';
 import { IdentityModule } from './features/identity/identity.module';
 import { NotificationsModule } from './features/notifications/notifications.module';
+import { PaperlessNgxModule } from './features/paperless-ngx/paperless-ngx.module';
 import { PolicyRegistryModule } from './features/policy-registry/policy-registry.module';
 import { PortalConnectorsModule } from './features/portal-connectors/portal-connectors.module';
 
@@ -39,6 +40,7 @@ import { PortalConnectorsModule } from './features/portal-connectors/portal-conn
     AdminSettingsModule,
     AuditModule,
     NotificationsModule,
+    PaperlessNgxModule,
   ],
 })
 export class AppModule {}

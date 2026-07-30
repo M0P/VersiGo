@@ -49,6 +49,8 @@ export const appConfigSchema = z.object({
   AI_ENABLED: booleanFromEnv.default(false),
 
   PAPERLESS_ENABLED: booleanFromEnv.default(false),
+  PAPERLESS_URL: z.string().optional(),
+  PAPERLESS_API_TOKEN: z.string().optional(),
 
   SETTINGS_ENCRYPTION_KEY: z
     .string()
