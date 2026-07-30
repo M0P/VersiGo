@@ -34,11 +34,6 @@ export class DocumentsController {
 
   constructor(private readonly service: DocumentsService) {}
 
-  private sanitizeFilename(name: string): string {
-    const cleaned = name.replace(/["\r\n]/g, '').replace(/[<>:/\\|?*]/g, '_');
-    return cleaned || 'document';
-  }
-
   @Post()
   @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE } }))
@@ -91,7 +86,7 @@ export class DocumentsController {
     try {
       const { document, filePath } = await this.service.getDocumentAndPath(householdId, userId, policyId, docId);
 
-      const safeName = this.sanitizeFilename(document.fileName);
+      const safeName = this.service.sanitizeFilename(document.fileName);
       const stat = await fs.promises.stat(filePath);
 
       const headers: Record<string, string> = {

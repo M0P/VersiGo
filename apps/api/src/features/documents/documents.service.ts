@@ -19,6 +19,21 @@ const ALLOWED_MIME_TYPES = [
   'text/csv',
 ];
 
+const MAGIC_BYTES: Record<string, Buffer[]> = {
+  'application/pdf': [Buffer.from([0x25, 0x50, 0x44, 0x46])],
+  'image/jpeg': [Buffer.from([0xff, 0xd8, 0xff])],
+  'image/png': [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+  'image/tiff': [Buffer.from([0x49, 0x49, 0x2a, 0x00]), Buffer.from([0x4d, 0x4d, 0x00, 0x2a])],
+  'application/msword': [Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [
+    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+  ],
+  'application/vnd.ms-excel': [Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [
+    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+  ],
+};
+
 export const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,6 +86,16 @@ export class DocumentsService {
     }
   }
 
+  private validateFileMagicBytes(mimetype: string, buffer: Buffer): void {
+    const signatures = MAGIC_BYTES[mimetype];
+    if (!signatures) return;
+
+    const valid = signatures.some((sig) => sig.equals(buffer.subarray(0, sig.length)));
+    if (!valid) {
+      throw new BadRequestException('Datei-Inhalt stimmt nicht mit dem angegebenen Dateityp überein');
+    }
+  }
+
   private validateFile(file: UploadedFile): void {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       throw new BadRequestException(`Dateityp ${file.mimetype} ist nicht erlaubt`);
@@ -83,9 +108,11 @@ export class DocumentsService {
     if (file.originalname.length > 255) {
       throw new BadRequestException('Dateiname ist zu lang (max. 255 Zeichen)');
     }
+
+    this.validateFileMagicBytes(file.mimetype, file.buffer);
   }
 
-  private sanitizeFilename(name: string): string {
+  sanitizeFilename(name: string): string {
     const cleaned = name.replace(/["\r\n]/g, '').replace(/[<>:/\\|?*]/g, '_');
     return cleaned || 'document';
   }
@@ -274,7 +301,6 @@ export class DocumentsService {
           documentDate: dto.documentDate !== undefined
             ? (dto.documentDate ? new Date(dto.documentDate) : null)
             : undefined,
-          storageType: dto.storageType,
         },
       });
 
@@ -306,9 +332,22 @@ export class DocumentsService {
   async remove(householdId: string, userId: string, policyId: string, docId: string) {
     await this.assertPolicyAccess(householdId, userId, policyId);
 
+    const filePath = this.resolveSafePath(policyId, docId, docId);
+    try {
+      await fs.unlink(filePath);
+    } catch (err) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        this.logger.warn(`remove: disk file already gone for doc ${docId} at ${filePath}`);
+      } else {
+        this.logger.error(`remove disk file ${filePath} failed: ${nodeErr.message}`);
+        throw err;
+      }
+    }
+
     const archivedAt = new Date();
 
-    const result = await this.db.$transaction(async (tx) => {
+    return this.db.$transaction(async (tx) => {
       const existing = await tx.policyDocument.findFirst({
         where: { id: docId, policyId, archivedAt: null },
       });
@@ -338,17 +377,5 @@ export class DocumentsService {
       this.logger.error(`remove document ${docId} failed: ${err.message}`, err.stack);
       throw err;
     });
-
-    const filePath = this.resolveSafePath(policyId, docId, docId);
-    try {
-      await fs.unlink(filePath);
-    } catch (err) {
-      const nodeErr = err as NodeJS.ErrnoException;
-      if (nodeErr.code !== 'ENOENT') {
-        this.logger.error(`remove disk file ${filePath} failed: ${nodeErr.message}`);
-      }
-    }
-
-    return result;
   }
 }
