@@ -1,4 +1,5 @@
-import { IsString, IsBoolean } from 'class-validator';
+import { IsString, IsBoolean, IsArray, ValidateNested, IsDateString, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class StartExtractionDto {
   @IsString()
@@ -19,4 +20,38 @@ export class AiHealthCheckResponseDto {
 
   @IsString()
   provider!: string;
+}
+
+export class SourceDocumentInfo {
+  @IsString()
+  id!: string;
+
+  @IsString()
+  fileName!: string;
+}
+
+export class CoverageSummaryResponseDto {
+  @IsString()
+  id!: string;
+
+  @IsString()
+  policyId!: string;
+
+  @IsString()
+  providerKey!: string;
+
+  @IsOptional()
+  @IsString()
+  model!: string | null;
+
+  @IsString()
+  summaryMarkdown!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SourceDocumentInfo)
+  sourceDocuments!: SourceDocumentInfo[];
+
+  @IsDateString()
+  createdAt!: string;
 }

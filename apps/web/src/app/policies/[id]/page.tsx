@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactElement } from 'react';
 import { useParams } from 'next/navigation';
+import CoverageSummarySection from './coverage-summary-section';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -80,6 +81,8 @@ export default function PolicyDetailPage(): ReactElement {
           </li>
         ))}
       </ul>
+
+      <CoverageSummarySection householdId="default" policyId={policyId} />
 
       <a href="/policies">Zurueck zur Uebersicht</a>
     </main>
