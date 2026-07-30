@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Post,
@@ -7,9 +8,11 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { CurrentUser } from './current-user.decorator';
-import { AuthenticatedUser } from './auth.service';
+import { AuthenticatedUser, AuthService } from './auth.service';
 import { Public } from '@insura/foundation';
 import { OidcStrategy } from './oidc.strategy';
+import { CapabilityFlagsService } from '@insura/foundation';
+import { LoginRateLimiterService } from './login-rate-limiter.service';
 
 type SessionRequest = Request & {
   user?: AuthenticatedUser;
@@ -24,7 +27,12 @@ type SessionRequest = Request & {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly oidc: OidcStrategy) {}
+  constructor(
+    private readonly oidc: OidcStrategy,
+    private readonly authService: AuthService,
+    private readonly capabilities: CapabilityFlagsService,
+    private readonly rateLimiter: LoginRateLimiterService,
+  ) {}
 
   @Public()
   @Get('login')
@@ -41,6 +49,80 @@ export class AuthController {
     req.session.oidcCodeVerifier = codeVerifier;
     req.session.oidcState = state;
     res.redirect(url);
+  }
+
+  @Public()
+  @Get('config')
+  getAuthConfig(): { oidcEnabled: boolean; localEnabled: boolean } {
+    return {
+      oidcEnabled: this.capabilities.isEnabled('oidc'),
+      localEnabled: this.capabilities.isEnabled('local'),
+    };
+  }
+
+  @Public()
+  @Post('local/login')
+  async localLogin(
+    @Req() req: SessionRequest,
+    @Res() res: Response,
+    @Body() body: { identifier: string; password: string },
+  ): Promise<void> {
+    if (!this.capabilities.isEnabled('local')) {
+      res.status(501).json({
+        message:
+          'Lokale Anmeldung ist nicht konfiguriert. Setze LOCAL_AUTH_ENABLED=true.',
+      });
+      return;
+    }
+
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    const blocked = await this.rateLimiter.isBlocked(ip);
+    if (blocked) {
+      // Return generic error without revealing account existence
+      res.status(429).json({
+        message: 'Anmeldeversuch fehlgeschlagen. Bitte versuchen Sie es spaeter erneut.',
+      });
+      return;
+    }
+
+    const identifier = body?.identifier ?? '';
+    const password = body?.password ?? '';
+
+    if (!identifier || !password) {
+      res.status(400).json({ message: 'Benutzername und Passwort sind erforderlich' });
+      return;
+    }
+
+    const user = await this.authService.localLogin(identifier, password);
+
+    if (!user) {
+      await this.rateLimiter.recordAttempt(ip);
+      // Generic error - does not reveal whether identifier exists
+      res.status(401).json({
+        message: 'Anmeldedaten sind ungueltig.',
+      });
+      return;
+    }
+
+    // Success - reset rate limit counter
+    await this.rateLimiter.resetAttempts(ip);
+
+    req.session.regenerate((err?: Error | null) => {
+      if (err) {
+        res.status(500).json({ message: 'Session-Fehler' });
+        return;
+      }
+      req.session.userId = user.id;
+      // Clean up any stale OIDC flow data from previous session
+      delete req.session.oidcCodeVerifier;
+      delete req.session.oidcState;
+      res.status(200).json({
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        memberships: user.memberships,
+      });
+    });
   }
 
   @Public()

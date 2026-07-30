@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AppConfigService } from '../config';
 
-export type CapabilityKey = 'oidc' | 'ai' | 'paperless' | 'storage';
+export type CapabilityKey = 'oidc' | 'local' | 'ai' | 'paperless' | 'storage';
 
 /**
  * Zentrale Auskunftstelle darueber, ob eine optionale Integration
@@ -18,6 +18,8 @@ export class CapabilityFlagsService {
     switch (capability) {
       case 'oidc':
         return this.config.get('OIDC_ENABLED');
+      case 'local':
+        return this.config.get('LOCAL_AUTH_ENABLED');
       case 'ai':
         return this.config.get('AI_ENABLED');
       case 'paperless':
@@ -32,6 +34,7 @@ export class CapabilityFlagsService {
   snapshot(): Record<CapabilityKey, boolean> {
     return {
       oidc: this.isEnabled('oidc'),
+      local: this.isEnabled('local'),
       ai: this.isEnabled('ai'),
       paperless: this.isEnabled('paperless'),
       storage: this.isEnabled('storage'),

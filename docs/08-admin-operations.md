@@ -17,7 +17,24 @@ Siehe `.env.example` für alle Konfigurationsvariablen. Erforderliche Variablen:
 | `SESSION_SECRET` | Session-Secret (min. 32 Zeichen) | `openssl rand -hex 32` |
 | `SETTINGS_ENCRYPTION_KEY` | AES-256-GCM Schlüssel (64 Hex-Zeichen) | `openssl rand -hex 32` |
 
-Optionale Variablen für OIDC, AI, Paperless-ngx, S3 sind in `.env.example` dokumentiert.
+Optionale Variablen für OIDC, lokale Authentifizierung, AI, Paperless-ngx, S3 sind in `.env.example` dokumentiert.
+
+## Lokale Authentifizierung
+
+Die lokale Benutzername/Passwort-Authentifizierung wird über die Umgebungsvariable `LOCAL_AUTH_ENABLED=true` aktiviert.
+
+### Entwicklung
+Für die lokale Entwicklung kann die lokale Authentifizierung ohne OIDC-Provider genutzt werden:
+```
+LOCAL_AUTH_ENABLED=true
+```
+
+### Betriebshinweise
+- Beide Authentifizierungsmethoden (OIDC und lokal) können gleichzeitig aktiv sein
+- Bei ausschließlicher Nutzung der lokalen Authentifizierung muss OIDC deaktiviert sein (`OIDC_ENABLED=false`)
+- Wenn keine Authentifizierungsmethode aktiviert ist, startet die Anwendung nicht (Konfigurationsfehler)
+- Benutzerkonten für die lokale Anmeldung müssen über die Admin-Oberfläche oder Skripte angelegt werden (derzeit kein Self-Service)
+- Ein Passwort-Reset per E-Mail ist derzeit nicht implementiert (geplante Erweiterung)
 
 ### Health Checks
 

@@ -46,6 +46,12 @@ Monatlicher Review via `pnpm outdated -r` und `pnpm audit`. Ergebnisse werden im
 | @nestjs/bullmq | ^11.0.0 | Feb 2026 | keine offenen kritischen | NestJS Core Team, offizielles Modul, aktiv | MIT | Bereits in foundation zugelassen |
 | axios | ^1.18.1 | Apr 2026 | keine offenen kritischen (Snyk-geprüft) | Weite Verbreitung, aktiv, 30M+ wöchentl. Downloads | MIT | Bereits via @nestjs/axios in API zugelassen |
 
+## AP-14-local-username-password-login: neu geprüfte Abhängigkeiten
+
+| Paket | Version | Letztes Release | Security Advisories | Bus-Faktor / Wartung | Lizenz | Ergebnis |
+|---|---|---|---|---|---|---|
+| bcrypt | ^5.1.1 | Jul 2024 (5.1.1) | keine offenen kritischen (Snyk-geprüft) | kelektron + Community, sehr weite Verbreitung, 1M+ wöchentl. Downloads, aktiv | MIT | Zugelassen |
+
 ### Explizit verworfene Kandidaten
 - **passport-openidconnect** (jaredhanson): letztes Release Feb 2024 (>12 Monate), geringere Aktivität als openid-client. Nicht zugelassen.
 - **passport-jwt**: letztes Release >4 Jahre zurück, kein aktiver Bus-Faktor sichtbar. Nicht zugelassen; JWT-Validierung erfolgt bei Bedarf über @nestjs/jwt.

@@ -19,6 +19,7 @@ describe('CapabilityFlagsService', () => {
     const service = new CapabilityFlagsService(buildConfig());
     expect(service.snapshot()).toEqual({
       oidc: false,
+      local: false,
       ai: false,
       paperless: false,
       storage: false,

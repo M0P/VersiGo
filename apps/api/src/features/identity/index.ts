@@ -4,4 +4,6 @@ export * from './current-user.decorator';
 export * from './auth.guard';
 export * from './roles.guard';
 export * from './household-membership.guard';
+export * from './password-hashing.service';
+export * from './login-rate-limiter.service';
 export * from './identity.module';
