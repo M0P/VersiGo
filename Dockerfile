@@ -1,7 +1,7 @@
 FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 WORKDIR /app
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
 COPY apps/ apps/
 COPY packages/ packages/
 COPY prisma/ prisma/
