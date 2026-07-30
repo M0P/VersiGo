@@ -12,6 +12,7 @@ import { AiAssistModule } from './features/ai-assist/ai-assist.module';
 import { AuditModule } from './features/audit/audit.module';
 import { CostTrackingModule } from './features/cost-tracking/cost-tracking.module';
 import { DocumentsModule } from './features/documents/documents.module';
+import { FamilySharingModule } from './features/family-sharing/family-sharing.module';
 import { IdentityModule } from './features/identity/identity.module';
 import { NotificationsModule } from './features/notifications/notifications.module';
 import { PolicyRegistryModule } from './features/policy-registry/policy-registry.module';
@@ -32,6 +33,7 @@ import { PortalConnectorsModule } from './features/portal-connectors/portal-conn
     PolicyRegistryModule,
     DocumentsModule,
     CostTrackingModule,
+    FamilySharingModule,
     AiAssistModule,
     PortalConnectorsModule,
     AdminSettingsModule,
