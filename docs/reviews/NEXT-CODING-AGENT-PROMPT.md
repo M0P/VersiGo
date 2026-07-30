@@ -1,11 +1,11 @@
-# Next Work Package: AP-07-admin-settings
+# Next Work Package: AP-08-paperless-ngx
 
 Implementiere ausschließlich dieses Arbeitspaket. Verwende denselben Review-Loop:
 - Führe die Implementierung durch
 - Führe Formatierung, Linting, Typecheck und Tests aus
-- Erstelle einen Branch `feat/AP-07-admin-settings` vom aktuellen `main`
+- Erstelle einen Branch `feat/AP-08-paperless-ngx` vom aktuellen `main`
 - Lasse einen Review durch den code-reviewer Subagenten durchführen
-- Speichere Reviews unter `docs/reviews/AP-07-admin-settings-review-<iteration>.md`
+- Speichere Reviews unter `docs/reviews/AP-08-paperless-ngx-review-<iteration>.md`
 - Behebe Critical, High und Medium Findings
 - Committe nur bei erfüllter Akzeptanzbedingung
 - Beginne KEIN späteres Arbeitspaket
@@ -14,33 +14,33 @@ Starte keinen anderen Branch, kein anderes Feature und kein späteres Arbeitspak
 
 ---
 
-Full content of `prompts/AP-07-admin-settings.md`:
+Full content of `prompts/AP-08-paperless-ngx.md`:
 
-# Arbeitspaket AP-07: admin-settings
+# Arbeitspaket AP-08: paperless-ngx
 
 ## Ziel
-Admin-UI, verschlüsselter Settings-Store, Feature Flags und Integrationsverwaltung.
+Optionaler Paperless-ngx-Adapter für Deep Links, Metadaten und referenzierte Dokumente.
 
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-07 im Projekt Insura.
+Du implementierst AP-08 im Projekt Insura.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`
 - Alle Dokumente unter `/docs`, insbesondere Architektur-ADRs, Sicherheit und Bibliothekspolitik
 
-Arbeite in einem neuen Branch `feat/AP-07-admin-settings` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
+Arbeite in einem neuen Branch `feat/AP-08-paperless-ngx` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
 
 Aufgabe:
-Admin-UI, verschlüsselter Settings-Store, Feature Flags und Integrationsverwaltung.
+Optionaler Paperless-ngx-Adapter für Deep Links, Metadaten und referenzierte Dokumente.
 
 Akzeptanzkriterien:
-- Einstellungen sind webbasiert verwaltbar.
-- Technische Bootstrap-Werte bleiben minimiert und dokumentiert.
-- Feature Flags deaktivieren nur die jeweilige Teilfunktion.
-- API-Keys werden nicht im Klartext angezeigt oder geloggt.
-- Konfigurationsvalidierung und Connectivity-Tests sind vorhanden.
+- Die Integration ist vollständig optional.
+- Ohne Paperless bleibt die interne Dokumentenablage uneingeschränkt nutzbar.
+- Adapter nutzt klar abgegrenzte Ports/Interfaces.
+- Fehlerhafte Synchronisation blockiert keine Kernfunktionen.
+- Mock-basierte Integrationstests sind vorhanden.
 
 Vorgehen:
 1. Gib zunächst ausschließlich Ziel, technische Lösung, Architekturentscheidung, betroffene Dateien, neue Abhängigkeiten samt Maintenance-Prüfung, Risiken und Testplan aus.
@@ -51,7 +51,7 @@ Vorgehen:
 6. Öffne einen Pull Request gegen `main`; niemals selbst mergen.
 
 PR-Titel:
-`feat(AP-07): admin-settings`
+`feat(AP-08): paperless-ngx`
 
 PR-Beschreibung muss enthalten:
 - Zweck und Architekturentscheidung

@@ -12,8 +12,8 @@ permission:
   edit: allow
   bash: allow
   task:
-    code-reviewer: allow
     "*": deny
+    code-reviewer: allow
   webfetch: deny
   websearch: deny
 ---
@@ -24,6 +24,15 @@ MODEL RULE:
 - You must use only your configured model: opencode/big-pickle.
 - Do not select, suggest, invoke, or delegate to any other coding model.
 - For review work, invoke only the code-reviewer subagent.
+
+REVIEW ENFORCEMENT RULE:
+- A code review is valid only if the Task tool successfully invokes
+  the `code-reviewer` subagent.
+- Never perform, simulate, summarise, or replace the review yourself.
+- If the Task tool or `code-reviewer` is unavailable, stop immediately.
+- Do not write a review report, fix review findings, or commit anything
+  if no completed `code-reviewer` task result exists.
+- Report exactly: "REVIEW AUTOMATION FAILED: DeepSeek code-reviewer could not be invoked."
 
 SCOPE RULE:
 - Implement ONLY the work package supplied in the user's request.
