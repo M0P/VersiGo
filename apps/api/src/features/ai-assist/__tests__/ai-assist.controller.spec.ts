@@ -9,7 +9,7 @@ type ServiceLike = {
   listJobs: ReturnType<typeof vi.fn>;
   getJobStatus: ReturnType<typeof vi.fn>;
   summarize: ReturnType<typeof vi.fn>;
-  getLatestSummary: ReturnType<typeof vi.fn>;
+  getLatestSummaryWithSources: ReturnType<typeof vi.fn>;
   setDocumentExclusion: ReturnType<typeof vi.fn>;
   healthCheck: ReturnType<typeof vi.fn>;
 };
@@ -21,7 +21,7 @@ function createMockService(): ServiceLike {
     listJobs: vi.fn(),
     getJobStatus: vi.fn(),
     summarize: vi.fn(),
-    getLatestSummary: vi.fn(),
+    getLatestSummaryWithSources: vi.fn(),
     setDocumentExclusion: vi.fn(),
     healthCheck: vi.fn(),
   };
@@ -96,15 +96,22 @@ describe('AiAssistController', () => {
     expect(service.summarize).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 
-  it('getLatestSummary delegiert an Service', async () => {
+  it('getLatestSummary delegiert an getLatestSummaryWithSources', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
-    service.getLatestSummary.mockResolvedValue({ id: 'summary-1', summaryMarkdown: '# Test' });
+    service.getLatestSummaryWithSources.mockResolvedValue({
+      id: 'summary-1',
+      summaryMarkdown: '# Test',
+      sourceDocuments: [{ id: 'doc-1', fileName: 'test.pdf' }],
+      providerKey: 'ollama',
+      model: 'llama3',
+    });
 
     const result = await controller.getLatestSummary(householdId, policyId, mockUser);
 
     expect(result.summaryMarkdown).toBe('# Test');
-    expect(service.getLatestSummary).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
+    expect(result.sourceDocuments).toHaveLength(1);
+    expect(service.getLatestSummaryWithSources).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 
   it('setDocumentExclusion delegiert an Service', async () => {
@@ -131,5 +138,15 @@ describe('AiAssistController', () => {
     const result = await controller.healthCheck(householdId);
 
     expect(result).toEqual({ connected: false, provider: 'none' });
+  });
+
+  it('aiStatus delegiert an healthCheck', async () => {
+    const service = createMockService();
+    const controller = new AiAssistController(service as never);
+    service.healthCheck.mockResolvedValue({ connected: true, provider: 'ollama' });
+
+    const result = await controller.aiStatus(householdId);
+
+    expect(result).toEqual({ connected: true, provider: 'ollama' });
   });
 });

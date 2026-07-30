@@ -95,7 +95,7 @@ export class AiAssistController {
   }
 
   /**
-   * Ruft die letzte Zusammenfassung einer Police ab.
+   * Ruft die letzte Zusammenfassung einer Police inklusive Quelldokument-Informationen ab.
    */
   @Get(':policyId/summary')
   @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
@@ -104,7 +104,19 @@ export class AiAssistController {
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.aiAssistService.getLatestSummary(householdId, user.id, policyId);
+    return this.aiAssistService.getLatestSummaryWithSources(householdId, user.id, policyId);
+  }
+
+  /**
+   * Prueft, ob AI fuer dieses Household konfiguriert und aktiv ist.
+   * Leichtgewichtiger Check ohne Policy-Kontext fuer die UI.
+   */
+  @Get('status')
+  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  async aiStatus(
+    @Param('householdId') _householdId: string,
+  ) {
+    return this.aiAssistService.healthCheck();
   }
 
   /**
