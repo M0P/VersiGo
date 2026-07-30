@@ -1,11 +1,11 @@
-# Next Work Package: AP-08-paperless-ngx
+# Next Work Package: AP-09-ai-assist
 
 Implementiere ausschließlich dieses Arbeitspaket. Verwende denselben Review-Loop:
 - Führe die Implementierung durch
 - Führe Formatierung, Linting, Typecheck und Tests aus
-- Erstelle einen Branch `feat/AP-08-paperless-ngx` vom aktuellen `main`
+- Erstelle einen Branch `feat/AP-09-ai-assist` vom aktuellen `main`
 - Lasse einen Review durch den code-reviewer Subagenten durchführen
-- Speichere Reviews unter `docs/reviews/AP-08-paperless-ngx-review-<iteration>.md`
+- Speichere Reviews unter `docs/reviews/AP-09-ai-assist-review-<iteration>.md`
 - Behebe Critical, High und Medium Findings
 - Committe nur bei erfüllter Akzeptanzbedingung
 - Beginne KEIN späteres Arbeitspaket
@@ -14,33 +14,33 @@ Starte keinen anderen Branch, kein anderes Feature und kein späteres Arbeitspak
 
 ---
 
-Full content of `prompts/AP-08-paperless-ngx.md`:
+Full content of `prompts/AP-09-ai-assist.md`:
 
-# Arbeitspaket AP-08: paperless-ngx
+# Arbeitspaket AP-09: ai-assist
 
 ## Ziel
-Optionaler Paperless-ngx-Adapter für Deep Links, Metadaten und referenzierte Dokumente.
+Optionale AI-Provider-Adapter, asynchrone Vertragsdatenextraktion und Job-Monitoring.
 
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-08 im Projekt Insura.
+Du implementierst AP-09 im Projekt Insura.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`
 - Alle Dokumente unter `/docs`, insbesondere Architektur-ADRs, Sicherheit und Bibliothekspolitik
 
-Arbeite in einem neuen Branch `feat/AP-08-paperless-ngx` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
+Arbeite in einem neuen Branch `feat/AP-09-ai-assist` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
 
 Aufgabe:
-Optionaler Paperless-ngx-Adapter für Deep Links, Metadaten und referenzierte Dokumente.
+Optionale AI-Provider-Adapter, asynchrone Vertragsdatenextraktion und Job-Monitoring.
 
 Akzeptanzkriterien:
-- Die Integration ist vollständig optional.
-- Ohne Paperless bleibt die interne Dokumentenablage uneingeschränkt nutzbar.
-- Adapter nutzt klar abgegrenzte Ports/Interfaces.
-- Fehlerhafte Synchronisation blockiert keine Kernfunktionen.
-- Mock-basierte Integrationstests sind vorhanden.
+- Ollama und OpenAI-kompatible Provider sind über ein gemeinsames Interface anbindbar.
+- AI-Jobs laufen asynchron und sind retryfähig.
+- AI-Ausfall blockiert weder Vertrags- noch Dokumentenverwaltung.
+- Extrahierte Daten enthalten Quelle, Konfidenz und Übernahme-Workflow.
+- Dokumente können von AI-Verarbeitung ausgeschlossen werden.
 
 Vorgehen:
 1. Gib zunächst ausschließlich Ziel, technische Lösung, Architekturentscheidung, betroffene Dateien, neue Abhängigkeiten samt Maintenance-Prüfung, Risiken und Testplan aus.
@@ -51,7 +51,7 @@ Vorgehen:
 6. Öffne einen Pull Request gegen `main`; niemals selbst mergen.
 
 PR-Titel:
-`feat(AP-08): paperless-ngx`
+`feat(AP-09): ai-assist`
 
 PR-Beschreibung muss enthalten:
 - Zweck und Architekturentscheidung
