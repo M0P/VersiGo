@@ -116,7 +116,8 @@ describe('CostTrackingController', () => {
 
     const result = await controller.getAnnualCost(householdId, policyId, mockUser);
 
-    expect(result.annualGross).toBe(1200);
+    expect(result).not.toBeNull();
+    expect(result!.annualGross).toBe(1200);
     expect(service.getAnnualCost).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 
@@ -127,7 +128,8 @@ describe('CostTrackingController', () => {
 
     const result = await controller.getYearComparison(householdId, policyId, mockUser, '2025');
 
-    expect(result.absoluteChange).toBe(100);
+    expect(result).not.toBeNull();
+    expect(result!.absoluteChange).toBe(100);
     expect(service.getYearComparison).toHaveBeenCalledWith(householdId, mockUser.id, policyId, 2025);
   });
 });

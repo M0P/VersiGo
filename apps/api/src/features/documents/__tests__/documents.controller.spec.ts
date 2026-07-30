@@ -48,7 +48,8 @@ function createMockService(): ServiceLike {
   };
 }
 
-function createMockRes() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createMockRes(): any {
   return {
     set: vi.fn(),
     status: vi.fn().mockReturnThis(),

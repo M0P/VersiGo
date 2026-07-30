@@ -56,16 +56,18 @@ export default function PolicyCostsPage(): ReactElement {
       .then(([annualRes, entriesRes]) => {
         if (annualRes.status === 401 || entriesRes.status === 401) {
           window.location.href = '/login';
-          return Promise.resolve(null);
+          return;
         }
         return Promise.all([
           annualRes.ok ? annualRes.json() : null,
           entriesRes.ok ? entriesRes.json() : [],
-        ]);
-      })
-      .then(([annualData, entriesData]) => {
-        if (annualData) setAnnual(annualData);
-        setEntries(entriesData ?? []);
+        ]).then(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ([annualData, entriesData]: [any, any]) => {
+            if (annualData) setAnnual(annualData);
+            setEntries(entriesData ?? []);
+          },
+        );
       })
       .catch(() => { setAnnual(null); setEntries([]); })
       .finally(() => setLoading(false));

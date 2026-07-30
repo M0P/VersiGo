@@ -20,7 +20,7 @@ import { HouseholdRole } from '@prisma/client';
 import { Response } from 'express';
 import * as fs from 'fs';
 import { DocumentsService, MAX_FILE_SIZE } from './documents.service';
-import type { UploadedFile } from './documents.types';
+import type { UploadedFile as UploadedFileType } from './documents.types';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
 import { Roles } from '../identity/roles.decorator';
@@ -48,7 +48,7 @@ export class DocumentsController {
         ],
       }),
     )
-    file: UploadedFile,
+    file: UploadedFileType,
     @Body() dto: UploadDocumentDto,
   ) {
     return this.service.upload(householdId, user.id, policyId, file, dto);

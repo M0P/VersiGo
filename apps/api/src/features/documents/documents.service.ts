@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { DatabaseService, AppConfigService } from '@insura/foundation';
+import type { Prisma } from '@prisma/client';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -317,7 +318,7 @@ export class DocumentsService {
           entityType: 'PolicyDocument',
           entityId: docId,
           action: 'UPDATE',
-          diffJson: diff,
+          diffJson: diff as Prisma.InputJsonValue,
         },
       });
 
