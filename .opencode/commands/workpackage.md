@@ -19,3 +19,4 @@ Follow the coding-agent workflow exactly:
 - After committing, create docs/reviews/NEXT-CODING-AGENT-PROMPT.md from the next numbered file in /prompts.
 - Stop after creating that prompt; never start the next work package.
 - Never push or merge.
+- At the end make sure that everything is comitted and ready to be pushed and merged by the user - this is always the last step.
