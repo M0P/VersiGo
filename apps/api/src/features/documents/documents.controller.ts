@@ -35,7 +35,8 @@ export class DocumentsController {
   constructor(private readonly service: DocumentsService) {}
 
   private sanitizeFilename(name: string): string {
-    return name.replace(/["\r\n]/g, '').replace(/[<>:/\\|?*]/g, '_');
+    const cleaned = name.replace(/["\r\n]/g, '').replace(/[<>:/\\|?*]/g, '_');
+    return cleaned || 'document';
   }
 
   @Post()
@@ -88,8 +89,7 @@ export class DocumentsController {
     res: Response,
   ) {
     try {
-      const document = await this.service.findOne(householdId, userId, policyId, docId);
-      const filePath = await this.service.getFilePath(householdId, userId, policyId, docId);
+      const { document, filePath } = await this.service.getDocumentAndPath(householdId, userId, policyId, docId);
 
       const safeName = this.sanitizeFilename(document.fileName);
       const stat = await fs.promises.stat(filePath);

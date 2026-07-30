@@ -31,6 +31,7 @@ type ServiceLike = {
   updateMetadata: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
   getFilePath: ReturnType<typeof vi.fn>;
+  getDocumentAndPath: ReturnType<typeof vi.fn>;
 };
 
 function createMockService(): ServiceLike {
@@ -41,6 +42,7 @@ function createMockService(): ServiceLike {
     updateMetadata: vi.fn(),
     remove: vi.fn(),
     getFilePath: vi.fn(),
+    getDocumentAndPath: vi.fn(),
   };
 }
 
@@ -137,13 +139,15 @@ describe('DocumentsController', () => {
   it('download setzt Content-Disposition auf attachment', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
-    service.findOne.mockResolvedValue({ id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' });
-    service.getFilePath.mockResolvedValue('/tmp/test.pdf');
+    service.getDocumentAndPath.mockResolvedValue({
+      document: { id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' },
+      filePath: '/tmp/test.pdf',
+    });
     const res = createMockRes();
 
     await controller.download(householdId, policyId, docId, mockUser, res);
 
-    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser.id, policyId, docId);
+    expect(service.getDocumentAndPath).toHaveBeenCalledWith(householdId, mockUser.id, policyId, docId);
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({
         'Content-Disposition': expect.stringContaining('attachment'),
@@ -154,8 +158,10 @@ describe('DocumentsController', () => {
   it('preview setzt Content-Disposition auf inline', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
-    service.findOne.mockResolvedValue({ id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' });
-    service.getFilePath.mockResolvedValue('/tmp/test.pdf');
+    service.getDocumentAndPath.mockResolvedValue({
+      document: { id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' },
+      filePath: '/tmp/test.pdf',
+    });
     const res = createMockRes();
 
     await controller.preview(householdId, policyId, docId, mockUser, res);
@@ -170,7 +176,7 @@ describe('DocumentsController', () => {
   it('download leitet NotFoundException von Service weiter', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
-    service.findOne.mockRejectedValue(new NotFoundException('Dokument nicht gefunden'));
+    service.getDocumentAndPath.mockRejectedValue(new NotFoundException('Dokument nicht gefunden'));
     const res = createMockRes();
 
     await expect(
@@ -181,8 +187,10 @@ describe('DocumentsController', () => {
   it('download erzeugt ReadStream und piped an Response', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
-    service.findOne.mockResolvedValue({ id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' });
-    service.getFilePath.mockResolvedValue('/tmp/test.pdf');
+    service.getDocumentAndPath.mockResolvedValue({
+      document: { id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' },
+      filePath: '/tmp/test.pdf',
+    });
     const res = createMockRes();
 
     await controller.download(householdId, policyId, docId, mockUser, res);
@@ -192,5 +200,22 @@ describe('DocumentsController', () => {
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({ 'Content-Disposition': expect.stringContaining('attachment') }),
     );
+  });
+
+  it('streamFile gibt 500 bei fehlgeschlagenem stat', async () => {
+    const service = createMockService();
+    const controller = new DocumentsController(service as never);
+    const fsMock = await import('fs');
+    (fsMock.promises.stat as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ENOENT'));
+
+    service.getDocumentAndPath.mockResolvedValue({
+      document: { id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' },
+      filePath: '/tmp/test.pdf',
+    });
+    const res = createMockRes();
+
+    await expect(
+      controller.download(householdId, policyId, docId, mockUser, res),
+    ).rejects.toThrow('ENOENT');
   });
 });

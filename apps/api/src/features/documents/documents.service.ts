@@ -85,6 +85,11 @@ export class DocumentsService {
     }
   }
 
+  private sanitizeFilename(name: string): string {
+    const cleaned = name.replace(/["\r\n]/g, '').replace(/[<>:/\\|?*]/g, '_');
+    return cleaned || 'document';
+  }
+
   private computeChecksum(buffer: Buffer): string {
     return crypto.createHash('sha256').update(buffer).digest('hex');
   }
@@ -117,6 +122,26 @@ export class DocumentsService {
     return this.resolveSafePath(policyId, documentId, documentId);
   }
 
+  async getDocumentAndPath(
+    householdId: string,
+    userId: string,
+    policyId: string,
+    docId: string,
+  ): Promise<{ document: { id: string; fileName: string; mimeType: string | null }; filePath: string }> {
+    await this.assertPolicyAccess(householdId, userId, policyId);
+
+    const document = await this.db.policyDocument.findFirst({
+      where: { id: docId, policyId, archivedAt: null },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Dokument nicht gefunden');
+    }
+
+    const filePath = this.resolveSafePath(policyId, docId, docId);
+    return { document, filePath };
+  }
+
   async upload(
     householdId: string,
     userId: string,
@@ -144,13 +169,12 @@ export class DocumentsService {
         data: {
           policyId,
           storageType: 'INTERNAL',
-          fileName: file.originalname,
+          fileName: this.sanitizeFilename(file.originalname),
           mimeType: file.mimetype,
           fileSize: file.size,
           checksum,
           category: dto.category,
           documentDate: dto.documentDate ? new Date(dto.documentDate) : undefined,
-          documentVersion: 1,
           createdByUserId: userId,
         },
       });
@@ -206,6 +230,7 @@ export class DocumentsService {
     return this.db.policyDocument.findMany({
       where: { policyId, archivedAt: null },
       orderBy: { uploadedAt: 'desc' },
+      take: 200,
     });
   }
 

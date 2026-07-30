@@ -82,7 +82,7 @@ describe('DocumentsService', () => {
         policyId,
         fileName: 'test.pdf',
         mimeType: 'application/pdf',
-        storageRef: '/tmp/uploads/policy-1/doc-1/doc-1',
+        storageRef: `/tmp/uploads/${policyId}/${docId}/${docId}`,
       });
 
       const result = await service.upload(householdId, userId, policyId, mockFile, { category: 'vertrag' });
