@@ -18,4 +18,4 @@ COPY --from=base /app /app
 
 EXPOSE 3000 3001
 
-CMD ["sh", "-c", "pnpm --filter @insura/api exec prisma migrate deploy && pnpm run dev"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy --schema /app/prisma/schema.prisma && pnpm run dev"]
