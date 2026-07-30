@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "modal-coder": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Modal Coder",
+      "options": { "baseURL": "https://m0p-66517--coder-endpoint-serve.modal.run/v1" },
+      "models": { "coder": { "name": "Qwen3-Coder-32B (Modal)" } }
+    },
+    "modal-review": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Modal Reviewer",
+      "options": { "baseURL": "https://m0p-66517--reviewer-endpoint-serve.modal.run/v1" },
+      "models": { "reviewer": { "name": "Qwen3-4B-Thinking (Modal)" } }
+    }
+  }
+}
