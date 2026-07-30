@@ -1,46 +1,43 @@
-# Next Work Package: AP-09-ai-assist
+# Nächster Agent: AP-10-ai-coverage-summaries
 
-Implementiere ausschließlich dieses Arbeitspaket. Verwende denselben Review-Loop:
-- Führe die Implementierung durch
-- Führe Formatierung, Linting, Typecheck und Tests aus
-- Erstelle einen Branch `feat/AP-09-ai-assist` vom aktuellen `main`
-- Lasse einen Review durch den code-reviewer Subagenten durchführen
-- Speichere Reviews unter `docs/reviews/AP-09-ai-assist-review-<iteration>.md`
-- Behebe Critical, High und Medium Findings
-- Committe nur bei erfüllter Akzeptanzbedingung
-- Beginne KEIN späteres Arbeitspaket
-
-Starte keinen anderen Branch, kein anderes Feature und kein späteres Arbeitspaket.
+Führe den folgenden Prompt im nächsten Coding-Agent-Session aus:
 
 ---
 
-Full content of `prompts/AP-09-ai-assist.md`:
+```text
+Du implementierst AP-10 im Projekt Insura.
 
-# Arbeitspaket AP-09: ai-assist
+## Work Package: AP-10-ai-coverage-summaries
+
+Ziel: AI-Leistungszusammenfassungen mit Quellenbezug, Status und übersichtlicher UI.
+
+Full contents of `prompts/AP-10-ai-coverage-summaries.md`:
+
+# Arbeitspaket AP-10: ai-coverage-summaries
 
 ## Ziel
-Optionale AI-Provider-Adapter, asynchrone Vertragsdatenextraktion und Job-Monitoring.
+AI-Leistungszusammenfassungen mit Quellenbezug, Status und übersichtlicher UI.
 
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-09 im Projekt Insura.
+Du implementierst AP-10 im Projekt Insura.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`
 - Alle Dokumente unter `/docs`, insbesondere Architektur-ADRs, Sicherheit und Bibliothekspolitik
 
-Arbeite in einem neuen Branch `feat/AP-09-ai-assist` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
+Arbeite in einem neuen Branch `feat/AP-10-ai-coverage-summaries` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
 
 Aufgabe:
-Optionale AI-Provider-Adapter, asynchrone Vertragsdatenextraktion und Job-Monitoring.
+AI-Leistungszusammenfassungen mit Quellenbezug, Status und übersichtlicher UI.
 
 Akzeptanzkriterien:
-- Ollama und OpenAI-kompatible Provider sind über ein gemeinsames Interface anbindbar.
-- AI-Jobs laufen asynchron und sind retryfähig.
-- AI-Ausfall blockiert weder Vertrags- noch Dokumentenverwaltung.
-- Extrahierte Daten enthalten Quelle, Konfidenz und Übernahme-Workflow.
-- Dokumente können von AI-Verarbeitung ausgeschlossen werden.
+- Zusammenfassungen sind als abgeleitete, regenerierbare Daten gespeichert.
+- Quellendokumente und Modell/Provider sind sichtbar.
+- Die UI zeigt klare Hinweise auf fehlende oder deaktivierte AI-Konfiguration.
+- Keine Beratung oder nicht belegbare Zusage erzeugen; Darstellung ist als Vertragszusammenfassung gekennzeichnet.
+- Tests decken Degradierung, Fehlerfälle und Quellenverknüpfung ab.
 
 Vorgehen:
 1. Gib zunächst ausschließlich Ziel, technische Lösung, Architekturentscheidung, betroffene Dateien, neue Abhängigkeiten samt Maintenance-Prüfung, Risiken und Testplan aus.
@@ -51,7 +48,7 @@ Vorgehen:
 6. Öffne einen Pull Request gegen `main`; niemals selbst mergen.
 
 PR-Titel:
-`feat(AP-09): ai-assist`
+`feat(AP-10): ai-coverage-summaries`
 
 PR-Beschreibung muss enthalten:
 - Zweck und Architekturentscheidung
@@ -64,4 +61,22 @@ PR-Beschreibung muss enthalten:
 
 Merge-Gate:
 Der Pull Request darf nur nach erfolgreich bestandenem Funktionstest, grüner CI, aktuellem `main` im Branch und unabhängigem Review gemergt werden. Wenn ein Check fehlschlägt, behebe ihn im selben Branch und aktualisiere den Pull Request.
+```
+
+### Wichtige Anweisungen
+
+1. **Implementiere NUR dieses Arbeitspaket (AP-10).** Nicht später beginnende Arbeitspakete anfangen.
+2. **Verwende denselben Review-Loop** wie in AGENTS.md beschrieben:
+   - Implementieren → Checks laufen lassen → @code-reviewer aufrufen → Review-Ergebnis in docs/reviews/ speichern → Findings fixen → erneut reviewen → bei Akzeptanz committen.
+   - Akzeptanzbedingung: 0 Critical, 0 High, 0 Medium, ≤8 Minor.
+3. **Starte in einem neuen Branch** `feat/AP-10-ai-coverage-summaries` auf Basis von `main`.
+4. **Nach erfolgreichem Commit** das nächste Arbeitspaket identifizieren (`prompts/AP-11-portal-connectors.md`) und eine neue NEXT-CODING-AGENT-PROMPT.md erstellen. Danach stoppen.
+
+## Basis-Wissen
+
+- Distrobox `fedora-app` für alle CLI-Befehle: `distrobox enter fedora-app -- <command>`
+- PostgreSQL läuft in der Distrobox. Dev-Server: `distrobox enter fedora-app -- bash -c "pnpm run dev"`
+- Alle relevanten Checks: lint, typecheck, test (API: vitest, Worker: vitest)
+- Prisma: `distrobox enter fedora-app -- bash -c "CI=true pnpm --filter @insura/api exec prisma generate"`
+- CI=true verhindert interaktive Nachfragen bei pnpm
 ```

@@ -5,3 +5,4 @@ export * from './health';
 export * from './capabilities';
 export * from './encryption';
 export * from './queue';
+export * from './ai';

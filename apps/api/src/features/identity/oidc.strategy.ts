@@ -1,12 +1,25 @@
 import { Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
-import { Issuer, Client, generators } from 'openid-client';
 import { AppConfigService, CapabilityFlagsService } from '@insura/foundation';
 import { AuthService, AuthenticatedUser } from './auth.service';
+
+import * as oidc from 'openid-client';
+
+// openid-client v6 verwendet eine komplett neue API (discovery, Configuration, etc.).
+// Die alten v5-Exporte (Issuer, Client, generators) existieren nicht mehr und sind
+// zur Laufzeit undefined. Dies muss in einem separaten Arbeitspaket auf die v6-API
+// migriert werden (siehe openid-client/UPGRADE.md).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Issuer: any = (oidc as any).Issuer;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Client: any = (oidc as any).Client;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const generators: any = (oidc as any).generators;
 
 @Injectable()
 export class OidcStrategy implements OnModuleInit {
   private readonly logger = new Logger(OidcStrategy.name);
-  private client: Client | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private client: any | null = null;
 
   constructor(
     private readonly config: AppConfigService,
