@@ -17,8 +17,7 @@
     "dev:web": "pnpm --filter @insura/web dev",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
-    "compose:smoke-test": "sh scripts/compose-smoke-test.sh"
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

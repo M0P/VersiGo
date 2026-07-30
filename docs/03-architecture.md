@@ -26,33 +26,13 @@ Empfohlen wird ein **modularer Monolith** mit vertikal geschnittenen Feature-Sli
 - Wenn ein abhängiges Feature fehlt, wird nur die konkrete Teilfunktion deaktiviert.
 
 ## Deployment-Topologie
-- `web`: Next.js Frontend (Port 3000)
-- `api`: NestJS Backend (Port 3001)
+- `web`: Frontend
+- `api`: Backend
 - `worker`: Hintergrundjobs
 - `db`: PostgreSQL
 - `redis`: Queue/Cache
-- `storage`: optional MinIO (Port 9000/9001)
+- `storage`: optional MinIO
 - optional externer OIDC Provider
-
-## Docker Compose Setup
-Der komplette Insura Stack kann mit Docker Compose gestartet werden:
-
-```bash
-docker compose up --build
-```
-
-Dies startet alle benötigten Dienste:
-- Web Frontend auf Port 3000
-- API Backend auf Port 3001
-- PostgreSQL Datenbank
-- Redis Queue/Cache
-- MinIO Dateispeicher (optional)
-
-Die Services kommunizieren über Docker Compose Netzwerke:
-- Web → API (http://api:3001)
-- API → DB (postgresql://db:5432)
-- API → Redis (redis://redis:6379)
-- API → Storage (http://storage:9000)
 
 ## Beispiel Feature-Degradation
 - AI Provider nicht konfiguriert: Vertragserfassung bleibt nutzbar, nur Extraktion/Zusammenfassung wird ausgeblendet.
