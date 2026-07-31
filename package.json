@@ -12,9 +12,10 @@
   ],
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --parallel",
-    "dev:api": "pnpm --filter @insura/api dev",
-    "dev:web": "pnpm --filter @insura/web dev",
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=@insura/api",
+    "dev:web": "turbo run dev --filter=@insura/web",
+    "dev:worker": "turbo run dev --filter=@insura/worker",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"

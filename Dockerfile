@@ -42,20 +42,10 @@ COPY eslint.config.mjs eslint.config.mjs
 RUN npx prisma generate
 RUN pnpm run build
 
-# Patch @insura/foundation's package.json so Node.js can resolve the
-# compiled output at runtime (the `main` field normally points to
-# `src/index.ts` for local dev type resolution). The TS compilation
-# itself is handled by turbo (pnpm run build above).
-RUN node -e "const fs=require('fs'); \
-      const p=JSON.parse(fs.readFileSync('packages/foundation/package.json','utf8')); \
-      p.main='dist/index.js'; \
-      fs.writeFileSync('packages/foundation/package.json', JSON.stringify(p,null,2));"
-
 # ============================================================
 # Stage 3: Runner – minimal production image
 # ============================================================
 FROM node:24-alpine AS runner
-RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
 
 # Install PostgreSQL client for wait/health checks
 RUN apk add --no-cache postgresql16-client
@@ -107,6 +97,12 @@ RUN npx prisma generate
 # Copy start script
 COPY docker/start.sh /app/start.sh
 RUN chmod +x /app/start.sh
+
+# Make the whole app directory writable for the non-root runtime user.
+# Next.js writes cache/artefact directories and the worker/API may write
+# runtime data – without this the container start fails with EACCES
+# (observed: `permission denied, open /app/_tmp_...`).
+RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser

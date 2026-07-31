@@ -23,6 +23,8 @@ cd insura
 cp .env.example .env
 # (optional) .env anpassen, insbesondere Secrets generieren:
 #   openssl rand -hex 32  # für SETTINGS_ENCRYPTION_KEY und SESSION_SECRET
+# Lokale Entwicklung: LOCAL_AUTH_ENABLED=true (Default) und einen
+# eigenen LOCAL_ADMIN_PASSWORD-Wert in .env setzen.
 
 # Stack starten
 docker compose up --build
@@ -33,6 +35,24 @@ Nach dem Start sind die Dienste erreichbar unter:
 - **API:** http://localhost:3001
 - **API Health:** http://localhost:3001/health
 - **API Readiness:** http://localhost:3001/ready
+
+### Lokale Authentifizierung und Initial-Admin
+
+In der lokalen Entwicklung ist die lokale Benutzer-/Passwort-Anmeldung der
+Standard (`LOCAL_AUTH_ENABLED=true`, `OIDC_ENABLED=false`). Beim ersten Start
+auf einer leeren Datenbank legt die API genau einen initialen Administrator aus
+den `LOCAL_ADMIN_*`-Variablen der `.env` an (idempotent, Passwort nur als
+bcrypt-Hash). Anmeldung:
+
+```bash
+curl -sS -X POST http://localhost:3001/auth/local/login \
+  -H 'Content-Type: application/json' \
+  -d '{"identifier":"admin@local.test","password":"<IHR_PASSWORT>"}'
+```
+
+In Produktion (`NODE_ENV=production`) greift der Fail-Fast: Ohne explizit
+gesetzte `OIDC_ENABLED=true`- oder `LOCAL_AUTH_ENABLED=true`-Konfiguration
+startet die API nicht. Ein Default-Admin wird dort niemals angelegt.
 
 ### Stoppen und Zurücksetzen
 
@@ -85,6 +105,30 @@ pnpm run dev
 ```
 
 Dieser Modus ist **nicht** für CI, Releases oder vollständige Testverifikation geeignet.
+
+## Entwicklungsmodus (Turbo)
+
+Der Dev-Modus wird über Turborepo gestartet (mit laufender Datenbank und
+Redis, z. B. aus dem Compose-Stack):
+
+```bash
+pnpm run dev         # API, Worker und Web parallel (Watch-Mode)
+pnpm run dev:api     # nur NestJS-API
+pnpm run dev:web     # nur Next.js-Web
+pnpm run dev:worker  # nur Worker
+```
+
+Der `dev`-Task baut zuerst die Workspace-Abhängigkeiten (`^build`) und startet
+danach die Watch-Prozesse. `turbo.json` setzt `envMode: "loose"`, damit die
+Konfigurationsvariablen der Umgebung (`.env`) an die Dev-Prozesse durchgereicht
+werden.
+
+Der Next.js-Dev-Server erlaubt HMR/Dev-Anfragen standardmäßig nur von
+`localhost`. Wird die Web-UI über eine andere Origin aufgerufen (z. B. LAN-IP
+oder Reverse-Proxy), die in `NEXT_ALLOWED_DEV_ORIGINS` als kommaseparierte
+Liste (`host` oder `host:port`) ergänzen – z. B.
+`NEXT_ALLOWED_DEV_ORIGINS=192.168.24.8:3000`. Die Einstellung gilt nur im
+Dev-Modus.
 
 ## Personalisierung
 

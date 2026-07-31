@@ -1,9 +1,7 @@
 # Next Work Package
 
 ## Status
-Work package **AP-13** (Design System and Responsive UI) is committed at hash `8dfa26e` on branch `feature/AP-13-design-system-responsive-ui`. Final review verdict: 0 Critical / 0 High / 0 Medium / 0 Minor (rounds 4–7 documented in `docs/reviews/AP-13-review-{4,5,6,7}.md`; the canonical Docker Compose test suite passed: "All checks passed!").
-
-Note: an untracked file `prompts/BugFix-01-docker-setup.md` exists in the repo. It is a separate, not-yet-processed bugfix work package and was intentionally NOT included in the AP-13 commit. It is not part of this next work package.
+Work package **BugFix-01** (lokaler Docker- und Monorepo-Start vollständig lauffähig) is committed at hash `054702d` on branch `fix/BugFix-01-docker-setup`. Final review verdict: 0 Critical / 0 High / 0 Medium / 2 Minor (rounds 1–5 documented in `docs/reviews/BugFix-01-review-{1..5}.md`; the two R5 Minor findings were fixed and re-verified — the canonical Docker Compose test suite passed: "All checks passed!" and the compose smoke test ran 10/10 PASS, including the worker readiness marker and a live BullMQ round-trip).
 
 AP-14 and AP-15 are already committed. The next work package in rising order is **AP-16 — Rollen, Rechte, lokale Registrierung und Freischaltung**.
 

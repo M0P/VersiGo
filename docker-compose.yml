@@ -81,10 +81,17 @@ services:
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY muss gesetzt sein}
       STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
       DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
-      LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-false}"
+      # Auth-Flags werden nur durchgereicht, wenn gesetzt; die Default-
+      # Aufloesung (lokale Auth aktiv im Dev-Modus) uebernimmt die App.
+      LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
       LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
       LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
-      OIDC_ENABLED: "${OIDC_ENABLED:-false}"
+      # Initialer lokaler Administrator (nur lokale Entwicklung)
+      LOCAL_ADMIN_EMAIL: "${LOCAL_ADMIN_EMAIL:-}"
+      LOCAL_ADMIN_PASSWORD: "${LOCAL_ADMIN_PASSWORD:-}"
+      LOCAL_ADMIN_FIRST_NAME: "${LOCAL_ADMIN_FIRST_NAME:-}"
+      LOCAL_ADMIN_LAST_NAME: "${LOCAL_ADMIN_LAST_NAME:-}"
+      OIDC_ENABLED: "${OIDC_ENABLED:-}"
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
@@ -130,9 +137,12 @@ services:
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY muss gesetzt sein}
       STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
       DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
-      LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-false}"
+      # Auth-Flags werden konsistent zur API durchgereicht (die Default-
+      # Aufloesung uebernimmt die App).
+      LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
       LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
       LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
+      OIDC_ENABLED: "${OIDC_ENABLED:-}"
       AI_ENABLED: "${AI_ENABLED:-false}"
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
     command: ["node", "apps/worker/dist/apps/worker/src/main.js"]
@@ -157,7 +167,13 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
     image: insura:latest
     restart: unless-stopped
-    entrypoint: ["pnpm", "run", "docker-start"]
+    # Next.js wird direkt per Node gestartet. Ein pnpm-Aufruf wuerde bei
+    # jedem Containerstart `verify-deps-before-run` ausloesen; pnpm haelt
+    # den Zustand von node_modules fuer inkonsistent (die manuell im
+    # Runner-Image angelegten @insura/*-Symlinks) und will neu installieren
+    # -> Abbruch ohne TTY (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY).
+    # pnpm ist zur Laufzeit nicht noetig, nur zum Build.
+    entrypoint: ["node", "/app/node_modules/.pnpm/node_modules/next/dist/bin/next", "start", "-p", "3000"]
     working_dir: /app/apps/web
     environment:
       NODE_ENV: ${NODE_ENV:-production}

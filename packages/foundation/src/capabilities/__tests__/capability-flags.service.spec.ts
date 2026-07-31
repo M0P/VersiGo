@@ -15,8 +15,11 @@ function buildConfig(overrides: Record<string, string> = {}): AppConfigService {
 }
 
 describe('CapabilityFlagsService', () => {
-  it('meldet alle Capabilities als deaktiviert, wenn nichts konfiguriert ist', () => {
-    const service = new CapabilityFlagsService(buildConfig());
+  it('meldet alle Capabilities als deaktiviert, wenn in Produktion nichts konfiguriert ist', () => {
+    // In Produktion bleibt die lokale Auth deaktiviert, bis sie explizit
+    // gesetzt wird (LOCAL_AUTH_ENABLED). Im Dev-/Test-Modus ist sie der
+    // Standard (siehe app-config.schema.spec.ts).
+    const service = new CapabilityFlagsService(buildConfig({ NODE_ENV: 'production' }));
     expect(service.snapshot()).toEqual({
       oidc: false,
       local: false,
@@ -24,6 +27,12 @@ describe('CapabilityFlagsService', () => {
       paperless: false,
       storage: false,
     });
+  });
+
+  it('aktiviert lokale Auth im Dev-Modus standardmaessig', () => {
+    const service = new CapabilityFlagsService(buildConfig({ NODE_ENV: 'development' }));
+    expect(service.isEnabled('local')).toBe(true);
+    expect(service.isEnabled('oidc')).toBe(false);
   });
 
   it('meldet aktivierte Capability korrekt', () => {
