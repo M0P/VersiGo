@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useState, type ReactElement } from 'react';
+import { Card } from '../../../components/ui/card';
+import { Button } from '../../../components/ui/button';
+import { Loading } from '../../../components/ui/loading';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -40,7 +43,7 @@ type ViewState =
   | { status: 'generate-error'; message: string };
 
 /**
- * AI-Leistungszusammenfassung mit Quellenbezug, Status und disclaimern.
+ * AI-Leistungszusammenfassung mit Quellenbezug, Status und Disclaimer.
  *
  * Bekannte Grenzen:
  * - Markdown-Rendering unterstuetzt nur #, ##, - und Absaetze.
@@ -142,9 +145,6 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
         return;
       }
 
-      // POST-Antwort enthaelt summaryMarkdown und model, aber noch keine
-      // aufgeloesten Quelldokumente. Zeige zunaechst die minimale Ansicht
-      // und lade die vollstaendige Zusammenfassung im Hintergrund.
       const postData = await res.json() as { summaryMarkdown: string; model: string };
       setViewState({
         status: 'loaded',
@@ -159,7 +159,6 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
         },
       });
 
-      // Vollstaendige Daten (mit Quellen) asynchron laden
       loadPersistedSummary();
     } catch {
       setViewState({
@@ -169,10 +168,6 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     }
   }
 
-  /**
-   * Laedt die persistierte Zusammenfassung vom Server.
-   * Setzt bei Erfolg 'loaded', bei Fehler 'summary-load-error'.
-   */
   async function loadPersistedSummary(): Promise<void> {
     try {
       const res = await fetch(
@@ -204,16 +199,14 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     }
   }
 
-  // --- Render Helper ---
-
   function renderDisclaimer(): ReactElement {
     return (
       <p
         style={{
           fontSize: '0.8em',
           fontStyle: 'italic',
-          color: '#666',
-          borderLeft: '3px solid #ccc',
+          color: 'var(--insura-text-muted)',
+          borderLeft: '3px solid var(--insura-border)',
           paddingLeft: '0.5rem',
           marginTop: '0.5rem',
         }}
@@ -244,7 +237,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
 
   function renderMetadata(summary: CoverageSummary): ReactElement {
     return (
-      <div style={{ marginTop: '0.5rem', fontSize: '0.85em', color: '#888' }}>
+      <div style={{ marginTop: '0.5rem', fontSize: '0.85em', color: 'var(--insura-text-muted)' }}>
         Erstellt am {new Date(summary.createdAt).toLocaleDateString('de-DE', {
           day: '2-digit',
           month: '2-digit',
@@ -258,99 +251,62 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     );
   }
 
-  // --- Main Render ---
-
-  const sectionStyle: React.CSSProperties = {
-    marginTop: '1.5rem',
-    padding: '1rem',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    backgroundColor: '#fafafa',
-  };
-
-  const errorStyle: React.CSSProperties = {
-    color: '#c00',
-    padding: '0.5rem 0',
-  };
-
   switch (viewState.status) {
     case 'loading':
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p>Lade...</p>
-        </section>
+          <Loading label="Lade Zusammenfassung..." />
+        </Card>
       );
 
     case 'ai-unavailable':
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p style={{ color: '#888', fontStyle: 'italic' }}>
-            KI-Funktionen sind nicht verfuegbar.
+          <p style={{ color: 'var(--insura-text-muted)', fontStyle: 'italic' }}>
+            KI-Funktionen sind nicht verfügbar.
             {viewState.provider === 'none'
               ? ' Bitte AI-Konfiguration in den Admin-Einstellungen aktivieren.'
               : ' Der konfigurierte Provider antwortet nicht.'}
           </p>
-        </section>
+        </Card>
       );
 
     case 'ai-check-error':
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p style={errorStyle}>{viewState.message}</p>
-        </section>
+          <p style={{ color: 'var(--insura-danger)' }}>{viewState.message}</p>
+        </Card>
       );
 
     case 'no-summary':
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p>Noch keine Zusammenfassung vorhanden.</p>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#0066cc',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
+          <p className="text-muted">Noch keine Zusammenfassung vorhanden.</p>
+          <Button onClick={handleGenerate}>
             Zusammenfassung erstellen
-          </button>
-        </section>
+          </Button>
+        </Card>
       );
 
     case 'summary-load-error':
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p style={errorStyle}>{viewState.message}</p>
-          <button
-            type="button"
-            onClick={() => { setViewState({ status: 'loading' }); loadPersistedSummary(); }}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#0066cc',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
+          <p style={{ color: 'var(--insura-danger)' }}>{viewState.message}</p>
+          <Button variant="secondary" onClick={() => { setViewState({ status: 'loading' }); loadPersistedSummary(); }}>
             Erneut versuchen
-          </button>
-        </section>
+          </Button>
+        </Card>
       );
 
     case 'loaded': {
       const { summary } = viewState;
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
           <div
             style={{
@@ -379,61 +335,40 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
           {renderMetadata(summary)}
           {renderDisclaimer()}
 
-          <button
-            type="button"
-            onClick={handleGenerate}
-            style={{
-              marginTop: '1rem',
-              padding: '0.5rem 1rem',
-              backgroundColor: '#0066cc',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Neu erstellen
-          </button>
-        </section>
+          <div style={{ marginTop: 'var(--insura-space-4)' }}>
+            <Button variant="secondary" onClick={handleGenerate}>
+              Neu erstellen
+            </Button>
+          </div>
+        </Card>
       );
     }
 
     case 'generating':
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p>Zusammenfassung wird erstellt... Dies kann einen Moment dauern.</p>
-        </section>
+          <Loading label="Zusammenfassung wird erstellt..." />
+        </Card>
       );
 
     case 'generate-error':
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p style={errorStyle}>{viewState.message}</p>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#0066cc',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
+          <p style={{ color: 'var(--insura-danger)' }}>{viewState.message}</p>
+          <Button variant="secondary" onClick={handleGenerate}>
             Erneut versuchen
-          </button>
-        </section>
+          </Button>
+        </Card>
       );
 
     default:
       return (
-        <section style={sectionStyle}>
+        <Card>
           <h2>KI-Leistungszusammenfassung</h2>
           <p>Unbekannter Zustand.</p>
-        </section>
+        </Card>
       );
   }
 }

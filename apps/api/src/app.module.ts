@@ -18,6 +18,7 @@ import { NotificationsModule } from './features/notifications/notifications.modu
 import { PaperlessNgxModule } from './features/paperless-ngx/paperless-ngx.module';
 import { PolicyRegistryModule } from './features/policy-registry/policy-registry.module';
 import { PortalConnectorsModule } from './features/portal-connectors/portal-connectors.module';
+import { UserPreferencesModule } from './features/user-preferences/user-preferences.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { PortalConnectorsModule } from './features/portal-connectors/portal-conn
     AuditModule,
     NotificationsModule,
     PaperlessNgxModule,
+    UserPreferencesModule,
   ],
 })
 export class AppModule {}

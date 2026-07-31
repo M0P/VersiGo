@@ -1,6 +1,13 @@
 'use client';
 
 import { useEffect, useState, type ReactElement } from 'react';
+import { AppShell } from '../../../components/ui/app-shell';
+import { PageHeader, SectionHeader } from '../../../components/ui/page-header';
+import { Card } from '../../../components/ui/card';
+import { Button } from '../../../components/ui/button';
+import { Loading } from '../../../components/ui/loading';
+import { Alert } from '../../../components/ui/alert';
+import { NAV_SECTIONS } from '../../../components/ui/nav-config';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -8,6 +15,18 @@ type Summary = {
   totalAnnualGross: number;
   perType: Record<string, number>;
   policyCount: number;
+};
+
+const typeLabels: Record<string, string> = {
+  HAFTPFLICHT: 'Haftpflicht',
+  HAUSRAT: 'Hausrat',
+  RECHTSSCHUTZ: 'Rechtsschutz',
+  KFZ: 'KFZ',
+  WOHNGEBAEUDE: 'Wohngebäude',
+  UNFALL: 'Unfall',
+  LEBEN: 'Leben',
+  BERUFSUNFAEHIGKEIT: 'Berufsunfähigkeit',
+  SONSTIGE: 'Sonstige',
 };
 
 export default function HouseholdCostsPage(): ReactElement {
@@ -28,49 +47,76 @@ export default function HouseholdCostsPage(): ReactElement {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <main><p>Lade...</p></main>;
-  if (!summary) return <main><p>Uebersicht nicht verfuegbar.</p></main>;
+  if (loading) {
+    return (
+      <AppShell navSections={NAV_SECTIONS}>
+        <PageHeader title="Kostenübersicht" />
+        <Loading label="Lade Kostenübersicht..." />
+      </AppShell>
+    );
+  }
 
-  const typeLabels: Record<string, string> = {
-    HAFTPFLICHT: 'Haftpflicht',
-    HAUSRAT: 'Hausrat',
-    RECHTSSCHUTZ: 'Rechtsschutz',
-    KFZ: 'KFZ',
-    WOHNGEBAEUDE: 'Wohngebaeude',
-    UNFALL: 'Unfall',
-    LEBEN: 'Leben',
-    BERUFSUNFAEHIGKEIT: 'Berufsunfaehigkeit',
-    SONSTIGE: 'Sonstige',
-  };
+  if (!summary) {
+    return (
+      <AppShell navSections={NAV_SECTIONS}>
+        <PageHeader title="Kostenübersicht" />
+        <Alert variant="warning">Übersicht nicht verfügbar.</Alert>
+      </AppShell>
+    );
+  }
 
   return (
-    <main>
-      <h1>Kostenuebersicht</h1>
-      <dl>
-        <dt>Gesamt (jaerlich)</dt><dd>{summary.totalAnnualGross.toFixed(2)} EUR</dd>
-        <dt>Anzahl Versicherungen</dt><dd>{summary.policyCount}</dd>
-      </dl>
+    <AppShell navSections={NAV_SECTIONS}>
+      <PageHeader
+        title="Kostenübersicht"
+        description="Ihre Versicherungskosten auf einen Blick"
+        actions={
+          <a href="/policies">
+            <Button variant="secondary" size="sm">Zu den Versicherungen</Button>
+          </a>
+        }
+      />
 
-      <h2>Aufschluss nach Versicherungstyp</h2>
-      {Object.keys(summary.perType).length === 0 && <p>Keine Daten.</p>}
-      <table>
-        <thead>
-          <tr>
-            <th>Typ</th>
-            <th>Jaerliche Kosten</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(summary.perType).map(([type, amount]) => (
-            <tr key={type}>
-              <td>{typeLabels[type] ?? type}</td>
-              <td>{amount.toFixed(2)} EUR</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="split-layout" style={{ marginBottom: 'var(--insura-space-6)' }}>
+        <Card>
+          <h3>Gesamt (jährlich)</h3>
+          <p style={{ fontSize: 'var(--insura-font-size-3xl)', fontWeight: 'var(--insura-font-weight-bold)', color: 'var(--insura-accent)', margin: 0 }}>
+            {summary.totalAnnualGross.toFixed(2)} EUR
+          </p>
+        </Card>
+        <Card>
+          <h3>Anzahl Versicherungen</h3>
+          <p style={{ fontSize: 'var(--insura-font-size-3xl)', fontWeight: 'var(--insura-font-weight-bold)', color: 'var(--insura-accent)', margin: 0 }}>
+            {summary.policyCount}
+          </p>
+        </Card>
+      </div>
 
-      <a href="/policies">Zu den Versicherungen</a>
-    </main>
+      <Card>
+        <SectionHeader title="Aufschluss nach Versicherungstyp" />
+        {Object.keys(summary.perType).length === 0 ? (
+          <p className="text-muted">Keine Daten.</p>
+        ) : (
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Typ</th>
+                  <th>Jährliche Kosten</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(summary.perType).map(([type, amount]) => (
+                  <tr key={type}>
+                    <td data-label="Typ">{typeLabels[type] ?? type}</td>
+                    <td data-label="Jährliche Kosten">{amount.toFixed(2)} EUR</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </AppShell>
   );
 }
