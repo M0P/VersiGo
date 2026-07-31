@@ -9,6 +9,7 @@ import { RolesGuard } from './roles.guard';
 import { HouseholdMembershipGuard } from './household-membership.guard';
 import { PasswordHashingService } from './password-hashing.service';
 import { LoginRateLimiterService } from './login-rate-limiter.service';
+import { LocalAdminBootstrapService } from './local-admin.bootstrap';
 
 @Global()
 @Module({
@@ -19,6 +20,7 @@ import { LoginRateLimiterService } from './login-rate-limiter.service';
     PasswordHashingService,
     LoginRateLimiterService,
     HouseholdMembershipGuard,
+    LocalAdminBootstrapService,
     { provide: APP_GUARD, useClass: SessionAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
@@ -27,9 +29,12 @@ import { LoginRateLimiterService } from './login-rate-limiter.service';
 export class IdentityModule implements OnModuleInit {
   private readonly logger = new Logger(IdentityModule.name);
 
-  constructor(private readonly capabilities: CapabilityFlagsService) {}
+  constructor(
+    private readonly capabilities: CapabilityFlagsService,
+    private readonly adminBootstrap: LocalAdminBootstrapService,
+  ) {}
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     const oidcEnabled = this.capabilities.isEnabled('oidc');
     const localEnabled = this.capabilities.isEnabled('local');
 
@@ -49,5 +54,9 @@ export class IdentityModule implements OnModuleInit {
       `Authentifizierung: OIDC=${oidcEnabled ? 'aktiv' : 'inaktiv'}, ` +
       `Lokal=${localEnabled ? 'aktiv' : 'inaktiv'}`,
     );
+
+    if (localEnabled) {
+      await this.adminBootstrap.bootstrap();
+    }
   }
 }

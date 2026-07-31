@@ -1,11 +1,21 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // Turbo >= 2.10 reicht Umgebungsvariablen nur an Tasks weiter, wenn sie
+  // deklariert sind (strict) oder envMode "loose" gesetzt ist. Ohne "loose"
+  // starten die Dev-Tasks nicht (Fehler: "Ungueltige Konfiguration:
+  // DATABASE_URL: Required ..."). Achtung: In "loose" beeinflussen ALLE
+  // Env-Variablen den Cache-Hash von Build-Tasks. Wer eine build-relevante
+  // Variable aendert (z. B. NEXT_PUBLIC_API_BASE_URL), muss den Turbo-Cache
+  // leeren (pnpm exec turbo clean bzw. --force), sonst koennen veraltete
+  // Artefakte wiederverwendet werden.
+  "envMode": "loose",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**"]
     },
     "dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
@@ -14,7 +24,7 @@
       "outputs": []
     },
     "test": {
-      "dependsOn": ["^test"],
+      "dependsOn": ["^build", "^test"],
       "outputs": []
     },
     "typecheck": {

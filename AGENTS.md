@@ -47,6 +47,51 @@ pnpm run dev
 
 This fallback is **not** a valid verification path for CI, merges, or releases. All mandatory quality checks run through Docker Compose.
 
+## Container Engine Notes (Podman on the dev machine)
+
+This development machine does not run Docker Engine. The `docker` CLI is a
+Podman shim and `docker compose` delegates to **podman-compose**
+(`/home/marc/.local/bin/podman-compose`). This has several consequences that
+have cost agents significant time in the past — read carefully:
+
+1. **podman-compose reuses existing containers.** After you rebuild an image
+   (`docker compose ... up --build` or `podman build -t ... .`), containers
+   that already exist are **not** recreated and stay pinned to the *old image
+   ID*. Symptom: tests/logs show stale code even though `podman images` shows
+   the tag points at a fresh image.
+   **Fix:** run `docker compose -f docker-compose.test.yml down -v` (or at
+   least `down`) *before* `up`, so containers are recreated from the current
+   image. `up --build` alone is NOT enough on this machine.
+2. **Verify what a container really uses:**
+   - `podman inspect <container> --format '{{.Image}}'` (image ID the container
+     was created from)
+   - `podman inspect <image-tag> --format '{{.Id}}'` (current image ID of tag)
+   - If they differ, the container is stale — `down` + `up` again.
+3. **Layer cache is normally reliable.** After editing source files,
+   `COPY apps/ apps/` / `COPY packages/ packages/` must show a NEW layer ID
+   (no `Using cache` line) in the build log. If a cached layer looks wrong,
+   force it: `podman build --no-cache --target build -t insura-test:latest .`
+4. **Fast verification of image content** (no compose involved):
+   `podman run --rm --entrypoint sh insura-test:latest -c 'sha256sum <path>; grep -c "<pattern>" <path>'`
+5. **Image names are prefixed** with `localhost/` (e.g.
+   `localhost/insura:latest`, `localhost/insura-test:latest`). Stray older
+   images (e.g. `localhost/insura:test`) may exist and are not used.
+6. **Transient crun errors** like `unable to start container ... exec.fifo`
+   appear occasionally in compose logs; simply retry the command.
+7. **Two separate stacks coexist:** the running dev stack (`insura_*`
+   containers, image `localhost/insura:latest`) and the test stack
+   (`insura_test_*`, image `localhost/insura-test:latest`, from
+   `docker-compose.test.yml`). They share no volumes or networks.
+8. **Disk fills up quickly.** Podman storage sits on `/var/home` (a 123 GB
+   partition that also holds the host home directory). Repeated image builds
+   accumulate hundreds of layers/images (`podman system df` showed 431 images
+   / 26 GB reclaimable at one point). A build will fail with
+   `no space left on device` when the partition is ~96% full.
+   **Fix:** `podman system prune -a -f` (frees tens of GB by removing unused
+   images and build cache; expect a full rebuild afterwards, including the
+   `pnpm install` deps stage). Check with `df -h /var/home` and
+   `podman system df`.
+
 ## Required Future-Feature Contract
 
 > Every feature must leave `docker compose up --build` working from a fresh clone. Any new runtime dependency, environment variable, migration, queue, storage path, port, health endpoint, or service must be added to the Compose stack, `.env.example`, documentation, and Compose smoke test within the same feature.

@@ -5,6 +5,12 @@
     "target": "ES2022",
     "declaration": true,
     "outDir": "dist",
+    // rootDir wird aus den Eingabedateien abgeleitet: Weil die
+    // tsconfig-paths-Zuordnung "@insura/foundation" auf die SRC-Dateien
+    // unter ../../packages/foundation/src zeigt, liegen die Quelldateien
+    // dieses Projekts relativ zum Workspace-Root. Dadurch entsteht der
+    // verschachtelte Ausgabepfad dist/apps/api/src/main.js, auf den
+    // "start" (package.json) und "entryFile" (nest-cli.json) zeigen.
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
