@@ -87,12 +87,14 @@ COPY --from=build /app/apps/web/package.json ./apps/web/package.json
 
 COPY --from=build /app/packages ./packages
 
+ENV CI=true
+
 RUN mkdir -p /app/node_modules/@insura && \
     ln -sfn /app/packages/foundation /app/node_modules/@insura/foundation && \
     ln -sfn /app/apps/api /app/node_modules/@insura/api && \
     ln -sfn /app/apps/worker /app/node_modules/@insura/worker && \
     ln -sfn /app/apps/web /app/node_modules/@insura/web && \
-    pnpm exec prisma generate --schema=/app/prisma/schema.prisma
+    node /app/node_modules/prisma/build/index.js generate --schema=/app/prisma/schema.prisma
 
 COPY docker/start.sh ./start.sh
 
