@@ -56,7 +56,9 @@ RUN --mount=type=cache,id=insura-pnpm-store,target=/pnpm/store \
 # ============================================================
 FROM node:24-alpine AS runner
 
-RUN apk add --no-cache postgresql16-client
+RUN corepack enable && \
+    corepack prepare pnpm@11.17.0 --activate && \
+    apk add --no-cache postgresql16-client
 
 WORKDIR /app
 
@@ -89,7 +91,8 @@ RUN mkdir -p /app/node_modules/@insura && \
     ln -sfn /app/packages/foundation /app/node_modules/@insura/foundation && \
     ln -sfn /app/apps/api /app/node_modules/@insura/api && \
     ln -sfn /app/apps/worker /app/node_modules/@insura/worker && \
-    ln -sfn /app/apps/web /app/node_modules/@insura/web
+    ln -sfn /app/apps/web /app/node_modules/@insura/web && \
+    pnpm exec prisma generate --schema=/app/prisma/schema.prisma
 
 COPY docker/start.sh ./start.sh
 
