@@ -86,11 +86,20 @@ pnpm run dev
 
 Dieser Modus ist **nicht** für CI, Releases oder vollständige Testverifikation geeignet.
 
+## Personalisierung
+
+Nach der Anmeldung können Sie unter **Einstellungen** (http://localhost:3000/settings):
+
+- **Akzentfarbe wählen**: 8 Preset-Farben oder ein eigener Hex-Farbwert
+- **Helles/dunkles Design**: Umschaltung per Klick im Topbar oder in den Einstellungen
+- Die Einstellung wird pro Benutzer serverseitig gespeichert
+
 ## Architektur
 
 - **Modularer Monolith** mit vertikal geschnittenen Features (siehe `docs/03-architecture.md`)
 - **Backend:** NestJS (API + Worker)
 - **Frontend:** Next.js (Web)
+- **Design System:** CSS Custom Properties mit Theme-Provider (siehe `docs/11-ui-ux.md`)
 - **Datenbank:** PostgreSQL mit Prisma ORM
 - **Queue/Cache:** Redis + BullMQ
 - **Dateispeicher:** Lokales Volume (optional MinIO/S3)

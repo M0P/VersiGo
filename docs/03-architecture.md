@@ -17,6 +17,7 @@ Empfohlen wird ein **modularer Monolith** mit vertikal geschnittenen Feature-Sli
 - Queue/Jobs: Redis + BullMQ.
 - Suche optional: PostgreSQL Full Text zuerst, keine zusätzliche Suchmaschine in V1.
 - Auth: OIDC via Keycloak, Authentik oder externer IdP.
+- UI-Architektur: **CSS Custom Properties** mit @layer-Kaskade für das Design System (siehe `docs/11-ui-ux.md`). React-Komponenten in `apps/web/src/components/ui/`. Theme-Provider in `apps/web/src/contexts/` für Farbwahl.
 
 ## Strukturelle Regeln
 - Kein Shared-Domain-Monster-Modul.

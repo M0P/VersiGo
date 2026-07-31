@@ -1,173 +1,95 @@
 # Next Work Package
 
 ## Status
-Work package **AP-14** (Local Username/Password Login) is committed at hash `5a52da3`.
-A CI fix for `compose-smoke` inheriting the wrong `COMPOSE_FILE` is committed at hash `b8dce1a`.
+Work package **AP-13** (Design System and Responsive UI) is committed at hash `8dfa26e` on branch `feature/AP-13-design-system-responsive-ui`. Final review verdict: 0 Critical / 0 High / 0 Medium / 0 Minor (rounds 4–7 documented in `docs/reviews/AP-13-review-{4,5,6,7}.md`; the canonical Docker Compose test suite passed: "All checks passed!").
 
-We are closing the numbering gap. The next work package is **AP-13 — Design System and Responsive UI**. After AP-13 is done, continue in rising order (AP-14, AP-15, AP-16, AP-17…).
+Note: an untracked file `prompts/BugFix-01-docker-setup.md` exists in the repo. It is a separate, not-yet-processed bugfix work package and was intentionally NOT included in the AP-13 commit. It is not part of this next work package.
+
+AP-14 and AP-15 are already committed. The next work package in rising order is **AP-16 — Rollen, Rechte, lokale Registrierung und Freischaltung**.
 
 ## Prompt for the next coding-agent
 
-Below is the full content of the next work package. Implement only this work package. Use the same review loop (invoke @code-reviewer, fix findings, iterate). Do not start any later work package.
+Below is the full content of the next work package. Implement only this work package. Use the same review loop (invoke @code-reviewer, save each result verbatim under `docs/reviews/`, fix Critical/High/Medium findings, iterate until 0 Critical / 0 High / 0 Medium and at most 8 Minor findings, with the canonical Docker Compose test suite green). Do not start any later work package.
 
 ---
 
-/prompts/AP-13-design-system-responsive-ui.md
+/prompts/AP-16-roles-rechte-lokale-registrierung.md
 
-# AP-13 — Design System and Responsive UI
+# Feature: Rollen, Rechte, lokale Registrierung und Freischaltung
 
-## Goal
+## Ziel
 
-Create a shared, accessible, responsive design system for Insura and apply it to the existing web application without changing existing business behaviour.
+Ersetze das bisherige Household-Rollenmodell (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`) durch ein klar durchgesetztes globales Rollen- und Rechtekonzept mit genau drei Rollen: `READ_ONLY`, `USER` und `ADMIN`. Jede Person verwendet lokale Zugangsdaten aus Benutzername und Passwort; eine E-Mail-Adresse ist weder erforderlich noch abzufragen. Neue Registrierungen bleiben bis zur expliziten Freischaltung durch einen Admin gesperrt.
 
-The UI must feel modern and calm, inspired by Material You: expressive colour, large readable surfaces, rounded components, clear hierarchy, subtle elevation, and restrained transparency/liquid-glass effects. It must work well on mobile, tablet, and desktop and provide a consistent foundation for all current and future views.
+Dies ist ein vollständiger vertikaler Slice: Prisma-Migration, sichere lokale Credentials, Registrierung/Freischaltung, API- und Guard-Durchsetzung, UI, Audit, Tests, Docker-Compose-Testvertrag und Dokumentation gehören in denselben Änderungsumfang.
 
-This is a vertical slice: deliver the design tokens, reusable UI primitives, theme selection, responsive application shell, and migration of representative existing views in one feature.
+## Vorbedingungen und verbindliche Referenzen
 
-## Read first
+Lies vor Planung und Umsetzung vollständig `AGENTS.md`, `prompts/00-gemeinsame-regeln.md`, alle Dateien unter `docs/` einschließlich ADRs, `dependency-policy.md`, `.opencode/agents/*`, `prompts/PR-REVIEW.md`, bestehende Identity-, Family-Sharing-, Policy-, Settings- und Audit-Implementierungen sowie die zugehörigen Tests und Migrationen.
 
-Before changing code, inspect and follow:
+- Halte alle dortigen Regeln ein, einschließlich vertikaler Feature-Grenzen, Household-Isolation, objektbezogener Freigaben, Security/Privacy, Audit, Dependency Policy, unabhängiger Code Reviews und des verbindlichen Docker-Compose-Testvertrags.
+- Bestehende OIDC-Unterstützung darf nicht unbeabsichtigt beschädigt werden. Da alle Nutzer lokale Zugangsdaten benötigen, muss der Agent vor der Umsetzung eine explizite, dokumentierte Entscheidung treffen, ob OIDC entfernt, deaktiviert oder als optionaler, an ein lokales Konto gebundener zweiter Login-Weg erhalten bleibt. Ohne ausdrücklich dokumentierte, sichere Migrations- und Kompatibilitätsentscheidung keine Änderung am Identity-Modell.
+- Bereits vorhandene `OWNER`-, `ADMIN`-, `MEMBER`- und `VIEWER`-Daten benötigen eine dokumentierte, verlustfreie Migrationsstrategie. `OWNER` darf nicht stillschweigend zu weniger Rechten führen; der sichere Standard ist eine Migration auf `ADMIN`, sofern die Architekturprüfung keine begründete Alternative festlegt.
 
-- `AGENTS.md`
-- `docs/01-product-vision.md`
-- `docs/02-requirements.md`
-- `docs/03-architecture.md`
-- `docs/11-ui-ux.md`
-- `docs/10-quality-and-library-policy.md`
-- `dependency-policy.md`
-- Existing web routes, layouts, components, tests, Docker files, and all relevant prior prompts
-- Existing conventions for environment variables, API clients, authentication, and error handling
+## Rollenmodell
 
-Do not introduce a UI library or styling dependency unless it is permitted by the repository dependency policy. Prefer the project's existing styling approach; if none is suitable, introduce the smallest maintainable solution and document the decision.
+| Rolle | Erlaubt | Verboten |
+|---|---|---|
+| `ADMIN` | Alles, was `USER` darf; Nutzer verwalten; Registrierung freischalten/ablehnen; Rollen zuweisen und ändern; Nutzer deaktivieren; globale System- und Integrationskonfiguration verwalten; Feature Flags verwalten | Eigene letzte aktive Admin-Berechtigung oder letzten aktiven Admin entfernen/degradieren; Secrets im Klartext ansehen oder in Logs/API-Antworten offenlegen |
+| `USER` | Eigenes Profil und eigene Oberflächeneinstellungen ändern; eigene Verträge und zugehörige Vertragsinformationen vollständig erstellen, lesen, ändern, archivieren/löschen; zugehörige Kosten, Dokumente, Portal-Links und erlaubte Fachdaten im bestehenden Berechtigungsrahmen verwalten; explizit freigegebene Objekte im Umfang der Freigabe nutzen | Nutzer/Rollen/Systemeinstellungen ändern; fremde oder nur lesend freigegebene Verträge verändern; globale Konfiguration sehen oder ändern |
+| `READ_ONLY` | Ausschließlich explizit und einzeln bzw. über vorhandene Freigabe-Scopes lesend freigegebene Verträge und deren erlaubte Detaildaten lesen | Eigene oder fremde Verträge anlegen, ändern, archivieren oder löschen; Dokumente/Kosten/Portal-Links/Freigaben verändern; Profil-, Theme-, Locale- oder sonstige Einstellungen verändern; System-/Admin-UI aufrufen |
 
-## Scope
+Die Durchsetzung erfolgt serverseitig in Guards/Policies und Datenabfragen; das Ausblenden von UI-Steuerelementen ist nur eine zusätzliche UX-Maßnahme. Household- und Objektfreigaben dürfen nicht durch globale Rollen umgangen werden. Ein `READ_ONLY`-Nutzer erhält ohne passende explizite `READ`-Freigabe keinen Zugriff auf Verträge, auch nicht auf eigene historische oder Household-Daten.
 
-### 1. Shared design system
+## Funktionaler Umfang
 
-Create one authoritative styling system for the whole web application.
+### Lokale Konten
 
-- Define semantic design tokens for colour, typography, spacing, shape, elevation, opacity, motion, breakpoints, focus states, and z-index.
-- Use CSS custom properties or the project's established equivalent so all components consume shared tokens rather than hard-coded colours or duplicated values.
-- Support light and dark appearance if feasible within the existing architecture. Do not make this a prerequisite for completing the slice if it would substantially enlarge scope.
-- Create reusable primitives/components for at least:
-  - Application shell and responsive navigation
-  - Page header and section header
-  - Surface/card
-  - Button variants
-  - Text input, select, textarea, and form-field validation state
-  - Alert/notice and empty state
-  - Loading state
-  - Table/list container suitable for narrow screens
-  - Dialog or confirmation surface where an existing view needs one
-- Ensure keyboard navigation, visible focus states, adequate target sizes, semantic HTML, labels, and sensible contrast.
+- Implementiere ein eindeutiges, normalisiertes Benutzername-Feld; keine E-Mail-Pflicht, kein E-Mail-Versand und keine E-Mail-Rücksetzung als versteckte Voraussetzung.
+- Speichere ausschließlich zeitgemäß gehashte Passwörter mit per Passwort individuellem Salt; keine Klartextpasswörter in Datenbank, Logs, Audit, Fehlern, Testausgaben oder API-Responses.
+- Ergänze sichere Registrierung, Login, Logout und Session-Integration gemäß bestehender Session-, CSRF-, Cookie- und Proxy-Regeln.
+- Neue Registrierungen erhalten den Status `PENDING`/`PENDING_APPROVAL` und können sich nicht anmelden oder geschützte Ressourcen aufrufen, bis ein Admin sie aktiviert. Antworttexte dürfen weder Benutzerexistenz noch Freischaltstatus unnötig offenlegen.
+- Implementiere Brute-Force-Schutz/Rate Limiting, sichere Passwortvalidierung, generische Login-Fehler und Audit-Ereignisse ohne sensible Werte.
+- Definiere einen sicheren First-Admin-/Bootstrap-Pfad. Er muss explizit konfiguriert, einmalig bzw. sicher begrenzt, auditiert und für Produktion dokumentiert sein; niemals automatische Default-Zugangsdaten erzeugen.
 
-### 2. Material You visual direction
+### Nutzerverwaltung
 
-Implement the visual direction through tokens and components rather than per-page styling.
+- Admin-UI und autorisierte API für Liste, Detailansicht, Suche/Filter nach Status/Rolle, Aktivierung, Ablehnung/Deaktivierung und Rollenzuweisung bereitstellen.
+- Rollenänderungen, Aktivierungen, Deaktivierungen und administrative Identitätsänderungen auditieren; Passwortwerte, Hashes, Sessions und Tokens niemals auditieren.
+- Verhindere zuverlässig, dass der letzte aktive Admin deaktiviert, gelöscht oder auf `USER`/`READ_ONLY` herabgestuft wird. Prüfe dies transaktional gegen Race Conditions.
+- Eine Rolle ist für die gesamte Instanz gültig. Falls HouseholdMembership für Mandantentrennung weiter erforderlich ist, entferne sie nicht ohne ADR und Migration; entkopple fachliche Mitgliedschaft von der neuen globalen Berechtigungsrolle sauber.
 
-- Use soft rounded corners, tonal hierarchy, readable typography, and restrained shadows.
-- Add subtle transparency and liquid-glass effects only to non-essential decorative surfaces such as the top bar, navigation, or elevated panels.
-- Always provide a solid-colour fallback and maintain readable contrast; transparency must not obscure content or controls.
-- Respect `prefers-reduced-motion`; avoid distracting animation.
+### Verträge und Freigaben
 
-### 3. Responsive layouts
+- `USER`-CRUD für eigene Policies muss alle bereits implementierten Vertragsinformationen und verknüpften Daten abdecken, aber keine bestehenden Ownership-, Household- oder Objektfreigabegrenzen schwächen.
+- `READ_ONLY` erhält nur echte Leserechte auf explizit freigegebene Policy-Scopes. Detail-Endpunkte, Dokument-Downloads/Metadaten, Kosten, AI-Zusammenfassungen, Portal-Links und Exportpfade müssen jeweils serverseitig auf die Freigabe geprüft werden.
+- Bestehende `WRITE`-Freigaben dürfen nicht dazu führen, dass `READ_ONLY` schreibt. Für diese Rolle gilt immer die strengere Rollenregel.
 
-Make the web application responsive by design rather than by shrinking desktop layouts.
+### UI
 
-- Mobile: optimize for narrow touch screens, single-column content, large controls, and compact navigation.
-- Tablet: use intermediate layouts and avoid wasted space.
-- Desktop: use responsive max-width content areas, sensible multi-column layouts where useful, and efficient navigation.
-- Define documented breakpoints in the shared styling system.
-- Tables and dense data must remain usable on small screens through responsive columns, stacked rows, or an equivalent accessible pattern; do not require horizontal scrolling for core actions unless unavoidable.
-- Test representative widths around 360px, 768px, and 1280px or equivalent project breakpoints.
+- Ergänze responsive, zugängliche Seiten für Registrierung, lokale Anmeldung, Freischalt-Hinweis, Admin-Nutzerverwaltung und verbotene Zugriffe. Verwende das vorhandene bzw. nach AP-13 eingeführte zentrale UI-System, ohne parallel ein eigenes Styling-System zu schaffen.
+- `READ_ONLY` sieht nur seine lesbaren Inhalte und keine editierbaren Einstellungen. Direkte Route-Aufrufe und API-Anfragen bleiben trotzdem geschützt.
+- Nutzernamen, Status, Rolle und Aktionen müssen verständlich dargestellt werden; gefährliche Admin-Aktionen verlangen eine klare Bestätigung.
 
-### 4. User-selected colour
+## Migration, Tests und Docker
 
-Allow a signed-in user to choose an accent colour and define a custom colour.
+- Liefere Prisma-Migrationen mit einer nachvollziehbaren Up-/Datenmigrationsstrategie, einer sicheren Zuordnung alter Rollen und Tests gegen bestehende Daten.
+- Ergänze Unit-, API-/Integrations-, UI- und Regressionstests für jede Rolle, jede verbotene Aktion, Household-Isolation, explizite Freigaben, Pending-Accounts, Admin-Freischaltung, letzte-Admin-Schutz, Login, Rate Limits und Audit-Redaction.
+- Führe den vollständigen, kanonischen Docker-Compose-Testvertrag aus. Node, pnpm, Prisma, Datenbank, Redis, Build und Tests dürfen in der verbindlichen Prüfung nicht vom Host abhängen.
+- Starte und smoke-teste den Laufzeitstack aus sauberem Insura-spezifischem Compose-Zustand. `docker compose up --build` bleibt funktionsfähig.
 
-- Provide a clear settings entry point appropriate to the existing settings/admin/user-information architecture.
-- Offer a small set of accessible preset colours plus a custom colour picker or validated colour value input.
-- Apply the selected colour across the shared semantic accent tokens, including primary actions, active navigation, focus treatments where appropriate, and selected states.
-- Validate and sanitize custom colour input. Derive accessible foreground/contrast variants instead of blindly using the raw value everywhere.
-- Persist the choice using the existing persistence and household/user-scoping conventions. Do not leak one user's preference to another user or household.
-- Use a stable default when no preference is configured.
-- Avoid a flash of the wrong theme where practical.
+## Dokumentation und Review
 
-### 5. Migrate current views
+Aktualisiere nach erfolgreicher Umsetzung und erfolgreichem Docker-Compose-Test mindestens Datenmodell, Security/Privacy, Architektur, Admin Operations, README, `.env.example`, Compose-/CI-Konfiguration und die zentralen Regeln, sofern betroffen. Dokumentiere insbesondere die Rollenmatrix, Migrationszuordnung, Bootstrap-Absicherung, lokale Authentifizierung, Pending-Status, Freigabegrenzen und OIDC-Entscheidung.
 
-Apply the new system to the existing application shell and representative established routes, including authentication, policy, household/cost, and admin/settings views where present.
+Halte den vollständigen unabhängigen Review-Loop ein: `@code-reviewer` read-only aufrufen, jedes Ergebnis wortgetreu unter `docs/reviews/` speichern, Critical/High/Medium beheben und bis maximal fünf Runden wiederholen. Ein Commit/PR ist nur bei 0 Critical, 0 High, 0 Medium, höchstens 8 Minor, grüner Compose-CI und bestandenem kanonischem Compose-Testvertrag zulässig.
 
-- Preserve all routes, API contracts, permissions, and existing feature behaviour.
-- Remove or consolidate duplicated page-specific styling where safe.
-- Do not rewrite unrelated feature logic.
-- Ensure future pages can be built entirely from the new tokens and primitives.
+## Akzeptanzkriterien
 
-## Backend and data requirements
-
-If persistence is required, implement it as a complete vertical slice:
-
-- Add a Prisma migration when schema changes are needed.
-- Add a narrowly scoped API endpoint/service only if the existing settings mechanism cannot safely support the preference.
-- Authenticate and authorize every endpoint.
-- Scope reads and writes to the current user according to the established identity and household model.
-- Validate DTOs and return safe errors.
-- Add unit and integration tests appropriate to the changed layer.
-
-Do not store user-specific preferences only in browser storage when the product already has authenticated persistence; browser storage may be used as a temporary rendering cache but not as the source of truth.
-
-## Docker Compose requirement
-
-`docker compose up --build` must run the complete application from a fresh clone after this feature.
-
-- Preserve or improve the existing Compose developer experience.
-- Ensure the web app, API, worker, database, Redis, and any required dependencies start in the correct order and communicate through documented configuration.
-- Add health checks and readiness handling where the current setup lacks them and they are needed for reliable startup.
-- Update `.env.example` with any new non-secret configuration.
-- Do not commit secrets, generated credentials, local volumes, or machine-specific paths.
-- Verify the feature in the Compose environment, including theme preference persistence where applicable.
-
-This Compose requirement is part of the feature's acceptance criteria and remains mandatory for every subsequent feature.
-
-## Tests and quality gates
-
-Add or update:
-
-- Unit tests for colour parsing/normalization and contrast/derived-token logic.
-- API/service tests for preference authorization and persistence, if applicable.
-- Component tests for key primitives and colour preference behaviour where the repository supports them.
-- Responsive visual or browser tests if the existing test stack supports them; otherwise document a concise manual responsive verification procedure.
-- Existing lint, type-check, unit-test, build, and migration checks.
-
-Do not weaken, skip, or delete existing tests to make the feature pass.
-
-## Documentation
-
-Update:
-
-- `docs/11-ui-ux.md` with the design tokens, breakpoints, component conventions, accessibility rules, and colour-customization behaviour.
-- `docs/04-data-model.md` if persistence changes.
-- `docs/03-architecture.md` if a new UI architecture or persistence boundary is introduced.
-- `README.md` with the Compose startup command and how to choose a colour.
-- Create an ADR only if a consequential new styling framework, persistence strategy, or theming architecture is selected.
-
-## Acceptance criteria
-
-- Existing and migrated views share one design-token and component system.
-- The application is usable and visually coherent at mobile, tablet, and desktop widths.
-- A user can select a preset accent colour or a valid custom colour; it persists safely and affects the UI consistently.
-- The UI remains accessible, including keyboard focus, labels, contrast, and reduced-motion behaviour.
-- Existing functionality and access controls remain intact.
-- Database migrations, tests, linting, type checks, and production build pass.
-- From a fresh clone with documented environment values, `docker compose up --build` starts a usable application.
-- The final implementation is documented and contains no unrelated refactors.
-
-## Delivery report
-
-In the final response, provide:
-
-1. Files changed and why.
-2. The design-system architecture and token location.
-3. Responsive behaviour and tested viewport sizes.
-4. How colour preferences are stored, validated, and scoped.
-5. Exact commands run, including Compose verification.
-6. Any intentionally deferred work and rationale.
+- Genau die drei globalen Rollen `READ_ONLY`, `USER`, `ADMIN` sind serverseitig durchgesetzt und korrekt migriert.
+- Jeder Nutzer besitzt Benutzername und Passwort; E-Mail ist nicht erforderlich.
+- Registrierung erzeugt gesperrte Pending-Konten; nur ein Admin kann sie freischalten.
+- `ADMIN` verwaltet Nutzer, Rollen und Systemeinstellungen; `USER` verwaltet ausschließlich eigene Verträge und eigenes Profil; `READ_ONLY` liest nur explizit freigegebene Verträge und ändert keinerlei Einstellungen.
+- Rechteverletzungen sind über UI, direkte Routen und APIs gleichermaßen verhindert; Datenisolation bleibt gewährleistet.
+- Passwort-, Session-, Audit- und Rate-Limit-Schutz ist vorhanden und getestet.
+- Migrationen, Dokumentation, unabhängiger Review und der vollständige Docker-Compose-Test-/CI-Pfad sind erfolgreich.

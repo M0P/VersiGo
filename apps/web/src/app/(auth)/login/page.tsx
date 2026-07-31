@@ -2,6 +2,11 @@
 
 import type { FormEvent, ReactElement } from 'react';
 import { useState, useEffect } from 'react';
+import { Card } from '../../../components/ui/card';
+import { Button } from '../../../components/ui/button';
+import { Input, FormField } from '../../../components/ui/form-field';
+import { Alert } from '../../../components/ui/alert';
+import { InlineSpinner } from '../../../components/ui/loading';
 
 type AuthConfig = {
   oidcEnabled: boolean;
@@ -69,19 +74,28 @@ export default function LoginPage(): ReactElement {
 
   if (configError) {
     return (
-      <main>
-        <h1>Anmeldung</h1>
-        <p role="alert">Der Anmeldedienst ist derzeit nicht verfuegbar. Bitte versuchen Sie es spaeter erneut.</p>
-      </main>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+        <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
+          <h1 style={{ marginBottom: 'var(--insura-space-2)' }}>Anmeldung</h1>
+          <Alert variant="danger">
+            Der Anmeldedienst ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.
+          </Alert>
+        </Card>
+      </div>
     );
   }
 
   if (!config) {
     return (
-      <main>
-        <h1>Anmeldung</h1>
-        <p>Lade Anmeldeoptionen...</p>
-      </main>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+        <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
+          <h1 style={{ marginBottom: 'var(--insura-space-2)' }}>Anmeldung</h1>
+          <p className="text-muted">Lade Anmeldeoptionen...</p>
+          <div style={{ marginTop: 'var(--insura-space-4)' }}>
+            <InlineSpinner />
+          </div>
+        </Card>
+      </div>
     );
   }
 
@@ -89,75 +103,82 @@ export default function LoginPage(): ReactElement {
 
   if (!hasAnyAuth) {
     return (
-      <main>
-        <h1>Anmeldung</h1>
-        <p role="alert">Es ist keine Anmeldeart konfiguriert. Bitte wenden Sie sich an Ihre Administration.</p>
-      </main>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+        <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
+          <h1 style={{ marginBottom: 'var(--insura-space-2)' }}>Anmeldung</h1>
+          <Alert variant="warning">
+            Es ist keine Anmeldeart konfiguriert. Bitte wenden Sie sich an Ihre Administration.
+          </Alert>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <main>
-      <h1>Anmeldung</h1>
-
-      {error && (
-        <div role="alert" style={{ color: 'red', marginBottom: '1rem' }}>
-          {error.message}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+      <Card style={{ maxWidth: 420, width: '100%' }}>
+        <div style={{ textAlign: 'center', marginBottom: 'var(--insura-space-6)' }}>
+          <h1 style={{ marginBottom: 'var(--insura-space-1)' }}>
+            <span style={{ color: 'var(--insura-accent)' }}>In</span>sura
+          </h1>
+          <p className="text-muted">Versicherungsverwaltung</p>
         </div>
-      )}
 
-      {config.localEnabled && (
-        <form onSubmit={handleLocalLogin} noValidate>
-          <fieldset disabled={loading}>
-            <legend>Mit Benutzername anmelden</legend>
+        {error && (
+          <Alert variant="danger" title="Anmeldefehler">
+            {error.message}
+          </Alert>
+        )}
 
-            <div>
-              <label htmlFor="login-identifier">Benutzername</label>
-              <br />
-              <input
-                id="login-identifier"
-                type="text"
-                autoComplete="username"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                required
-                aria-required="true"
-              />
-            </div>
+        {config.localEnabled && (
+          <form onSubmit={handleLocalLogin} noValidate>
+            <fieldset disabled={loading} style={{ border: 'none', padding: 0, margin: 0 }}>
+              <FormField label="Benutzername" required>
+                <Input
+                  id="login-identifier"
+                  type="text"
+                  autoComplete="username"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  required
+                  placeholder="Ihr Benutzername"
+                />
+              </FormField>
 
-            <div>
-              <label htmlFor="login-password">Passwort</label>
-              <br />
-              <input
-                id="login-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                aria-required="true"
-              />
-            </div>
+              <FormField label="Passwort" required>
+                <Input
+                  id="login-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="Ihr Passwort"
+                />
+              </FormField>
 
-            <div>
-              <button type="submit" disabled={loading || !identifier || !password}>
-                {loading ? 'Anmelden...' : 'Anmelden'}
-              </button>
-            </div>
-          </fieldset>
-        </form>
-      )}
+              <Button type="submit" disabled={loading || !identifier || !password} style={{ width: '100%' }}>
+                {loading ? <><InlineSpinner /> Anmelden...</> : 'Anmelden'}
+              </Button>
+            </fieldset>
+          </form>
+        )}
 
-      {config.localEnabled && config.oidcEnabled && (
-        <hr role="separator" aria-label="oder" />
-      )}
+        {config.localEnabled && config.oidcEnabled && (
+          <hr role="separator" aria-label="oder" style={{ margin: 'var(--insura-space-6) 0' }} />
+        )}
 
-      {config.oidcEnabled && (
-        <div>
-          <p>Alternativ mit Ihrem Identity-Provider anmelden:</p>
-          <a href={`${apiBaseUrl}/auth/login`}>Mit OIDC anmelden</a>
-        </div>
-      )}
-    </main>
+        {config.oidcEnabled && (
+          <div style={{ textAlign: 'center' }}>
+            <p className="text-sm text-muted" style={{ marginBottom: 'var(--insura-space-3)' }}>
+              Alternativ mit Ihrem Identity-Provider anmelden:
+            </p>
+            <a href={`${apiBaseUrl}/auth/login`}>
+              <Button variant="outline" style={{ width: '100%' }}>Mit OIDC anmelden</Button>
+            </a>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }

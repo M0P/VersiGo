@@ -1,6 +1,15 @@
 'use client';
 
 import { useEffect, useState, type ReactElement, type FormEvent } from 'react';
+import { AppShell } from '../../../components/ui/app-shell';
+import { PageHeader, SectionHeader } from '../../../components/ui/page-header';
+import { Card } from '../../../components/ui/card';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/form-field';
+import { Alert } from '../../../components/ui/alert';
+import { Loading } from '../../../components/ui/loading';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { NAV_SECTIONS } from '../../../components/ui/nav-config';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -78,7 +87,7 @@ export default function AdminFeatureFlagsPage(): ReactElement {
   };
 
   const handleDelete = async (key: string) => {
-    if (!window.confirm(`Feature-Flag "${key}" wirklich l\u00F6schen?`)) return;
+    if (!window.confirm(`Feature-Flag "${key}" wirklich löschen?`)) return;
     setError(null);
     try {
       const res = await fetch(`${API_BASE}/admin/feature-flags/${encodeURIComponent(key)}`, {
@@ -87,7 +96,7 @@ export default function AdminFeatureFlagsPage(): ReactElement {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.message ?? 'Fehler beim L\u00F6schen');
+        throw new Error(data.message ?? 'Fehler beim Löschen');
       }
       loadFlags();
     } catch (e: unknown) {
@@ -96,77 +105,92 @@ export default function AdminFeatureFlagsPage(): ReactElement {
     }
   };
 
-  if (loading) return <main><p>Lade Feature-Flags...</p></main>;
+  if (loading) {
+    return (
+      <AppShell navSections={NAV_SECTIONS}>
+        <PageHeader title="Globale Feature-Flags" />
+        <Loading label="Lade Feature-Flags..." />
+      </AppShell>
+    );
+  }
 
   return (
-    <div>
-      <h1>Globale Feature-Flags</h1>
+    <AppShell navSections={NAV_SECTIONS}>
+      <PageHeader title="Globale Feature-Flags" description="Feature-Flags systemweit steuern" />
 
-      {error && <p style={{ color: 'red' }}>Fehler: {error}</p>}
+      {error && <Alert variant="danger">Fehler: {error}</Alert>}
 
-      <section style={{ marginBottom: '2rem' }}>
-        <h2>Neues Feature-Flag</h2>
-        <form onSubmit={handleCreate} style={{ display: 'flex', gap: '0.5rem', alignItems: 'end', flexWrap: 'wrap' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem' }}>Key</label>
-            <input
+      <Card style={{ marginBottom: 'var(--insura-space-6)' }}>
+        <SectionHeader title="Neues Feature-Flag" />
+        <form onSubmit={handleCreate} style={{ display: 'flex', gap: 'var(--insura-space-3)', alignItems: 'end', flexWrap: 'wrap' }}>
+          <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
+            <label className="form-label">Key</label>
+            <Input
               type="text"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
               required
-              style={{ padding: '0.3rem' }}
+              placeholder="z. B. feature_x"
             />
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem' }}>
+          <div className="form-group">
+            <label className="form-check">
               <input
                 type="checkbox"
                 checked={newEnabled}
                 onChange={(e) => setNewEnabled(e.target.checked)}
-              />{' '}
+              />
               Aktiviert
             </label>
           </div>
-          <button type="submit" style={{ padding: '0.3rem 0.8rem' }}>Anlegen</button>
+          <Button type="submit" variant="primary">Anlegen</Button>
         </form>
-      </section>
+      </Card>
 
-      <section>
-        <h2>Vorhandene Feature-Flags</h2>
-        {flags.length === 0 && <p>Keine Feature-Flags vorhanden.</p>}
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr style={{ textAlign: 'left' }}>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Key</th>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Status</th>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Aktionen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {flags.map((f) => (
-              <tr key={f.id}>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  <code>{f.key}</code>
-                </td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  <span style={{ color: f.enabled ? 'green' : 'red', fontWeight: 'bold' }}>
-                    {f.enabled ? 'Aktiv' : 'Inaktiv'}
-                  </span>
-                </td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  <button
-                    onClick={() => handleToggle(f.key, f.enabled)}
-                    style={{ marginRight: '0.3rem' }}
-                  >
-                    {f.enabled ? 'Deaktivieren' : 'Aktivieren'}
-                  </button>
-                  <button onClick={() => handleDelete(f.key)} style={{ color: 'red' }}>L&ouml;schen</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    </div>
+      <Card>
+        <SectionHeader title="Vorhandene Feature-Flags" />
+        {flags.length === 0 ? (
+          <EmptyState icon="🚩" title="Keine Feature-Flags">
+            <p>Es sind noch keine Feature-Flags vorhanden.</p>
+          </EmptyState>
+        ) : (
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Status</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {flags.map((f) => (
+                  <tr key={f.id}>
+                    <td data-label="Key"><code>{f.key}</code></td>
+                    <td data-label="Status">
+                      <span className={`badge ${f.enabled ? 'badge-success' : 'badge-neutral'}`}>
+                        {f.enabled ? 'Aktiv' : 'Inaktiv'}
+                      </span>
+                    </td>
+                    <td data-label="Aktionen">
+                      <div className="btn-group">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleToggle(f.key, f.enabled)}
+                        >
+                          {f.enabled ? 'Deaktivieren' : 'Aktivieren'}
+                        </Button>
+                        <Button variant="danger" size="sm" onClick={() => handleDelete(f.key)}>Löschen</Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </AppShell>
   );
 }

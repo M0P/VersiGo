@@ -1,6 +1,12 @@
 'use client';
 
 import { useEffect, useState, type ReactElement } from 'react';
+import { AppShell } from '../../components/ui/app-shell';
+import { PageHeader, SectionHeader } from '../../components/ui/page-header';
+import { Card } from '../../components/ui/card';
+import { Loading } from '../../components/ui/loading';
+import { Alert } from '../../components/ui/alert';
+import { NAV_SECTIONS } from '../../components/ui/nav-config';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -38,55 +44,66 @@ export default function AdminDashboardPage(): ReactElement {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <main><p>Lade Admin-&Uuml;bersicht...</p></main>;
-  if (error) return <main><p>Fehler: {error}</p></main>;
+  if (loading) {
+    return (
+      <AppShell navSections={NAV_SECTIONS}>
+        <PageHeader title="Admin-Übersicht" />
+        <Loading label="Lade Admin-Übersicht..." />
+      </AppShell>
+    );
+  }
 
-  const statusIcon = (status: string) => {
+  if (error) {
+    return (
+      <AppShell navSections={NAV_SECTIONS}>
+        <PageHeader title="Admin-Übersicht" />
+        <Alert variant="danger">Fehler: {error}</Alert>
+      </AppShell>
+    );
+  }
+
+  const statusLabel = (status: string) => {
     switch (status) {
-      case 'ok': return '\u2705';
-      case 'warn': return '\u26A0\uFE0F';
-      case 'error': return '\u274C';
-      default: return '\u2753';
+      case 'ok': return '✅';
+      case 'warn': return '⚠️';
+      case 'error': return '❌';
+      default: return '❓';
     }
   };
 
   return (
-    <div>
-      <h1>Admin-&Uuml;bersicht</h1>
+    <AppShell navSections={NAV_SECTIONS}>
+      <PageHeader title="Admin-Übersicht" />
 
-      <section style={{ marginBottom: '2rem' }}>
-        <h2>Konfigurationsvalidierung</h2>
+      <Card>
+        <SectionHeader title="Konfigurationsvalidierung" />
         <p>
           Gesamtstatus:{' '}
-          <strong style={{ color: validation?.valid ? 'green' : 'red' }}>
-            {validation?.valid ? 'G\u00FCltig' : 'Fehlerhaft'}
+          <strong style={{ color: validation?.valid ? 'var(--insura-success)' : 'var(--insura-danger)' }}>
+            {validation?.valid ? 'Gültig' : 'Fehlerhaft'}
           </strong>
         </p>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr style={{ textAlign: 'left' }}>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Status</th>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Schl&uuml;ssel</th>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Meldung</th>
-            </tr>
-          </thead>
-          <tbody>
-            {validation?.checks.map((check) => (
-              <tr key={check.key}>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  {statusIcon(check.status)}
-                </td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  <code>{check.key}</code>
-                </td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  {check.message}
-                </td>
+        <div className="table-container" style={{ marginTop: 'var(--insura-space-4)' }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Schlüssel</th>
+                <th>Meldung</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    </div>
+            </thead>
+            <tbody>
+              {validation?.checks.map((check) => (
+                <tr key={check.key}>
+                  <td data-label="Status">{statusLabel(check.status)}</td>
+                  <td data-label="Schlüssel"><code>{check.key}</code></td>
+                  <td data-label="Meldung">{check.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </AppShell>
   );
 }

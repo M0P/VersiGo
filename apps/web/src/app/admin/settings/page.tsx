@@ -1,6 +1,15 @@
 'use client';
 
 import { useEffect, useState, type ReactElement, type FormEvent } from 'react';
+import { AppShell } from '../../../components/ui/app-shell';
+import { PageHeader, SectionHeader } from '../../../components/ui/page-header';
+import { Card } from '../../../components/ui/card';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/form-field';
+import { Alert } from '../../../components/ui/alert';
+import { Loading } from '../../../components/ui/loading';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { NAV_SECTIONS } from '../../../components/ui/nav-config';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -85,7 +94,7 @@ export default function AdminSettingsPage(): ReactElement {
   };
 
   const handleDelete = async (key: string) => {
-    if (!window.confirm(`Setting "${key}" wirklich l\u00F6schen?`)) return;
+    if (!window.confirm(`Setting "${key}" wirklich löschen?`)) return;
     setError(null);
     try {
       const res = await fetch(`${API_BASE}/admin/settings/${encodeURIComponent(key)}`, {
@@ -94,7 +103,7 @@ export default function AdminSettingsPage(): ReactElement {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.message ?? 'Fehler beim L\u00F6schen');
+        throw new Error(data.message ?? 'Fehler beim Löschen');
       }
       loadSettings();
     } catch (e: unknown) {
@@ -103,114 +112,128 @@ export default function AdminSettingsPage(): ReactElement {
     }
   };
 
-  if (loading) return <main><p>Lade Einstellungen...</p></main>;
+  if (loading) {
+    return (
+      <AppShell navSections={NAV_SECTIONS}>
+        <PageHeader title="Globale Einstellungen" />
+        <Loading label="Lade Einstellungen..." />
+      </AppShell>
+    );
+  }
 
   return (
-    <div>
-      <h1>Globale Einstellungen</h1>
+    <AppShell navSections={NAV_SECTIONS}>
+      <PageHeader title="Globale Einstellungen" description="Systemweite Konfigurationswerte verwalten" />
 
-      {error && <p style={{ color: 'red' }}>Fehler: {error}</p>}
+      {error && <Alert variant="danger">Fehler: {error}</Alert>}
 
-      <section style={{ marginBottom: '2rem' }}>
-        <h2>Neues Setting</h2>
-        <form onSubmit={handleCreate} style={{ display: 'flex', gap: '0.5rem', alignItems: 'end', flexWrap: 'wrap' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem' }}>Key</label>
-            <input
+      <Card style={{ marginBottom: 'var(--insura-space-6)' }}>
+        <SectionHeader title="Neues Setting" />
+        <form onSubmit={handleCreate} style={{ display: 'flex', gap: 'var(--insura-space-3)', alignItems: 'end', flexWrap: 'wrap' }}>
+          <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
+            <label className="form-label">Key</label>
+            <Input
               type="text"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
               required
-              style={{ padding: '0.3rem' }}
+              placeholder="z. B. integration.api_key"
             />
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem' }}>Wert</label>
-            <input
+          <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
+            <label className="form-label">Wert</label>
+            <Input
               type="text"
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
-              style={{ padding: '0.3rem' }}
+              placeholder="Wert eingeben"
             />
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.8rem' }}>
+          <div className="form-group">
+            <label className="form-check">
               <input
                 type="checkbox"
                 checked={newIsSecret}
                 onChange={(e) => setNewIsSecret(e.target.checked)}
-              />{' '}
-              Secret (verschl&uuml;sselt)
+              />
+              Secret
             </label>
           </div>
-          <button type="submit" style={{ padding: '0.3rem 0.8rem' }}>Anlegen</button>
+          <Button type="submit" variant="primary">Anlegen</Button>
         </form>
-      </section>
+      </Card>
 
-      <section>
-        <h2>Vorhandene Einstellungen</h2>
-        {settings.length === 0 && <p>Keine Einstellungen vorhanden.</p>}
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead>
-            <tr style={{ textAlign: 'left' }}>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Key</th>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Wert</th>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Secret</th>
-              <th style={{ padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Aktionen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {settings.map((s) => (
-              <tr key={s.id}>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  <code>{s.key}</code>
-                </td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  {editKey === s.key ? (
-                    <input
-                      type={s.isSecret ? 'password' : 'text'}
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      style={{ padding: '0.3rem' }}
-                    />
-                  ) : (
-                    <span>{s.valuePlain}</span>
-                  )}
-                </td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  {editKey === s.key ? (
-                    <input
-                      type="checkbox"
-                      checked={editIsSecret}
-                      onChange={(e) => setEditIsSecret(e.target.checked)}
-                    />
-                  ) : (
-                    <span>{s.isSecret ? 'Ja' : 'Nein'}</span>
-                  )}
-                </td>
-                <td style={{ padding: '0.5rem', borderBottom: '1px solid #eee' }}>
-                  {editKey === s.key ? (
-                    <>
-                      <button onClick={() => handleUpdate(s.key)} style={{ marginRight: '0.3rem' }}>Speichern</button>
-                      <button onClick={() => setEditKey(null)}>Abbrechen</button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => { setEditKey(s.key); setEditValue(''); setEditIsSecret(s.isSecret); }}
-                        style={{ marginRight: '0.3rem' }}
-                      >
-                        Bearbeiten
-                      </button>
-                      <button onClick={() => handleDelete(s.key)} style={{ color: 'red' }}>L&ouml;schen</button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    </div>
+      <Card>
+        <SectionHeader title="Vorhandene Einstellungen" />
+        {settings.length === 0 ? (
+          <EmptyState icon="⚙️" title="Keine Einstellungen">
+            <p>Es sind noch keine globalen Einstellungen vorhanden.</p>
+          </EmptyState>
+        ) : (
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Wert</th>
+                  <th>Secret</th>
+                  <th>Aktionen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {settings.map((s) => (
+                  <tr key={s.id}>
+                    <td data-label="Key"><code>{s.key}</code></td>
+                    <td data-label="Wert">
+                      {editKey === s.key ? (
+                        <Input
+                          type={s.isSecret ? 'password' : 'text'}
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                        />
+                      ) : (
+                        <span>{s.valuePlain}</span>
+                      )}
+                    </td>
+                    <td data-label="Secret">
+                      {editKey === s.key ? (
+                        <label className="form-check">
+                          <input
+                            type="checkbox"
+                            checked={editIsSecret}
+                            onChange={(e) => setEditIsSecret(e.target.checked)}
+                          />
+                        </label>
+                      ) : (
+                        <span>{s.isSecret ? 'Ja' : 'Nein'}</span>
+                      )}
+                    </td>
+                    <td data-label="Aktionen">
+                      {editKey === s.key ? (
+                        <div className="btn-group">
+                          <Button variant="primary" size="sm" onClick={() => handleUpdate(s.key)}>Speichern</Button>
+                          <Button variant="ghost" size="sm" onClick={() => setEditKey(null)}>Abbrechen</Button>
+                        </div>
+                      ) : (
+                        <div className="btn-group">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => { setEditKey(s.key); setEditValue(''); setEditIsSecret(s.isSecret); }}
+                          >
+                            Bearbeiten
+                          </Button>
+                          <Button variant="danger" size="sm" onClick={() => handleDelete(s.key)}>Löschen</Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </AppShell>
   );
 }

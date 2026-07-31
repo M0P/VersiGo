@@ -118,6 +118,14 @@
 - sourceDocumentRefsJson
 - createdAt
 
+### UserPreference (AP-13)
+- id
+- userId (FK -> users.id, unique per [userId, key], cascading delete)
+- key (z. B. `ui:accentColour`)
+- value (Klartext, z. B. `#1a73e8`)
+- createdAt
+- updatedAt
+
 ### AuditLog
 - id
 - actorUserId
