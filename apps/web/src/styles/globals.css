@@ -1172,3 +1172,124 @@
     padding: var(--insura-space-4);
   }
 }
+
+/* --- AP-17: Systemeinstellungen (Admin) & Profil --- */
+.settings-toolbar {
+  display: flex;
+  gap: var(--insura-space-4);
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.settings-filter-checks {
+  display: flex;
+  gap: var(--insura-space-4);
+  flex-wrap: wrap;
+  padding-bottom: var(--insura-space-2);
+}
+
+.settings-group .section-header {
+  margin-bottom: var(--insura-space-2);
+}
+
+.settings-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--insura-space-4);
+}
+
+.settings-entry {
+  border: var(--insura-border-width) solid var(--insura-border);
+  border-radius: var(--insura-radius-md);
+  padding: var(--insura-space-4);
+  background-color: var(--insura-surface);
+}
+
+.settings-entry-invalid {
+  border-color: var(--insura-warning);
+}
+
+.settings-entry-head {
+  display: flex;
+  align-items: center;
+  gap: var(--insura-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--insura-space-2);
+}
+
+.settings-entry-key {
+  font-weight: var(--insura-font-weight-semibold);
+  margin-right: var(--insura-space-1);
+}
+
+.settings-entry-description {
+  margin: 0 0 var(--insura-space-2);
+  color: var(--insura-text-secondary);
+}
+
+.settings-entry-form {
+  display: flex;
+  gap: var(--insura-space-3);
+  align-items: end;
+  flex-wrap: wrap;
+  margin-top: var(--insura-space-2);
+}
+
+.settings-entry-value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--insura-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--insura-space-1);
+}
+
+.settings-entry-value-label {
+  font-size: var(--insura-font-size-xs);
+  font-weight: var(--insura-font-weight-semibold);
+  color: var(--insura-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.settings-entry-value-text {
+  font-family: var(--insura-font-mono, monospace);
+  font-weight: var(--insura-font-weight-medium);
+}
+
+.settings-entry-reason {
+  margin: 0 0 var(--insura-space-2);
+  font-size: var(--insura-font-size-sm);
+  color: var(--insura-text-secondary);
+}
+
+.settings-entry-updated {
+  color: var(--insura-text-tertiary, var(--insura-text-secondary));
+}
+
+.profile-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--insura-space-3);
+  margin-bottom: var(--insura-space-4);
+}
+
+.profile-meta-value {
+  margin: 0;
+  font-weight: var(--insura-font-weight-medium);
+}
+
+@media (max-width: 639px) {
+  .settings-toolbar {
+    align-items: stretch;
+  }
+
+  .settings-filter-checks {
+    flex-direction: column;
+    gap: var(--insura-space-2);
+  }
+
+  .settings-entry-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

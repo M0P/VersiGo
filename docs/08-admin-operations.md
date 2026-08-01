@@ -138,6 +138,14 @@ Migrationen laufen automatisch über den `migration`-Service.
 ## Admin-UI Bereiche
 - Allgemein
 - Nutzerverwaltung (Liste, Status-Filter, Freischaltung, Ablehnung, Sperre, Rollenzuweisung, OIDC-Bindung)
+- **Systemeinstellungen (AP-17, `/admin/settings`, nur `ADMIN`):** katalogbasierte
+  zentrale Konfiguration mit Gruppierung, Suche und Filtern (Quelle `.env`/`UI`/`Default`,
+  „Nur ungültige UI-Werte", „Nur Neustart erforderlich"). Pro Schlüssel werden
+  effektiver Wert (Secrets maskiert), Quelle, Fallback-Grund, Validierungsstatus,
+  Neustartbedarf und letzter Änderungszeitpunkt/-akteur angezeigt. Aktionen:
+  Setzen/Ändern (atomar validiert), Zurücksetzen auf Fallback, sicherer
+  Connectivity-Test (nur für testbare Integrations-Schlüssel). Vollständiger
+  Katalog: `docs/13-settings-catalog.md`.
 - OIDC Konfiguration
 - AI Provider
 - Dokumentenspeicher
@@ -145,6 +153,31 @@ Migrationen laufen automatisch über den `migration`-Service.
 - Portal-Connectoren
 - Feature-Flags
 - Audit und Jobs
+
+## Systemeinstellungen (AP-17)
+
+- **Priorität:** gültiger DB-UI-Wert > validierter `.env`-Wert > Code-Default
+  bzw. kontrollierte Degradation. Die Admin-UI macht Quelle, Fallback-Grund
+  und effektiven Wert pro Schlüssel sichtbar.
+- **Runtime vs. Neustart:** `runtime`-Werte wirken sofort (API/Worker lesen
+  die zentrale Auflösung pro Aufruf). `restart`-Werte (z. B.
+  `LOCAL_AUTH_MAX_ATTEMPTS`, `STORAGE_ENABLED`) werden erst beim nächsten
+  Start aktiv – die UI markiert sie mit „Neustart erforderlich"; API und
+  Worker vorbefüllen sie beim Boot (`preloadRestartSettingsIntoEnv`).
+- **Secrets:** `AI_OPENAI_COMPAT_API_KEY`, `PAPERLESS_API_TOKEN` werden
+  verschlüsselt gespeichert und in der UI nur als „gesetzt/nicht gesetzt"
+  geführt; ein fehlender `SETTINGS_ENCRYPTION_KEY` führt zu fail-soft
+  Preload (Warnung), nie zu Klartext-Ausgabe.
+- **Connectivity-Tests:** nur für testbare Schlüssel
+  (`AI_OLLAMA_BASE_URL`, `AI_OPENAI_COMPAT_BASE_URL`, `AI_OPENAI_COMPAT_API_KEY`,
+  `PAPERLESS_URL`, `PAPERLESS_API_TOKEN`), 5-s-Timeout, keine Secrets im
+  Ergebnis. **SSRF-Schutz:** nur öffentliche `http(s)`-Endpunkte sind
+  testbar; `localhost`, private/link-local-Adressen und interne Hostnamen
+  werden abgewiesen. Lokale Dienste (z. B. Ollama unter
+  `http://localhost:11434`) sind daher nicht über die UI testbar – bitte
+  Erreichbarkeit direkt auf dem Host prüfen.
+- **Audit:** jede Änderung/Reset/Test wird revisionssicher protokolliert
+  (ohne Werte/Secrets).
 
 ## Betriebsfunktionen
 - Health-Checks pro Modul

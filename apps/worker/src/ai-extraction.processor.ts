@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { DatabaseService, AppConfigService } from '@insura/foundation';
+import { DatabaseService, SettingsResolverService } from '@insura/foundation';
 import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@insura/foundation';
 import type { Prisma } from '@prisma/client';
 import axios, { AxiosError } from 'axios';
@@ -320,37 +320,53 @@ Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format
 })
 export class AiExtractionProcessor extends WorkerHost {
   private readonly logger = new Logger(AiExtractionProcessor.name);
-  private readonly adapter: IAIAdapter;
 
   constructor(
     private readonly db: DatabaseService,
-    private readonly config: AppConfigService,
+    private readonly settings: SettingsResolverService,
   ) {
     super();
+  }
 
-    const enabled = this.config.get('AI_ENABLED');
-
+  /**
+   * Loest den aktiven Adapter pro Job ueber die zentrale Settings-Aufloesung
+   * auf (AP-17: UI > .env > Default). Admin-UI-Aenderungen an AI_ENABLED,
+   * AI_PROVIDER, Modellen, Endpunkten und Timeouts wirken damit auch im
+   * Worker ohne Neustart.
+   */
+  private async resolveAdapter(): Promise<IAIAdapter> {
+    const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');
     if (!enabled) {
-      this.adapter = new WorkerNoOpAdapter();
-    } else {
-      const provider = this.config.get('AI_PROVIDER') ?? 'ollama';
-      const timeout = this.config.get('AI_EXTRACTION_TIMEOUT_MS') ?? 60000;
+      return new WorkerNoOpAdapter();
+    }
 
-      switch (provider) {
-        case 'openai-compat': {
-          const baseUrl = (this.config.get('AI_OPENAI_COMPAT_BASE_URL') ?? '').replace(/\/+$/, '');
-          const apiKey = this.config.get('AI_OPENAI_COMPAT_API_KEY') ?? '';
-          const model = this.config.get('AI_OPENAI_COMPAT_MODEL') ?? 'gpt-4o-mini';
-          this.adapter = new WorkerOpenAiCompatAdapter(baseUrl, apiKey, model, timeout, baseUrl.length > 0 && apiKey.length > 0);
-          break;
-        }
-        case 'ollama':
-        default: {
-          const baseUrl = (this.config.get('AI_OLLAMA_BASE_URL') ?? 'http://localhost:11434').replace(/\/+$/, '');
-          const model = this.config.get('AI_OLLAMA_MODEL') ?? 'llama3';
-          this.adapter = new WorkerOllamaAdapter(baseUrl, model, timeout);
-          break;
-        }
+    const provider = (await this.settings.getEffectiveString('AI_PROVIDER')) ?? 'ollama';
+    const timeout =
+      (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
+
+    switch (provider) {
+      case 'openai-compat': {
+        const baseUrl = (
+          (await this.settings.getEffectiveString('AI_OPENAI_COMPAT_BASE_URL')) ?? ''
+        ).replace(/\/+$/, '');
+        const apiKey = (await this.settings.getEffectiveString('AI_OPENAI_COMPAT_API_KEY')) ?? '';
+        const model =
+          (await this.settings.getEffectiveString('AI_OPENAI_COMPAT_MODEL')) ?? 'gpt-4o-mini';
+        return new WorkerOpenAiCompatAdapter(
+          baseUrl,
+          apiKey,
+          model,
+          timeout,
+          baseUrl.length > 0 && apiKey.length > 0,
+        );
+      }
+      case 'ollama':
+      default: {
+        const baseUrl = (
+          (await this.settings.getEffectiveString('AI_OLLAMA_BASE_URL')) ?? 'http://localhost:11434'
+        ).replace(/\/+$/, '');
+        const model = (await this.settings.getEffectiveString('AI_OLLAMA_MODEL')) ?? 'llama3';
+        return new WorkerOllamaAdapter(baseUrl, model, timeout);
       }
     }
   }
@@ -361,6 +377,7 @@ export class AiExtractionProcessor extends WorkerHost {
     this.logger.log(`Verarbeite AI-Extraktions-Job ${jobId} fuer Policy ${policyId}`);
 
     try {
+      const adapter = await this.resolveAdapter();
       await this.db.aiExtractionJob.update({
         where: { id: jobId },
         data: { status: 'RUNNING' },
@@ -386,7 +403,7 @@ export class AiExtractionProcessor extends WorkerHost {
         return { success: true };
       }
 
-      const result = await this.adapter.extractContractFacts(documentContents, policyId);
+      const result = await adapter.extractContractFacts(documentContents, policyId);
 
       if (!result) {
         const currentJob = await this.db.aiExtractionJob.findUnique({ where: { id: jobId } });

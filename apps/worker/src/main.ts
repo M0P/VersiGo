@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { preloadRestartSettingsIntoEnv } from '@insura/foundation';
 import { WorkerModule } from './worker.module';
 
 /**
@@ -9,6 +10,10 @@ import { WorkerModule } from './worker.module';
  * (Config, Datenbank, Queue-Infrastruktur, Capability-Flags) und
  * registriert die fachlichen Job-Prozessoren (AiExtractionProcessor).
  *
+ * AP-17: Vor dem Nest-Bootstrap werden Neustart-Settings (Kategorie
+ * "restart") aus der Datenbank in process.env geschrieben, damit sie ab
+ * dem ersten Prozessstart wirken (Fail-soft bei nicht erreichbarer DB).
+ *
  * Hinweis: createApplicationContext() emittiert – anders als der
  * HTTP-Server (`NestFactory.create`) – kein 'Nest application
  * successfully started'. Der Worker loggt daher nach erfolgreichem
@@ -16,6 +21,8 @@ import { WorkerModule } from './worker.module';
  * Smoke-Test wartet.
  */
 async function bootstrap(): Promise<void> {
+  await preloadRestartSettingsIntoEnv();
+
   const app = await NestFactory.createApplicationContext(WorkerModule);
   app.enableShutdownHooks();
 

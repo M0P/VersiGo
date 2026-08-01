@@ -1,32 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HttpService } from '@nestjs/axios';
 import { Logger } from '@nestjs/common';
-import { AppConfigService, CapabilityFlagsService } from '@insura/foundation';
+import { SettingsResolverService } from '@insura/foundation';
 import { PaperlessNgxService } from '../paperless-ngx.service';
 import { NoOpPaperlessAdapter } from '../paperless-ngx.noop';
 import { of, throwError } from 'rxjs';
 import { AxiosError } from 'axios';
 import type { AxiosResponse } from 'axios';
 
-function createMockConfig(overrides: Record<string, unknown> = {}) {
-  return {
-    get: vi.fn((key: string) => {
-      const defaults: Record<string, unknown> = {
-        PAPERLESS_URL: 'http://paperless:8000',
-        PAPERLESS_API_TOKEN: 'test-token-123',
-      };
-      return overrides[key] ?? defaults[key] ?? undefined;
-    }),
-  } as unknown as AppConfigService;
-}
+type MockSettingsValues = Record<string, string | boolean | undefined>;
 
-function createMockCapabilityFlags(enabled = true) {
+function createMockSettings(values: MockSettingsValues = {}) {
   return {
-    isEnabled: vi.fn((key: string) => {
-      if (key === 'paperless') return enabled;
-      return false;
+    getEffectiveString: vi.fn(async (key: string) => {
+      const value = values[key];
+      return typeof value === 'string' ? value : undefined;
     }),
-  } as unknown as CapabilityFlagsService;
+    getEffectiveBoolean: vi.fn(async (key: string) => {
+      const value = values[key];
+      return typeof value === 'boolean' ? value : undefined;
+    }),
+    getEffectiveNumber: vi.fn(async () => undefined),
+  } as unknown as SettingsResolverService;
 }
 
 function createMockHttpService() {
@@ -35,17 +30,24 @@ function createMockHttpService() {
   } as unknown as HttpService;
 }
 
+function configuredValues(overrides: MockSettingsValues = {}): MockSettingsValues {
+  return {
+    PAPERLESS_ENABLED: true,
+    PAPERLESS_URL: 'http://paperless:8000',
+    PAPERLESS_API_TOKEN: 'test-token-123',
+    ...overrides,
+  };
+}
+
 describe('PaperlessNgxService', () => {
   let mockHttp: ReturnType<typeof createMockHttpService>;
-  let mockConfig: ReturnType<typeof createMockConfig>;
-  let mockCapabilityFlags: ReturnType<typeof createMockCapabilityFlags>;
+  let mockSettings: ReturnType<typeof createMockSettings>;
   let service: PaperlessNgxService;
 
   beforeEach(() => {
     mockHttp = createMockHttpService();
-    mockConfig = createMockConfig();
-    mockCapabilityFlags = createMockCapabilityFlags(true);
-    service = new PaperlessNgxService(mockHttp, mockConfig, mockCapabilityFlags);
+    mockSettings = createMockSettings(configuredValues());
+    service = new PaperlessNgxService(mockHttp, mockSettings);
   });
 
   describe('healthCheck', () => {
@@ -69,10 +71,22 @@ describe('PaperlessNgxService', () => {
       expect(result).toBe(false);
     });
 
-    it('gibt false zurueck wenn nicht konfiguriert', async () => {
-      const disabledFlags = createMockCapabilityFlags(false);
-      const disabledService = new PaperlessNgxService(mockHttp, mockConfig, disabledFlags);
+    it('gibt false zurueck wenn deaktiviert', async () => {
+      const disabledService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
+      );
       const result = await disabledService.healthCheck();
+      expect(result).toBe(false);
+      expect(mockHttp.get).not.toHaveBeenCalled();
+    });
+
+    it('gibt false zurueck wenn Konfiguration unvollstaendig ist', async () => {
+      const incompleteService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_API_TOKEN: undefined })),
+      );
+      const result = await incompleteService.healthCheck();
       expect(result).toBe(false);
       expect(mockHttp.get).not.toHaveBeenCalled();
     });
@@ -100,10 +114,13 @@ describe('PaperlessNgxService', () => {
     });
 
     it('gibt null zurueck wenn deaktiviert', async () => {
-      const disabledFlags = createMockCapabilityFlags(false);
-      const disabledService = new PaperlessNgxService(mockHttp, mockConfig, disabledFlags);
+      const disabledService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
+      );
       const result = await disabledService.getDeepLink(42);
       expect(result).toBeNull();
+      expect(mockHttp.get).not.toHaveBeenCalled();
     });
   });
 
@@ -160,8 +177,10 @@ describe('PaperlessNgxService', () => {
     });
 
     it('gibt null zurueck wenn deaktiviert', async () => {
-      const disabledFlags = createMockCapabilityFlags(false);
-      const disabledService = new PaperlessNgxService(mockHttp, mockConfig, disabledFlags);
+      const disabledService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
+      );
       const result = await disabledService.getDocumentMetadata(42);
       expect(result).toBeNull();
     });
@@ -192,8 +211,10 @@ describe('PaperlessNgxService', () => {
     });
 
     it('gibt Fehler zurueck bei deaktiviertem Paperless', async () => {
-      const disabledFlags = createMockCapabilityFlags(false);
-      const disabledService = new PaperlessNgxService(mockHttp, mockConfig, disabledFlags);
+      const disabledService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
+      );
       const result = await disabledService.syncDocument(42);
       expect(result.success).toBe(false);
       expect(result.error).toBe('Paperless nicht konfiguriert');
@@ -239,54 +260,78 @@ describe('PaperlessNgxService', () => {
     });
 
     it('gibt leeres Array zurueck wenn deaktiviert', async () => {
-      const disabledFlags = createMockCapabilityFlags(false);
-      const disabledService = new PaperlessNgxService(mockHttp, mockConfig, disabledFlags);
+      const disabledService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
+      );
       const results = await disabledService.searchDocuments('test');
       expect(results).toEqual([]);
     });
   });
 
-  describe('Konstruktor', () => {
+  describe('Laufzeit-Aufloesung (AP-17)', () => {
+    it('liest Konfiguration pro Aufruf ueber SettingsResolverService', async () => {
+      mockHttp.get = vi.fn().mockReturnValue(of({ status: 200, data: {} }));
+      await service.healthCheck();
+      expect(mockSettings.getEffectiveBoolean).toHaveBeenCalledWith('PAPERLESS_ENABLED');
+      expect(mockSettings.getEffectiveString).toHaveBeenCalledWith('PAPERLESS_URL');
+      expect(mockSettings.getEffectiveString).toHaveBeenCalledWith('PAPERLESS_API_TOKEN');
+    });
+
+    it('normalisiert eine trailing Slash in PAPERLESS_URL', async () => {
+      const trailingService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_URL: 'http://paperless:8000/' })),
+      );
+      mockHttp.get = vi.fn().mockReturnValue(of({ status: 200, data: {} }));
+      const result = await trailingService.healthCheck();
+      expect(result).toBe(true);
+      expect(mockHttp.get).toHaveBeenCalledWith(
+        'http://paperless:8000/api/',
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('HTTPS-Warnung (Laufzeit)', () => {
     let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    });
 
     afterEach(() => {
       warnSpy?.mockRestore();
     });
 
-    it('warnt bei PAPERLESS_URL ohne HTTPS', () => {
-      warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const httpConfig = createMockConfig({ PAPERLESS_URL: 'http://paperless:8000' });
-      const enabledFlags = createMockCapabilityFlags(true);
+    it('warnt bei PAPERLESS_URL ohne HTTPS', async () => {
+      const httpService = new PaperlessNgxService(mockHttp, mockSettings);
+      mockHttp.get = vi.fn().mockReturnValue(of({ status: 200, data: {} }));
+      await httpService.healthCheck();
 
-      new PaperlessNgxService(mockHttp, httpConfig, enabledFlags);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('kein HTTPS'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('kein HTTPS'));
     });
 
-    it('warnt nicht bei PAPERLESS_URL mit HTTPS', () => {
-      warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const httpsConfig = createMockConfig({ PAPERLESS_URL: 'https://paperless.example.com' });
-      const enabledFlags = createMockCapabilityFlags(true);
-
-      new PaperlessNgxService(mockHttp, httpsConfig, enabledFlags);
-
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('kein HTTPS'),
+    it('warnt nicht bei PAPERLESS_URL mit HTTPS', async () => {
+      const httpsService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_URL: 'https://paperless.example.com' })),
       );
+      mockHttp.get = vi.fn().mockReturnValue(of({ status: 200, data: {} }));
+      await httpsService.healthCheck();
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('kein HTTPS'));
     });
 
-    it('warnt nicht bei deaktiviertem Paperless', () => {
-      warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const httpConfig = createMockConfig({ PAPERLESS_URL: 'http://paperless:8000' });
-      const disabledFlags = createMockCapabilityFlags(false);
-
-      new PaperlessNgxService(mockHttp, httpConfig, disabledFlags);
-
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('kein HTTPS'),
+    it('warnt nicht bei deaktiviertem Paperless', async () => {
+      const disabledService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
       );
+      const result = await disabledService.healthCheck();
+      expect(result).toBe(false);
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('kein HTTPS'));
     });
   });
 });

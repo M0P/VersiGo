@@ -3,15 +3,46 @@ import { DatabaseService } from '@insura/foundation';
 import type { UserPreferenceResponseDto } from './dto/user-preferences.dto';
 
 /**
- * Key of the UI accent colour preference stored by the design system.
+ * Versionierter Katalog der persoenlichen UI-Praeferenzen (AP-17).
+ *
+ * Die konkrete Liste ist eine Allowlist – KEIN unvalidiertes JSON-Sammelfeld.
+ * Nur katalogisierte Schluessel duerfen gelesen oder gesetzt werden;
+ * unbekannte Schluessel werden strikt abgewiesen. Jeder Schluessel hat
+ * einen festen Wertetyp mit eigener Validierung.
  */
-const ACCENT_COLOUR_KEY = 'ui:accentColour';
+export const USER_PREFERENCES_VERSION = 1;
+
+export type UserPreferenceValueType = 'hexColour' | 'themeMode' | 'locale';
+
+export interface UserPreferenceDefinition {
+  type: UserPreferenceValueType;
+  description: string;
+}
+
+export const USER_PREFERENCE_CATALOG: Readonly<Record<string, UserPreferenceDefinition>> = {
+  'ui:accentColour': {
+    type: 'hexColour',
+    description: 'Akzentfarbe des Design-Systems (3- oder 6-stelliges Hex).',
+  },
+  'theme': {
+    type: 'themeMode',
+    description: 'Darstellungsmodus: light, dark oder system.',
+  },
+  'language': {
+    type: 'locale',
+    description: 'UI-Sprache/Locale des Nutzers.',
+  },
+} as const;
+
+const THEME_MODES = ['light', 'dark', 'system'] as const;
+const LOCALES = ['de-DE', 'en-US', 'fr-FR', 'it-IT', 'es-ES', 'pt-BR'] as const;
 
 /**
  * Manages user-scoped key-value preferences.
  *
  * Preferences are scoped to the authenticated user and are not shared
- * across users or households. Keys are unique per user.
+ * across users or households. Keys are unique per user and restricted
+ * to the versioned catalog above.
  */
 @Injectable()
 export class UserPreferencesService {
@@ -20,17 +51,42 @@ export class UserPreferencesService {
   constructor(private readonly db: DatabaseService) {}
 
   /**
-   * Validates a preference value for known UI keys.
-   * The accent colour must be a valid 3- or 6-digit hex string
-   * to prevent arbitrary content from being persisted and rendered.
+   * Validates a preference key (allowlist) and its value against the
+   * catalog. Throws BadRequestException for unknown keys or invalid values.
    */
-  private validateValue(key: string, value: string): void {
-    if (key === ACCENT_COLOUR_KEY) {
-      const cleaned = value.trim().replace(/^#/, '');
-      if (!/^[0-9a-fA-F]{3}$/.test(cleaned) && !/^[0-9a-fA-F]{6}$/.test(cleaned)) {
-        throw new BadRequestException(
-          `Value for '${key}' must be a valid 3- or 6-digit hex colour string`,
-        );
+  private validate(key: string, value: string): void {
+    const definition = USER_PREFERENCE_CATALOG[key];
+    if (!definition) {
+      throw new BadRequestException(
+        `Unbekannter Praeferenz-Schluessel '${key}' – nicht im Katalog (Allowlist).`,
+      );
+    }
+
+    switch (definition.type) {
+      case 'hexColour': {
+        const cleaned = value.trim().replace(/^#/, '');
+        if (!/^[0-9a-fA-F]{3}$/.test(cleaned) && !/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+          throw new BadRequestException(
+            `Value for '${key}' must be a valid 3- or 6-digit hex colour string`,
+          );
+        }
+        break;
+      }
+      case 'themeMode': {
+        if (!THEME_MODES.includes(value as (typeof THEME_MODES)[number])) {
+          throw new BadRequestException(
+            `Value for '${key}' must be one of: ${THEME_MODES.join(', ')}`,
+          );
+        }
+        break;
+      }
+      case 'locale': {
+        if (!LOCALES.includes(value as (typeof LOCALES)[number])) {
+          throw new BadRequestException(
+            `Value for '${key}' must be one of: ${LOCALES.join(', ')}`,
+          );
+        }
+        break;
       }
     }
   }
@@ -40,6 +96,13 @@ export class UserPreferencesService {
    * Throws NotFoundException if the key does not exist.
    */
   async getPreference(userId: string, key: string): Promise<UserPreferenceResponseDto> {
+    const definition = USER_PREFERENCE_CATALOG[key];
+    if (!definition) {
+      throw new BadRequestException(
+        `Unbekannter Praeferenz-Schluessel '${key}' – nicht im Katalog (Allowlist).`,
+      );
+    }
+
     const pref = await this.db.userPreference.findUnique({
       where: { userId_key: { userId, key } },
     });
@@ -58,10 +121,10 @@ export class UserPreferencesService {
 
   /**
    * Sets (creates or updates) a preference for the given user.
-   * Throws BadRequestException for invalid values of known keys.
+   * Throws BadRequestException for unknown keys or invalid values.
    */
   async setPreference(userId: string, key: string, value: string): Promise<UserPreferenceResponseDto> {
-    this.validateValue(key, value);
+    this.validate(key, value);
 
     const pref = await this.db.userPreference.upsert({
       where: { userId_key: { userId, key } },

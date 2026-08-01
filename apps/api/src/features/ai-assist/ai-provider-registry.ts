@@ -1,42 +1,37 @@
 import { Injectable } from '@nestjs/common';
-import { AppConfigService, CapabilityFlagsService } from '@insura/foundation';
+import { SettingsResolverService } from '@insura/foundation';
 import type { IAIAdapter } from '@insura/foundation';
 import { OllamaAdapter } from './ollama.adapter';
 import { OpenAiCompatAdapter } from './openai-compat.adapter';
 import { NoOpAIAdapter } from './noop-ai.adapter';
 
 /**
- * Registry, die den passenden AI-Adapter basierend auf der Konfiguration
- * auswaehlt. Wenn AI deaktiviert ist, wird der NoOp-Adapter verwendet.
+ * Registry, die den passenden AI-Adapter basierend auf der zentralen
+ * Settings-Aufloesung auswaehlt (AP-17). AI_ENABLED und AI_PROVIDER
+ * werden pro Aufruf ueber SettingsResolverService aufgeloest, sodass
+ * Admin-UI-Aenderungen sofort wirken. Wenn AI deaktiviert ist, wird
+ * der NoOp-Adapter verwendet.
  */
 @Injectable()
 export class AiProviderRegistry {
-  private readonly adapter: IAIAdapter;
+  private readonly adapters: Record<string, IAIAdapter>;
 
   constructor(
-    private readonly config: AppConfigService,
-    private readonly capabilityFlags: CapabilityFlagsService,
+    private readonly settings: SettingsResolverService,
     ollama: OllamaAdapter,
     openaiCompat: OpenAiCompatAdapter,
     private readonly noopAdapter: NoOpAIAdapter,
   ) {
-    if (!this.capabilityFlags.isEnabled('ai')) {
-      this.adapter = this.noopAdapter;
-    } else {
-      const provider = this.config.get('AI_PROVIDER') ?? 'ollama';
-      switch (provider) {
-        case 'openai-compat':
-          this.adapter = openaiCompat;
-          break;
-        case 'ollama':
-        default:
-          this.adapter = ollama;
-          break;
-      }
-    }
+    this.adapters = { ollama, 'openai-compat': openaiCompat };
   }
 
-  getAdapter(): IAIAdapter {
-    return this.adapter;
+  async getAdapter(): Promise<IAIAdapter> {
+    const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');
+    if (!enabled) {
+      return this.noopAdapter;
+    }
+
+    const provider = (await this.settings.getEffectiveString('AI_PROVIDER')) ?? 'ollama';
+    return this.adapters[provider] ?? this.noopAdapter;
   }
 }

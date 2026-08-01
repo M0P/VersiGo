@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { DatabaseService, CapabilityFlagsService } from '@insura/foundation';
+import { DatabaseService, SettingsResolverService } from '@insura/foundation';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { Prisma } from '@prisma/client';
@@ -16,13 +16,14 @@ export class AiAssistService {
   constructor(
     private readonly db: DatabaseService,
     private readonly providerRegistry: AiProviderRegistry,
-    private readonly capabilityFlags: CapabilityFlagsService,
+    private readonly settings: SettingsResolverService,
     private readonly authService: AuthService,
     @InjectQueue(AI_EXTRACTION_QUEUE) private readonly extractionQueue: Queue,
   ) {}
 
-  private assertAiEnabled(): void {
-    if (!this.capabilityFlags.isEnabled('ai')) {
+  private async assertAiEnabled(): Promise<void> {
+    const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');
+    if (!enabled) {
       throw new ForbiddenException('AI-Funktionen sind deaktiviert');
     }
   }
@@ -44,7 +45,7 @@ export class AiAssistService {
     userId: string,
     policyId: string,
   ): Promise<{ jobId: string; status: string }> {
-    this.assertAiEnabled();
+    await this.assertAiEnabled();
     await this.assertHouseholdAccess(householdId, userId);
 
     // Pruefe, ob die Policy existiert
@@ -72,10 +73,11 @@ export class AiAssistService {
     });
 
     // Erstelle einen neuen Job-Eintrag in der Datenbank
+    const adapter = await this.providerRegistry.getAdapter();
     const job = await this.db.aiExtractionJob.create({
       data: {
         policyId,
-        providerKey: this.providerRegistry.getAdapter().providerKey,
+        providerKey: adapter.providerKey,
         model: null,
         status: 'PENDING',
         retryCount: 0,
@@ -89,7 +91,7 @@ export class AiAssistService {
       jobId: job.id,
       policyId,
       documentIds: documents.map((d) => d.id),
-      providerKey: this.providerRegistry.getAdapter().providerKey,
+      providerKey: adapter.providerKey,
     });
 
     this.logger.log(`AI-Extraktions-Job ${job.id} fuer Policy ${policyId} gestartet`);
@@ -196,7 +198,7 @@ export class AiAssistService {
     userId: string,
     policyId: string,
   ): Promise<Record<string, unknown> | null> {
-    this.assertAiEnabled();
+    await this.assertAiEnabled();
     await this.assertHouseholdAccess(householdId, userId);
 
     const policy = await this.db.insurancePolicy.findFirst({
@@ -207,7 +209,7 @@ export class AiAssistService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
-    const adapter: IAIAdapter = this.providerRegistry.getAdapter();
+    const adapter: IAIAdapter = await this.providerRegistry.getAdapter();
 
     // Lade Dokument-Inhalte (aktuell nur Storage-Refs, da tatsaechlicher Inhalt
     // ggf. aus einer Datei geladen werden muss - hier als Platzhalter)
@@ -252,7 +254,7 @@ export class AiAssistService {
     userId: string,
     policyId: string,
   ): Promise<Record<string, unknown> | null> {
-    this.assertAiEnabled();
+    await this.assertAiEnabled();
     await this.assertHouseholdAccess(householdId, userId);
 
     const policy = await this.db.insurancePolicy.findFirst({
@@ -263,7 +265,7 @@ export class AiAssistService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
-    const adapter: IAIAdapter = this.providerRegistry.getAdapter();
+    const adapter: IAIAdapter = await this.providerRegistry.getAdapter();
 
     const documents = await this.db.policyDocument.findMany({
       where: { policyId, archivedAt: null, aiProcessingExcluded: false },
@@ -341,11 +343,12 @@ export class AiAssistService {
    * Prueft die Verbindung zum AI-Provider.
    */
   async healthCheck(): Promise<{ connected: boolean; provider: string }> {
-    if (!this.capabilityFlags.isEnabled('ai')) {
+    const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');
+    if (!enabled) {
       return { connected: false, provider: 'none' };
     }
 
-    const adapter = this.providerRegistry.getAdapter();
+    const adapter = await this.providerRegistry.getAdapter();
     const connected = await adapter.healthCheck();
 
     return { connected, provider: adapter.providerKey };

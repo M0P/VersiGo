@@ -107,6 +107,11 @@ export default function AdminIntegrationsPage(): ReactElement {
             {testing ? <><InlineSpinner /> Teste...</> : 'Test starten'}
           </Button>
         </form>
+        <p className="form-hint">
+          Aus SSRF-Schutz sind nur oeffentliche http(s)-Endpunkte testbar;
+          lokale Dienste (z. B. Ollama unter localhost) pruefen Sie bitte
+          direkt auf dem Host.
+        </p>
       </Card>
 
       {result && (

@@ -123,10 +123,22 @@
 ### UserPreference (AP-13)
 - id
 - userId (FK -> users.id, unique per [userId, key], cascading delete)
-- key (z. B. `ui:accentColour`)
+- key (versionierte Katalog-Allowlist AP-17: `ui:accentColour`, `theme`, `language`)
 - value (Klartext, z. B. `#1a73e8`)
 - createdAt
 - updatedAt
+
+### GlobalIntegrationSetting (AP-07/AP-17)
+- id
+- key (unique, identisch mit dem katalogisierten Env-Variablennamen, AP-17)
+- valuePlain (nullable, nur für Nicht-Secrets)
+- valueEncrypted (nullable, AES-256-GCM für Secrets, AP-17)
+- updatedByUserId (nullable, FK -> users.id, `ON DELETE SET NULL`; Audit-Akteur, AP-17)
+- createdAt
+- updatedAt
+- Modellregel (AP-17): Es existiert genau eine Zeile pro Schlüssel; der Wert ist
+  der datenbankgestützte UI-Wert mit Vorrang vor `.env`. Das Löschen der Zeile
+  entspricht dem „Zurücksetzen auf Fallback".
 
 ### AuditLog
 - id

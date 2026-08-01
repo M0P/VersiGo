@@ -6,6 +6,7 @@ import {
   EncryptionModule,
   CapabilityFlagsModule,
   QueueFoundationModule,
+  SettingsFoundationModule,
 } from '@insura/foundation';
 import { AiExtractionProcessor } from './ai-extraction.processor';
 
@@ -20,6 +21,7 @@ import { AiExtractionProcessor } from './ai-extraction.processor';
     EncryptionModule,
     CapabilityFlagsModule,
     QueueFoundationModule,
+    SettingsFoundationModule,
 
     // AI-Extraktions-Queue (muss mit API-Queue-Namen uebereinstimmen)
     BullModule.registerQueue({

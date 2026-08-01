@@ -20,6 +20,15 @@ Katalog von Versicherungsportalen, Deeplinks und optionalen Mailbox-/Dokumenten-
 
 ## 7. Admin Settings
 Webbasierte Konfiguration von Feature-Flags, Integrationen, Speichern, AI-Providern und Systemparametern.
+- **AP-17:** Zentraler Settings-Katalog (Allowlist) mit deterministischer Priorität
+  UI > `.env` > Code-Default; Admin-UI `/admin/settings` (nur `ADMIN`) mit
+  Gruppierung, Suche, Quellen-/Fehler-/Neustart-Filtern, Secret-Maskierung,
+  Zurücksetzen und sicheren Connectivity-Tests.
+- **AP-17:** Profil-Slice `/user/profile` und persönliche UI-Präferenzen
+  (versionierte Allowlist) für `USER`/`ADMIN`; `READ_ONLY` erhält 403.
+- Audit aller Änderungen ohne Werte/Secrets (`SYSTEM_CONFIG_UPSERTED`,
+  `SYSTEM_CONFIG_RESET`, `PROFILE_UPDATED`).
+- Vollständiger Katalog: `docs/13-settings-catalog.md`.
 
 ## 8. Audit & Activity
 Protokollierung sicherheits- und fachrelevanter Änderungen.

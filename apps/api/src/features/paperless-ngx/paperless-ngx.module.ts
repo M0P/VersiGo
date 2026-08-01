@@ -1,37 +1,29 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
-import { CapabilityFlagsService } from '@insura/foundation';
+import { SettingsFoundationModule } from '@insura/foundation';
 import { PaperlessNgxService } from './paperless-ngx.service';
-import { NoOpPaperlessAdapter } from './paperless-ngx.noop';
-import type { IPaperlessAdapter } from './paperless-ngx.interface';
 import { PAPERLESS_ADAPTER } from './paperless-ngx.interface';
 
 /**
  * Provider fuer den PAPERLESS_ADAPTER-Injection-Token.
  *
- * Wenn Paperless per CapabilityFlag aktiviert ist, wird die echte
- * PaperlessNgxService-Instanz injiziert. Andernfalls wird ein
- * NoOpPaperlessAdapter injiziert, der bei jedem Aufruf null
- * bzw. leere Ergebnisse zurueckgibt und niemals Fehler wirft.
+ * Seit AP-17 wird die Aktivierung von Paperless pro Aufruf ueber die
+ * zentrale Settings-Aufloesung (PAPERLESS_ENABLED) entschieden. Der
+ * Adapter degradiert selbst kontrolliert (null/leere Ergebnisse), wenn
+ * Paperless deaktiviert oder unvollstaendig konfiguriert ist. Ein
+ * separater NoOp-Adapter ist daher nicht mehr noetig.
  *
  * Konsumenten sollten per @Inject(PAPERLESS_ADAPTER) injizieren,
  * um unabhaengig von der konkreten Implementierung zu bleiben.
  */
 const adapterProvider = {
   provide: PAPERLESS_ADAPTER,
-  useFactory: (
-    capabilityFlags: CapabilityFlagsService,
-    paperlessService: PaperlessNgxService,
-  ): IPaperlessAdapter => {
-    return capabilityFlags.isEnabled('paperless')
-      ? paperlessService
-      : new NoOpPaperlessAdapter();
-  },
-  inject: [CapabilityFlagsService, PaperlessNgxService],
+  useFactory: (paperlessService: PaperlessNgxService) => paperlessService,
+  inject: [PaperlessNgxService],
 };
 
 @Module({
-  imports: [HttpModule],
+  imports: [HttpModule, SettingsFoundationModule],
   providers: [PaperlessNgxService, adapterProvider],
   exports: [PAPERLESS_ADAPTER],
 })

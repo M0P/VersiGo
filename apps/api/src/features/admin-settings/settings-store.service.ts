@@ -53,7 +53,12 @@ export class SettingsStoreService {
     };
   }
 
-  async createGlobalSetting(key: string, valuePlain: string | undefined, isSecret: boolean | undefined) {
+  async createGlobalSetting(
+    key: string,
+    valuePlain: string | undefined,
+    isSecret: boolean | undefined,
+    actorUserId?: string,
+  ) {
     const secret = isSecret ?? false;
 
     // Pruefe auf doppelten Key
@@ -74,7 +79,13 @@ export class SettingsStoreService {
     }
 
     const setting = await this.db.globalIntegrationSetting.create({
-      data: { key, valueEncrypted, valuePlain: valuePlainStored, isSecret: secret },
+      data: {
+        key,
+        valueEncrypted,
+        valuePlain: valuePlainStored,
+        isSecret: secret,
+        updatedByUserId: actorUserId,
+      },
     });
 
     this.logger.log(`Globales Setting '${key}' angelegt (secret: ${secret}, hasValue: ${valuePlain !== undefined})`);
@@ -89,7 +100,12 @@ export class SettingsStoreService {
     };
   }
 
-  async updateGlobalSetting(key: string, valuePlain: string | undefined, isSecret: boolean | undefined) {
+  async updateGlobalSetting(
+    key: string,
+    valuePlain: string | undefined,
+    isSecret: boolean | undefined,
+    actorUserId?: string,
+  ) {
     const existing = await this.db.globalIntegrationSetting.findUnique({ where: { key } });
     if (!existing) {
       throw new NotFoundException(`Globales Setting '${key}' nicht gefunden`);
@@ -115,7 +131,12 @@ export class SettingsStoreService {
 
     const setting = await this.db.globalIntegrationSetting.update({
       where: { key },
-      data: { valueEncrypted, valuePlain: valuePlainStored, isSecret: secret },
+      data: {
+        valueEncrypted,
+        valuePlain: valuePlainStored,
+        isSecret: secret,
+        updatedByUserId: actorUserId ?? existing.updatedByUserId,
+      },
     });
 
     this.logger.log(`Globales Setting '${key}' aktualisiert`);
