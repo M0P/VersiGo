@@ -94,6 +94,16 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactEleme
           credentials: 'include',
         });
 
+        if (res.status === 403) {
+          // AP-17: READ_ONLY darf keinerlei Profileinstellungen lesen oder
+          // aendern. Der Server erzwingt das; hier wird lediglich der
+          // Background-Fetch unterlassen, damit die UI keine unerlaubte
+          // Abfrage ausloest (keine Fehlermeldung – die Seite blendet die
+          // Editier-Oberflaeche bereits aus).
+          if (!cancelled) setLoaded(true);
+          return;
+        }
+
         if (res.ok) {
           const data: { value: string } = await res.json();
           if (data.value && !cancelled) {

@@ -27,7 +27,10 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Verwaltung',
     items: [
-      { href: '/settings', label: 'Einstellungen', icon: 'settings' },
+      // AP-17: /settings ist die persoenliche Profilseite ("Mein Profil").
+      // Die zentralen Systemeinstellungen liegen unter /admin/settings
+      // und sind (serverseitig durchgesetzt) nur fuer ADMIN sichtbar.
+      { href: '/settings', label: 'Mein Profil', icon: 'settings' },
       { href: '/admin', label: 'Admin', icon: 'admin' },
     ],
   },

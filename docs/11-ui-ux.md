@@ -100,6 +100,32 @@ All UI primitives live in `apps/web/src/components/ui/` and use the CSS classes 
 - **Desktop (≥ 1024px)**: 3-column grids, larger content padding, comfortable navigation.
 - Tables use `.table-container` for horizontal scroll fallback and mobile-friendly stacked rows.
 
+### Settings UI (AP-17)
+
+#### Mein Profil (`/settings`, `USER`/`ADMIN`)
+- Profilinformationen (Benutzername, Rolle, Kontoerstellt) schreibgeschützt;
+  Anzeigename und Sprache (Locale-Allowlist) editierbar via `PATCH /user/profile`.
+- Design-Anpassung (Farbmodus, Akzentfarbe) bleibt über `AppearanceSettings`
+  erreichbar (persönliche UI-Präferenz `ui:accentColour`, Allowlist `theme`).
+- `READ_ONLY` sieht ausschließlich eine Hinweis-Meldung („Nur-Lese-Zugriff"),
+  keine editierbaren Felder; die API blockiert alle Profil-/Präferenz-Endpunkte
+  mit 403.
+
+#### Systemeinstellungen (`/admin/settings`, nur `ADMIN`)
+- Katalogbasierte Ansicht, gruppiert nach Katalog-Gruppe; Toolbar mit Suche
+  (Schlüssel/Gruppe/Beschreibung) und Filtern: Quelle (`UI`/`.env`/`Default`),
+  „Nur ungültige UI-Werte", „Nur Neustart erforderlich".
+- Pro Schlüssel: Quellen-Badge, effektiver Wert (Secrets maskiert als
+  „••••••••"/„Nicht gesetzt"), Fallback-Grund, Warnung bei ungültigem UI-Wert,
+  „Neustart erforderlich"-Badge, letzter Änderungszeitpunkt/-akteur,
+  Connectivity-Test-Ergebnis.
+- Aktionen: Bearbeiten/Speichern (atomar validiert, typabhängiges Eingabefeld
+  inkl. `allowedValues`-Select und Zahlen-Min/Max), Zurücksetzen auf Fallback
+  (mit Bestätigungsdialog), „Verbindung testen" nur für testbare Schlüssel.
+- CSS-Klassen: `.settings-toolbar`, `.settings-filter-checks`,
+  `.settings-entry*` (in `globals.css`), Wiederverwendung der Badge-/Form-/
+  Alert-Komponenten.
+
 ### Tested Viewport Sizes
 - 360px (mobile)
 - 768px (tablet)

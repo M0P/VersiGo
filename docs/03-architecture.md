@@ -85,6 +85,22 @@ Testdienste laufen in einer isolierten Compose-Umgebung (`docker-compose.test.ym
 - `test` – Einmal-Container, der Lint, Typecheck, Unit-Tests und Migrationsprüfung ausführt
 - Produktionsvolumes werden nicht verwendet
 
+## Zentrale Konfigurationsauflösung (AP-17)
+
+- **Settings-Katalog (Allowlist):** Jede Konfigurationsvariable ist in
+  `packages/foundation/src/config/settings-catalog.ts` inventarisiert und genau
+  einer Kategorie zugeordnet (`runtime` | `restart` | `secret` | `bootstrap`).
+  Unbekannte oder freie `.env`-Namen werden strikt abgewiesen.
+- **Deterministische Priorität:** gültiger DB-UI-Wert > validierter `.env`-Wert
+  > sicherer Code-Default bzw. kontrollierte Degradation. Ein ungültiger
+  UI-Wert aktiviert nie einen defekten Zustand (`uiValueInvalid` sichtbar).
+- **Einheitliche Auflösung in API und Worker:** `SettingsResolverService`
+  (Foundation-Modul, `@Global`). Features lesen nicht direkt `process.env`.
+- **Boot-Preload:** `restart`-Werte werden beim Start von API/Worker aus der
+  DB in `process.env` vorbefüllt (fail-soft, Secrets AES-256-GCM-entschlüsselt).
+- **Admin-UI:** `/admin/settings` (Systemkonfiguration, nur `ADMIN`) und
+  `/settings` (Mein Profil, `USER`/`ADMIN`); Dokumentation: `docs/13-settings-catalog.md`.
+
 ## Beispiel Feature-Degradation
 - AI Provider nicht konfiguriert: Vertragserfassung bleibt nutzbar, nur Extraktion/Zusammenfassung wird ausgeblendet.
 - Paperless nicht verbunden: Dokumentenablage im lokalen Speicher bleibt nutzbar.

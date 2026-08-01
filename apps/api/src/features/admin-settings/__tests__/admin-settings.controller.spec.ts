@@ -3,8 +3,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AdminSettingsController } from '../admin-settings.controller';
 import { GlobalRole } from '@prisma/client';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import type { AuthenticatedUser } from '../../identity/auth.service';
+
+// SSRF-Guard wird im Controller-Spec gemockt (eigene Guard-Spec testet die
+// Blockliste); hier wird nur der Ablehnungspfad verifiziert.
+const { assertSafeTestEndpoint } = vi.hoisted(() => ({
+  assertSafeTestEndpoint: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../../common/connectivity/connectivity-guard', () => ({
+  assertSafeTestEndpoint,
+}));
 
 const adminUser: AuthenticatedUser = {
   id: 'user-1',
@@ -164,13 +173,72 @@ describe('AdminSettingsController', () => {
   });
 
   describe('Global Settings CRUD', () => {
-    it('createGlobalSetting ruft SettingsStore auf', async () => {
+    it('createGlobalSetting ruft SettingsStore mit Katalog-Schluessel und erzwungenem isSecret auf', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
       const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
 
-      await controller.createGlobalSetting(adminUser, { key: 'new-key', valuePlain: 'value', isSecret: false });
-      expect(settingsStore.createGlobalSetting).toHaveBeenCalledWith('new-key', 'value', false);
+      await controller.createGlobalSetting(adminUser, { key: 'AI_ENABLED', valuePlain: 'true', isSecret: false });
+      expect(settingsStore.createGlobalSetting).toHaveBeenCalledWith('AI_ENABLED', 'true', false);
+    });
+
+    it('createGlobalSetting erzwingt isSecret=true fuer Katalog-Secrets', async () => {
+      const settingsStore = createMockSettingsStore();
+      const db = createMockDb();
+      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+
+      await controller.createGlobalSetting(adminUser, { key: 'AI_OPENAI_COMPAT_API_KEY', valuePlain: 'sk-123', isSecret: false });
+      expect(settingsStore.createGlobalSetting).toHaveBeenCalledWith('AI_OPENAI_COMPAT_API_KEY', 'sk-123', true);
+    });
+
+    it('createGlobalSetting lehnt unbekannte Schluessel ab (Allowlist)', async () => {
+      const settingsStore = createMockSettingsStore();
+      const db = createMockDb();
+      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+
+      await expect(
+        controller.createGlobalSetting(adminUser, { key: 'new-key', valuePlain: 'value', isSecret: false }),
+      ).rejects.toThrow(BadRequestException);
+      expect(settingsStore.createGlobalSetting).not.toHaveBeenCalled();
+    });
+
+    it('createGlobalSetting lehnt Bootstrap-Schluessel ab', async () => {
+      const db = createMockDb();
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+
+      await expect(
+        controller.createGlobalSetting(adminUser, { key: 'DATABASE_URL', valuePlain: 'postgres://x', isSecret: false }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('createGlobalSetting lehnt ungueltige Werte ab', async () => {
+      const settingsStore = createMockSettingsStore();
+      const db = createMockDb();
+      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+
+      await expect(
+        controller.createGlobalSetting(adminUser, { key: 'AI_ENABLED', valuePlain: 'not-a-boolean', isSecret: false }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        controller.createGlobalSetting(adminUser, { key: 'AI_ENABLED', valuePlain: '', isSecret: false }),
+      ).rejects.toThrow(BadRequestException);
+      expect(settingsStore.createGlobalSetting).not.toHaveBeenCalled();
+    });
+
+    it('createGlobalSetting lehnt Anlage ohne Wert ab (keine tote Zeile)', async () => {
+      const settingsStore = createMockSettingsStore();
+      const db = createMockDb();
+      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+
+      await expect(
+        controller.createGlobalSetting(adminUser, { key: 'AI_ENABLED' }),
+      ).rejects.toThrow(BadRequestException);
+      // m9-ext: explizites null passiert @IsOptional() und darf keinen
+      // HTTP-500 in der Typvalidierung ausloesen, sondern einen sauberen 400.
+      await expect(
+        controller.createGlobalSetting(adminUser, { key: 'AI_ENABLED', valuePlain: null as unknown as string }),
+      ).rejects.toThrow(BadRequestException);
+      expect(settingsStore.createGlobalSetting).not.toHaveBeenCalled();
     });
 
     it('getGlobalSetting ruft SettingsStore auf', async () => {
@@ -182,13 +250,24 @@ describe('AdminSettingsController', () => {
       expect(settingsStore.getGlobalSetting).toHaveBeenCalledWith('test-key');
     });
 
-    it('updateGlobalSetting ruft SettingsStore auf', async () => {
+    it('updateGlobalSetting ruft SettingsStore mit validiertem Wert und Katalog-isSecret auf', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
       const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
 
-      await controller.updateGlobalSetting(adminUser, 'test-key', { valuePlain: 'new-value', isSecret: true });
-      expect(settingsStore.updateGlobalSetting).toHaveBeenCalledWith('test-key', 'new-value', true);
+      await controller.updateGlobalSetting(adminUser, 'AI_ENABLED', { valuePlain: 'false', isSecret: true });
+      expect(settingsStore.updateGlobalSetting).toHaveBeenCalledWith('AI_ENABLED', 'false', false);
+    });
+
+    it('updateGlobalSetting lehnt unbekannte Schluessel ab (Allowlist)', async () => {
+      const settingsStore = createMockSettingsStore();
+      const db = createMockDb();
+      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+
+      await expect(
+        controller.updateGlobalSetting(adminUser, 'test-key', { valuePlain: 'new-value' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(settingsStore.updateGlobalSetting).not.toHaveBeenCalled();
     });
 
     it('deleteGlobalSetting ruft SettingsStore auf', async () => {
@@ -251,6 +330,49 @@ describe('AdminSettingsController', () => {
       const result = await controller.testConnectivity(adminUser, { integrationKey: 'custom' });
       expect(result.success).toBe(false);
       expect(result.message).toContain('Kein Endpoint');
+    });
+
+    it('testConnectivity mit Endpoint fragt den Dienst ab', async () => {
+      const db = createMockDb();
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await controller.testConnectivity(adminUser, {
+        integrationKey: 'custom',
+        endpoint: 'https://example.com/health',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('HTTP 200: OK');
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://example.com/health',
+        expect.anything(),
+      );
+      vi.unstubAllGlobals();
+    });
+
+    it('testConnectivity lehnt unsichere Endpunkte (SSRF) ab, ohne sie anzufragen', async () => {
+      assertSafeTestEndpoint.mockRejectedValueOnce(
+        new Error('Adresse liegt in einem gesperrten Bereich'),
+      );
+      const db = createMockDb();
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await controller.testConnectivity(adminUser, {
+        integrationKey: 'custom',
+        endpoint: 'http://169.254.169.254/latest/meta-data',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('abgelehnt');
+      expect(result.message).toContain('gesperrten Bereich');
+      expect(fetchMock).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
     });
   });
 });

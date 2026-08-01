@@ -15,9 +15,17 @@ function createMockDb(): any {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createMockConfig(configOverrides: Record<string, unknown> = {}): any {
+function createMockSettings(settingsOverrides: Record<string, unknown> = {}): any {
   return {
-    get: vi.fn((key: string) => configOverrides[key] ?? null),
+    getEffectiveBoolean: vi.fn(async (key: string) =>
+      settingsOverrides[key] !== undefined ? Boolean(settingsOverrides[key]) : false,
+    ),
+    getEffectiveString: vi.fn(async (key: string) =>
+      settingsOverrides[key] !== undefined ? String(settingsOverrides[key]) : '',
+    ),
+    getEffectiveNumber: vi.fn(async (key: string) =>
+      settingsOverrides[key] !== undefined ? Number(settingsOverrides[key]) : null,
+    ),
   };
 }
 
@@ -25,9 +33,9 @@ function createProcessor(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: any,
+  settings: any,
 ): AiExtractionProcessor {
-  return new AiExtractionProcessor(db, config);
+  return new AiExtractionProcessor(db, settings);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,8 +60,8 @@ describe('AiExtractionProcessor', () => {
   describe('with AI disabled', () => {
     it('should use NoOp adapter which triggers retry on null extraction', async () => {
       const db = createMockDb();
-      const config = createMockConfig({ AI_ENABLED: false });
-      const processor = createProcessor(db, config);
+      const settings = createMockSettings({ AI_ENABLED: false });
+      const processor = createProcessor(db, settings);
 
       db.aiExtractionJob.update.mockResolvedValue({});
       db.policyDocument.findMany.mockResolvedValue([
@@ -73,8 +81,8 @@ describe('AiExtractionProcessor', () => {
 
     it('should skip job when no documents are available', async () => {
       const db = createMockDb();
-      const config = createMockConfig({ AI_ENABLED: false });
-      const processor = createProcessor(db, config);
+      const settings = createMockSettings({ AI_ENABLED: false });
+      const processor = createProcessor(db, settings);
 
       db.aiExtractionJob.update.mockResolvedValue({});
       db.policyDocument.findMany.mockResolvedValue([]);
@@ -90,8 +98,8 @@ describe('AiExtractionProcessor', () => {
   describe('error handling', () => {
     it('should handle database update errors gracefully', async () => {
       const db = createMockDb();
-      const config = createMockConfig({ AI_ENABLED: false });
-      const processor = createProcessor(db, config);
+      const settings = createMockSettings({ AI_ENABLED: false });
+      const processor = createProcessor(db, settings);
 
       db.aiExtractionJob.update.mockRejectedValue(new Error('DB error'));
 
@@ -103,8 +111,8 @@ describe('AiExtractionProcessor', () => {
 
     it('should set job to FAILED when max retries reached', async () => {
       const db = createMockDb();
-      const config = createMockConfig({ AI_ENABLED: false });
-      const processor = createProcessor(db, config);
+      const settings = createMockSettings({ AI_ENABLED: false });
+      const processor = createProcessor(db, settings);
 
       db.aiExtractionJob.update.mockResolvedValue({});
       db.policyDocument.findMany.mockResolvedValue([

@@ -94,6 +94,10 @@ if [ -f .env ]; then
       LOCAL_ADMIN_USERNAME) LOCAL_ADMIN_USERNAME="${LOCAL_ADMIN_USERNAME:-$value}" ;;
       LOCAL_ADMIN_PASSWORD) LOCAL_ADMIN_PASSWORD="${LOCAL_ADMIN_PASSWORD:-$value}" ;;
       REDIS_URL) REDIS_URL="${REDIS_URL:-$value}" ;;
+      # AP-17: Secret-Werte, die in keiner System-Config-Antwort auftauchen
+      # duerfen (Secret-Leak-Smoke-Check weiter unten).
+      AI_OPENAI_COMPAT_API_KEY) AI_OPENAI_COMPAT_API_KEY="${AI_OPENAI_COMPAT_API_KEY:-$value}" ;;
+      PAPERLESS_API_TOKEN) PAPERLESS_API_TOKEN="${PAPERLESS_API_TOKEN:-$value}" ;;
       # AP-16: TRUST_PROXY wird von der App/Compose ausgewertet (req.ip hinter
       # einem Reverse-Proxy). Der Smoke-Test reicht den Wert nur als Umgebungs-
       # variable an Compose weiter; ein Proxy wird hier nicht aufgebaut.
@@ -340,6 +344,85 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   fi
   echo "   Admin count after restart: $ADMIN_COUNT_AFTER"
   echo "   PASS"
+
+  # AP-17: Systemeinstellungen (nur ADMIN). Der API-Restart aus Schritt 8
+  # invalidiert die In-Memory-Session aus Schritt 5 – daher frischer Login.
+  echo "8b. Testing system-config access (ADMIN)..."
+  LOGIN2_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:${APP_PORT:-3001}/auth/local/login \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${ADMIN_USERNAME}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
+    -c /tmp/insura-smoke-cookies-2.txt)
+  if [ "$LOGIN2_STATUS" != "200" ]; then
+    echo "FAILED: fresh admin login returned HTTP $LOGIN2_STATUS"
+    exit 1
+  fi
+  SYSCONFIG_STATUS=$(curl -s -o /tmp/insura-smoke-sysconfig.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/admin/system-config)
+  if [ "$SYSCONFIG_STATUS" != "200" ]; then
+    echo "FAILED: /admin/system-config returned HTTP $SYSCONFIG_STATUS (expected 200 for ADMIN)"
+    exit 1
+  fi
+  grep -qF '"key":"AI_ENABLED"' /tmp/insura-smoke-sysconfig.json || { echo "FAILED: system-config response missing AI_ENABLED"; exit 1; }
+  grep -qF '"source"' /tmp/insura-smoke-sysconfig.json || { echo "FAILED: system-config response missing source metadata"; exit 1; }
+  # Secrets duerfen niemals im Klartext in der Antwort auftauchen.
+  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/insura-smoke-sysconfig.json; then
+    echo "FAILED: secret AI_OPENAI_COMPAT_API_KEY leaked in system-config response"
+    exit 1
+  fi
+  if [ -n "${PAPERLESS_API_TOKEN:-}" ] && grep -qF "$PAPERLESS_API_TOKEN" /tmp/insura-smoke-sysconfig.json; then
+    echo "FAILED: secret PAPERLESS_API_TOKEN leaked in system-config response"
+    exit 1
+  fi
+  echo "   System-config: HTTP 200, Katalog sichtbar, keine Secrets im Klartext"
+  echo "   PASS"
+
+  echo "8c. Rejecting unauthenticated system-config access..."
+  UNAUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    http://localhost:${APP_PORT:-3001}/admin/system-config)
+  if [ "$UNAUTH_STATUS" != "401" ]; then
+    echo "FAILED: unauthenticated /admin/system-config should return 401, got $UNAUTH_STATUS"
+    exit 1
+  fi
+  echo "   PASS"
+
+  echo "8d. Testing system-config update + reset (AI_ENABLED)..."
+  PUT_STATUS=$(curl -s -o /tmp/insura-smoke-sysconfig-put.json -w "%{http_code}" \
+    -X PUT http://localhost:${APP_PORT:-3001}/admin/system-config/AI_ENABLED \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    -H 'Content-Type: application/json' \
+    -d '{"value":"true"}')
+  if [ "$PUT_STATUS" != "200" ]; then
+    echo "FAILED: PUT /admin/system-config/AI_ENABLED returned HTTP $PUT_STATUS"
+    cat /tmp/insura-smoke-sysconfig-put.json
+    exit 1
+  fi
+  grep -qF '"source":"UI"' /tmp/insura-smoke-sysconfig-put.json || { echo "FAILED: UI-Wert nicht aktiv (source != UI)"; exit 1; }
+  grep -qF '"effectiveValue":true' /tmp/insura-smoke-sysconfig-put.json || { echo "FAILED: effektiver Wert nicht true"; exit 1; }
+  DELETE_STATUS=$(curl -s -o /tmp/insura-smoke-sysconfig-del.json -w "%{http_code}" \
+    -X DELETE http://localhost:${APP_PORT:-3001}/admin/system-config/AI_ENABLED \
+    -b /tmp/insura-smoke-cookies-2.txt)
+  if [ "$DELETE_STATUS" != "200" ]; then
+    echo "FAILED: DELETE /admin/system-config/AI_ENABLED returned HTTP $DELETE_STATUS"
+    exit 1
+  fi
+  grep -qF '"uiValuePresent":false' /tmp/insura-smoke-sysconfig-del.json || { echo "FAILED: Reset hat den UI-Wert nicht entfernt"; exit 1; }
+  echo "   Update (UI-Quelle) + Reset (Fallback) erfolgreich"
+  echo "   PASS"
+
+  echo "8e. Testing profile endpoint (ADMIN)..."
+  PROFILE_STATUS=$(curl -s -o /tmp/insura-smoke-profile.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/user/profile)
+  if [ "$PROFILE_STATUS" != "200" ]; then
+    echo "FAILED: /user/profile returned HTTP $PROFILE_STATUS (expected 200 for ADMIN)"
+    exit 1
+  fi
+  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/insura-smoke-profile.json || { echo "FAILED: Profilantwort ohne erwarteten Benutzernamen"; exit 1; }
+  grep -qF '"role":"ADMIN"' /tmp/insura-smoke-profile.json || { echo "FAILED: Profilantwort ohne ADMIN-Rolle"; exit 1; }
+  echo "   Profil: HTTP 200, korrekter Benutzername/Rolle"
+  echo "   PASS"
 else
   echo "5. Skipping local admin login check (LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD not configured)."
 fi
@@ -349,40 +432,43 @@ fi
 # NOTE: createApplicationContext() never logs Nest's 'Nest application
 # successfully started' message (that constant is only emitted by the HTTP
 # server path). The worker therefore logs its own ready marker.
-echo "9. Checking worker startup..."
-# Worker logs are captured to a file and grepped on disk: `grep -q` on a
-# pipeline can spuriously fail under `set -o pipefail` when the producer
-# dies on SIGPIPE after the match (grows in crash-loop scenarios).
+# READINESS DETECTION: we do NOT gate on the worker's log output. Podman's
+# k8s-file log driver (used on the dev machine via podman-compose) can
+# silently drop early boot lines when containers start in quick succession
+# - entrypoint echoes, Nest boot lines and the 'Worker bereit' marker were
+# observed missing even though the worker was fully functional (it consumed
+# BullMQ jobs). Log-based gates therefore produced intermittent false
+# failures. Instead we detect readiness by process: the worker's node
+# process only starts AFTER the entrypoint finished (DB wait + migrate
+# deploy + `exec node`), so pgrep matching that process is a genuine
+# 'application process started' signal, independent of log capture.
 WORKER_LOG=/tmp/insura-worker-smoke.log
 WORKER_READY=false
 for i in $(seq 1 30); do
-  $COMPOSE logs worker > "$WORKER_LOG" 2>/dev/null || true
-  if grep -qF "Worker bereit" "$WORKER_LOG"; then
+  if $COMPOSE exec -T worker pgrep -f "apps/worker/dist/apps/worker/src/main.js" >/dev/null 2>&1; then
     WORKER_READY=true
-    MARKER_COUNT_1=$(grep -cF "Worker bereit" "$WORKER_LOG" || true)
     break
   fi
   sleep 2
 done
 if [ "$WORKER_READY" != true ]; then
-  echo "FAILED: Worker did not become ready"
+  echo "FAILED: Worker process did not start"
   $COMPOSE logs worker
   exit 1
 fi
-# Crash-loop detection: a restarting worker logs the marker once per boot.
-# Wait a window, then confirm the count did not increase since detection
-# (a pre-existing marker from an earlier boot is fine; a growing count
-# means a restart. A crash-loop slower than this window is caught by the
-# step-10 job round-trip, which needs a live worker).
+# Crash-loop detection: a restarting worker gets a fresh PID. Capture the
+# PID, wait a window, then confirm the same process is still alive (a
+# crash-loop slower than this window is caught by the step-10 job
+# round-trip, which needs a live worker).
+WORKER_PID_1=$($COMPOSE exec -T worker pgrep -f "apps/worker/dist/apps/worker/src/main.js" | head -1)
 sleep 5
-$COMPOSE logs worker > "$WORKER_LOG" 2>/dev/null || true
-MARKER_COUNT_2=$(grep -cF "Worker bereit" "$WORKER_LOG" || true)
-if [ "$MARKER_COUNT_2" -gt "$MARKER_COUNT_1" ]; then
-  echo "FAILED: Worker restarted shortly after becoming ready (crash-loop?)"
+WORKER_PID_2=$($COMPOSE exec -T worker pgrep -f "apps/worker/dist/apps/worker/src/main.js" | head -1)
+if [ -z "$WORKER_PID_2" ] || [ "$WORKER_PID_2" != "$WORKER_PID_1" ]; then
+  echo "FAILED: Worker process restarted shortly after starting (crash-loop?)"
   $COMPOSE logs worker
   exit 1
 fi
-echo "   Worker: ready, queue infrastructure registered, no restart"
+echo "   Worker: process alive, no restart"
 echo "   PASS"
 
 # 10. Live queue round-trip: enqueue a BullMQ job and verify the worker
@@ -423,7 +509,14 @@ ENQUEUE_OUT=$($COMPOSE exec -T api node -e "
 }
 echo "   Enqueued job: $SMOKE_JOB_ID"
 
-# The worker logs a processing line once it picks the job up.
+# The worker logs a processing line once it picks the job up. Like the
+# step-9 ready marker, this log line is unreliable on the dev machine
+# (podman's log driver can drop early lines), so it is used only as a
+# diagnostic, never as the pass/fail gate. The authoritative proof that
+# the worker consumed the job is BullMQ state in Redis (below): the job
+# must leave the wait list and reach a terminal state, which only the
+# worker's AiExtractionProcessor can achieve.
+echo "   Waiting for worker to consume the job (BullMQ terminal state)..."
 JOB_PICKED_UP=false
 for i in $(seq 1 30); do
   $COMPOSE logs worker > "$WORKER_LOG" 2>/dev/null || true
@@ -433,17 +526,17 @@ for i in $(seq 1 30); do
   fi
   sleep 2
 done
-if [ "$JOB_PICKED_UP" != true ]; then
-  echo "FAILED: Worker did not consume the enqueued job"
-  $COMPOSE logs worker
-  exit 1
+if [ "$JOB_PICKED_UP" = true ]; then
+  echo "   Worker consumed the job (processing line observed)"
+else
+  echo "   (processing log line not observed - checking BullMQ state only)"
 fi
-echo "   Worker consumed the job"
 
 # The job must leave the wait list and reach a terminal BullMQ state:
 # either its hash is gone (removed on completion) or it carries a
 # finishedOn timestamp (kept as failed/completed). This is independent
-# of BullMQ's cleanup defaults and of the job's final status.
+# of BullMQ's cleanup defaults and of the job's final status. It also
+# proves the worker consumed the job without relying on log capture.
 # (redis-cli returns 0 even for a missing key, so test the output.)
 JOB_TERMINAL=false
 for i in $(seq 1 15); do

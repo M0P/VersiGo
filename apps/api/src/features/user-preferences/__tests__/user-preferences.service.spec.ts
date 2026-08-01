@@ -71,9 +71,15 @@ describe('UserPreferencesService', () => {
       expect(result.value).toBe('#1a73e8');
     });
 
-    it('should throw NotFoundException when preference does not exist', async () => {
+    it('should throw BadRequestException for unknown (non-catalog) keys', async () => {
       await expect(
         service.getPreference('user-1', 'nonexistent'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException when a catalog key is not set', async () => {
+      await expect(
+        service.getPreference('user-1', 'theme'),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -110,9 +116,27 @@ describe('UserPreferencesService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should allow arbitrary values for non-UI preference keys', async () => {
-      const result = await service.setPreference('user-1', 'custom:note', 'any value');
-      expect(result.value).toBe('any value');
+    it('should reject unknown (non-catalog) preference keys', async () => {
+      await expect(
+        service.setPreference('user-1', 'custom:note', 'any value'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should accept theme and language catalog keys with valid values', async () => {
+      const theme = await service.setPreference('user-1', 'theme', 'dark');
+      expect(theme.value).toBe('dark');
+
+      const language = await service.setPreference('user-1', 'language', 'de-DE');
+      expect(language.value).toBe('de-DE');
+    });
+
+    it('should reject invalid theme and language values', async () => {
+      await expect(
+        service.setPreference('user-1', 'theme', 'blue'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.setPreference('user-1', 'language', 'xx-XX'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

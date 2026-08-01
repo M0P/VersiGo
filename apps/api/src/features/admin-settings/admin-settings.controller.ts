@@ -8,11 +8,18 @@ import {
   Param,
   UseGuards,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { GlobalRole } from '@prisma/client';
 import { SettingsStoreService } from './settings-store.service';
 import { FeatureFlagsService } from './feature-flags.service';
-import { AppConfigService, DatabaseService } from '@insura/foundation';
+import {
+  AppConfigService,
+  DatabaseService,
+  getSettingDefinition,
+  validateSettingValue,
+} from '@insura/foundation';
+import type { SettingDefinition } from '@insura/foundation';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
 import { Roles } from '../identity/roles.decorator';
@@ -29,6 +36,7 @@ import {
   ConnectivityTestDto,
   ConnectivityTestResultDto,
 } from './dto/admin-settings.dto';
+import { assertSafeTestEndpoint } from '../../common/connectivity/connectivity-guard';
 
 // Hilfsfunktion: Prueft, ob der User die globale Rolle ADMIN hat (ADR-007)
 function assertIsGlobalAdmin(user: AuthenticatedUser): void {
@@ -71,11 +79,22 @@ export class AdminSettingsController {
     @Body() dto: CreateGlobalSettingDto,
   ) {
     assertIsGlobalAdmin(user);
-    return this.settingsStore.createGlobalSetting(
-      dto.key,
-      dto.valuePlain,
-      dto.isSecret,
-    );
+    // M3: Legacy-Endpunkte laufen durch dieselbe Katalog-Allowlist und
+    // Typvalidierung wie die neue Systemkonfiguration; isSecret wird NIE
+    // vom Aufrufer uebernommen, sondern aus der Katalog-Kategorie erzwungen.
+    const definition = this.assertCatalogSetting(dto.key);
+    // m9: Anlage ohne Wert wuerde eine "tote" Zeile ohne Wert erzeugen,
+    // die in keiner UI auftaucht und nicht zurueckgesetzt werden kann.
+    // `== null` faengt sowohl undefined als auch explizites null ab
+    // (null passiert @IsOptional() und wuerde sonst einen HTTP-500 in der
+    // Typvalidierung ausloesen).
+    if (dto.valuePlain == null) {
+      throw new BadRequestException(
+        `Ein Wert ist fuer '${dto.key}' erforderlich (Anlage).`,
+      );
+    }
+    const { valuePlain, isSecret } = this.validateLegacyValue(definition, dto.valuePlain);
+    return this.settingsStore.createGlobalSetting(dto.key, valuePlain, isSecret);
   }
 
   @Patch('admin/settings/:key')
@@ -85,11 +104,9 @@ export class AdminSettingsController {
     @Body() dto: UpdateGlobalSettingDto,
   ) {
     assertIsGlobalAdmin(user);
-    return this.settingsStore.updateGlobalSetting(
-      key,
-      dto.valuePlain,
-      dto.isSecret,
-    );
+    const definition = this.assertCatalogSetting(key);
+    const { valuePlain, isSecret } = this.validateLegacyValue(definition, dto.valuePlain);
+    return this.settingsStore.updateGlobalSetting(key, valuePlain, isSecret);
   }
 
   @Delete('admin/settings/:key')
@@ -178,6 +195,22 @@ export class AdminSettingsController {
         default: {
           // Allgemeiner HTTP-Connectivity-Test fuer externe Dienste
           if (dto.endpoint) {
+            try {
+              // SSRF-Schutz (M4): nur http(s), keine lokalen/privaten/
+              // metadata-Adressen – identisch zur Systemkonfiguration.
+              await assertSafeTestEndpoint(dto.endpoint);
+            } catch (error: unknown) {
+              // M5-ext: gleiche Handlungsanleitung wie beim
+              // Systemkonfigurations-Test, damit Nutzer nicht annehmen,
+              // lokale Dienste seien per UI testbar.
+              result.message =
+                `Endpunkt aus Sicherheitsgruenden abgelehnt: ` +
+                `${(error as Error).message} – der Connectivity-Test erlaubt ` +
+                `aus SSRF-Schutz nur oeffentliche http(s)-Endpunkte; lokale ` +
+                `Dienste (z. B. Ollama unter localhost) pruefen Sie bitte ` +
+                `direkt auf dem Host.`;
+              break;
+            }
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 5000);
             try {
@@ -454,5 +487,54 @@ export class AdminSettingsController {
     @Param('key') key: string,
   ) {
     return this.featureFlags.deleteHouseholdFlag(householdId, key);
+  }
+
+  // =====================
+  // Intern (M3): Katalog-Allowlist + Wertvalidierung fuer Legacy-Endpunkte
+  // =====================
+
+  /**
+   * Allowlist-Pruefung fuer die Legacy-Global-Settings-Endpunkte: Der
+   * Schluessel muss im versionierten Settings-Katalog existieren und darf
+   * nicht der Bootstrap-Kategorie angehoeren (nur Environment/Compose).
+   * Unbekannte oder Bootstrap-Schluessel koennen ueber die UI weder
+   * angelegt noch geaendert werden.
+   */
+  private assertCatalogSetting(key: string): SettingDefinition {
+    const definition = getSettingDefinition(key);
+    if (!definition) {
+      throw new BadRequestException(
+        `Unbekannter Settings-Schluessel '${key}' – nicht im Katalog (Allowlist).`,
+      );
+    }
+    if (definition.category === 'bootstrap') {
+      throw new BadRequestException(
+        `'${key}' ist eine Infrastruktur-/Bootstrap-Konfiguration und nur ueber Environment/Compose setzbar.`,
+      );
+    }
+    return definition;
+  }
+
+  /**
+   * Wertvalidierung + erzwungenes Geheimnis-Flag: `isSecret` wird NIE vom
+   * Aufrufer uebernommen, sondern ausschliesslich aus der Katalog-Kategorie
+   * abgeleitet. Ein Katalog-Secret kann so nicht als Klartext abgelegt
+   * werden und ein Nicht-Secret nicht versehentlich als Secret.
+   */
+  private validateLegacyValue(
+    definition: SettingDefinition,
+    valuePlain: string | undefined,
+  ): { valuePlain: string | undefined; isSecret: boolean } {
+    const isSecret = definition.category === 'secret';
+    if (valuePlain === undefined) {
+      return { valuePlain: undefined, isSecret };
+    }
+    const validated = validateSettingValue(definition, valuePlain);
+    if (!validated.ok) {
+      throw new BadRequestException(
+        `Ungueltiger Wert fuer '${definition.key}': ${validated.error}`,
+      );
+    }
+    return { valuePlain: validated.canonical, isSecret };
   }
 }

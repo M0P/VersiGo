@@ -136,11 +136,32 @@ Dev-Modus.
 
 ## Personalisierung
 
-Nach der Anmeldung können Sie unter **Einstellungen** (http://localhost:3000/settings):
+Nach der Anmeldung können Sie unter **Mein Profil** (http://localhost:3000/settings,
+`USER`/`ADMIN`):
 
+- **Profil bearbeiten**: Anzeigename und Sprache (Locale-Allowlist)
 - **Akzentfarbe wählen**: 8 Preset-Farben oder ein eigener Hex-Farbwert
 - **Helles/dunkles Design**: Umschaltung per Klick im Topbar oder in den Einstellungen
 - Die Einstellung wird pro Benutzer serverseitig gespeichert
+- `READ_ONLY`-Konten sehen keine editierbaren Einstellungen (Server: 403)
+
+## Systemeinstellungen (Admin, AP-17)
+
+Admins verwalten die zentrale Systemkonfiguration unter
+**Systemeinstellungen** (http://localhost:3000/admin/settings, nur `ADMIN`):
+
+- **Katalogbasiert (Allowlist):** Nur dokumentierte Schlüssel sind setzbar;
+  Infrastruktur-/Bootstrap-Werte (DB, Redis, Secrets, Ports, TLS/Proxy) sind
+  ausschließlich Environment/Compose.
+- **Priorität:** gültiger UI-Wert (Datenbank) > `.env`-Fallback > Code-Default.
+  Die UI zeigt pro Schlüssel Quelle, Fallback-Grund und effektiven Wert.
+- **Secrets** (z. B. `AI_OPENAI_COMPAT_API_KEY`, `PAPERLESS_API_TOKEN`) werden
+  verschlüsselt gespeichert und nur maskiert angezeigt.
+- **Neustart-Werte** (z. B. `STORAGE_ENABLED`) werden als „Neustart
+  erforderlich" markiert und beim nächsten Start aktiv.
+- **Connectivity-Tests** für AI-/Paperless-Endpunkte direkt aus der UI.
+- Änderungen werden revisionssicher auditiert (ohne Werte/Secrets).
+- Vollständiger Katalog: `docs/13-settings-catalog.md`.
 
 ## Architektur
 
@@ -167,4 +188,5 @@ Nach der Anmeldung können Sie unter **Einstellungen** (http://localhost:3000/se
 - `docs/10-quality-and-library-policy.md`
 - `docs/11-ui-ux.md`
 - `docs/12-roadmap.md`
+- `docs/13-settings-catalog.md`
 - `docs/adr/` – Architecture Decision Records

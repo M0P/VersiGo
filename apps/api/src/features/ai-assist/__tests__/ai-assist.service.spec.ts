@@ -47,13 +47,15 @@ type MockDb = ReturnType<typeof createMockDb>;
 function createMockProviderRegistry() {
   const adapter = new NoOpAIAdapter();
   return {
-    getAdapter: vi.fn().mockReturnValue(adapter),
+    getAdapter: vi.fn().mockResolvedValue(adapter),
   };
 }
 
-function createMockCapabilityFlags(enabled: boolean) {
+function createMockSettings(enabled: boolean) {
   return {
-    isEnabled: vi.fn().mockReturnValue(enabled),
+    getEffectiveBoolean: vi.fn().mockResolvedValue(enabled),
+    getEffectiveString: vi.fn().mockResolvedValue('ollama'),
+    getEffectiveNumber: vi.fn().mockResolvedValue(60000),
   };
 }
 
@@ -88,14 +90,14 @@ describe('AiAssistService', () => {
   beforeEach(() => {
     mockDb = createMockDb();
     const mockRegistry = createMockProviderRegistry();
-    const mockCapFlags = createMockCapabilityFlags(true);
+    const mockSettings = createMockSettings(true);
     const mockQueue = createMockQueue();
     const mockAuthService = createMockAuthService();
 
     service = new AiAssistService(
       mockDb as never,
       mockRegistry as never,
-      mockCapFlags as never,
+      mockSettings as never,
       mockAuthService as never,
       mockQueue as never,
     );
@@ -151,14 +153,14 @@ describe('AiAssistService', () => {
     });
 
     it('wirft ForbiddenException bei deaktiviertem AI', async () => {
-      const mockCapFlags = createMockCapabilityFlags(false);
+      const mockSettings = createMockSettings(false);
       const mockRegistry = createMockProviderRegistry();
       const mockQueue = createMockQueue();
 
       const disabledService = new AiAssistService(
         mockDb as never,
         mockRegistry as never,
-        mockCapFlags as never,
+        mockSettings as never,
         createMockAuthService() as never,
         mockQueue as never,
       );
@@ -229,14 +231,14 @@ describe('AiAssistService', () => {
     });
 
     it('wirft ForbiddenException bei deaktiviertem AI', async () => {
-      const mockCapFlags = createMockCapabilityFlags(false);
+      const mockSettings = createMockSettings(false);
       const mockRegistry = createMockProviderRegistry();
       const mockQueue = createMockQueue();
 
       const disabledService = new AiAssistService(
         mockDb as never,
         mockRegistry as never,
-        mockCapFlags as never,
+        mockSettings as never,
         createMockAuthService() as never,
         mockQueue as never,
       );
@@ -267,14 +269,14 @@ describe('AiAssistService', () => {
         extractContractFacts: vi.fn(),
         healthCheck: vi.fn(),
       };
-      const mockRegistry = { getAdapter: vi.fn().mockReturnValue(mockAdapter) };
-      const mockCapFlags = createMockCapabilityFlags(true);
+      const mockRegistry = { getAdapter: vi.fn().mockResolvedValue(mockAdapter) };
+      const mockSettings = createMockSettings(true);
       const mockQueue = createMockQueue();
 
       const svc = new AiAssistService(
         mockDb as never,
         mockRegistry as never,
-        mockCapFlags as never,
+        mockSettings as never,
         createMockAuthService() as never,
         mockQueue as never,
       );
@@ -405,14 +407,14 @@ describe('AiAssistService', () => {
 
   describe('healthCheck', () => {
     it('meldet nicht verbunden bei deaktiviertem AI', async () => {
-      const mockCapFlags = createMockCapabilityFlags(false);
+      const mockSettings = createMockSettings(false);
       const mockRegistry = createMockProviderRegistry();
       const mockQueue = createMockQueue();
 
       const disabledService = new AiAssistService(
         mockDb as never,
         mockRegistry as never,
-        mockCapFlags as never,
+        mockSettings as never,
         createMockAuthService() as never,
         mockQueue as never,
       );

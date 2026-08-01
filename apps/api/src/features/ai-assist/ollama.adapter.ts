@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { AppConfigService } from '@insura/foundation';
+import { SettingsResolverService } from '@insura/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@insura/foundation';
@@ -35,40 +35,58 @@ Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format
 Wenn vorhanden, gib Deckungssummen, Ausschluesse, Selbstbehalte und Kuendigungsfristen an.
 Halte die Zusammenfassung auf max. 500 Zeichen.`;
 
+interface OllamaRuntimeConfig {
+  baseUrl: string;
+  model: string;
+  timeout: number;
+}
+
+/**
+ * Ollama-Adapter (AP-17): liest seine Konfiguration pro Aufruf ueber die
+ * zentrale Settings-Aufloesung (UI > .env > Default). Dadurch wirken
+ * Admin-UI-Aenderungen an AI_OLLAMA_BASE_URL/-MODEL/-TIMEOUT sofort,
+ * ohne Neustart.
+ */
 @Injectable()
 export class OllamaAdapter implements IAIAdapter {
   private readonly logger = new Logger(OllamaAdapter.name);
   readonly providerKey = 'ollama';
 
-  private readonly baseUrl: string;
-  private readonly model: string;
-  private readonly timeout: number;
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly settings: SettingsResolverService,
+  ) {}
 
-  constructor(private readonly httpService: HttpService, config: AppConfigService) {
-    this.baseUrl = (config.get('AI_OLLAMA_BASE_URL') ?? 'http://localhost:11434').replace(/\/+$/, '');
-    this.model = config.get('AI_OLLAMA_MODEL') ?? 'llama3';
-    this.timeout = config.get('AI_EXTRACTION_TIMEOUT_MS') ?? 60000;
+  private async runtimeConfig(): Promise<OllamaRuntimeConfig> {
+    const baseUrl = (
+      (await this.settings.getEffectiveString('AI_OLLAMA_BASE_URL')) ?? 'http://localhost:11434'
+    ).replace(/\/+$/, '');
+    const model = (await this.settings.getEffectiveString('AI_OLLAMA_MODEL')) ?? 'llama3';
+    const timeout =
+      (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
+    return { baseUrl, model, timeout };
   }
 
   private async chatCompletion(
     systemPrompt: string,
     userContent: string,
+    config: OllamaRuntimeConfig,
   ): Promise<string | null> {
-    const url = `${this.baseUrl}/api/chat`;
+    const url = `${config.baseUrl}/api/chat`;
 
     try {
       const { data } = await firstValueFrom(
         this.httpService.post<OllamaChatResponse>(
           url,
           {
-            model: this.model,
+            model: config.model,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userContent },
             ],
             stream: false,
           },
-          { timeout: this.timeout },
+          { timeout: config.timeout },
         ),
       );
       return data.message?.content ?? null;
@@ -98,14 +116,16 @@ export class OllamaAdapter implements IAIAdapter {
 
     if (documentContents.length === 0) return null;
 
+    const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       EXTRACTION_SYSTEM_PROMPT,
       this.buildExtractionPrompt(documentContents),
+      config,
     );
 
     if (!raw) return null;
 
-    const parsed = tryParseExtractionResponse(raw, this.model);
+    const parsed = tryParseExtractionResponse(raw, config.model);
     if (!parsed) {
       this.logger.warn(`Konnte JSON nicht parsen aus AI-Antwort: ${raw.substring(0, 200)}`);
       return null;
@@ -126,9 +146,11 @@ export class OllamaAdapter implements IAIAdapter {
 
     if (documentContents.length === 0) return null;
 
+    const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       SUMMARIZE_SYSTEM_PROMPT,
       this.buildSummarizePrompt(documentContents),
+      config,
     );
 
     if (!raw) return null;
@@ -136,13 +158,14 @@ export class OllamaAdapter implements IAIAdapter {
     return {
       summaryMarkdown: raw,
       sourceDocumentRefs: [],
-      model: this.model,
+      model: config.model,
     };
   }
 
   async healthCheck(): Promise<boolean> {
     try {
-      const url = `${this.baseUrl}/api/tags`;
+      const config = await this.runtimeConfig();
+      const url = `${config.baseUrl}/api/tags`;
       const { status } = await firstValueFrom(
         this.httpService.get(url, { timeout: 5_000 }),
       );

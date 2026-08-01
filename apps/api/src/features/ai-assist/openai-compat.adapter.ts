@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { AppConfigService } from '@insura/foundation';
+import { SettingsResolverService } from '@insura/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@insura/foundation';
@@ -52,46 +52,61 @@ Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format
 Wenn vorhanden, gib Deckungssummen, Ausschluesse, Selbstbehalte und Kuendigungsfristen an.
 Halte die Zusammenfassung auf max. 500 Zeichen.`;
 
+interface OpenAiRuntimeConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  timeout: number;
+  configured: boolean;
+}
+
+/**
+ * OpenAI-kompatibler Adapter (AP-17): liest seine Konfiguration pro Aufruf
+ * ueber die zentrale Settings-Aufloesung (UI > .env > Default). Dadurch
+ * wirken Admin-UI-Aenderungen an AI_OPENAI_COMPAT_* sofort, ohne Neustart.
+ * Der API-Key wird intern entschluesselt geliefert und nie protokolliert.
+ */
 @Injectable()
 export class OpenAiCompatAdapter implements IAIAdapter {
   private readonly logger = new Logger(OpenAiCompatAdapter.name);
   readonly providerKey = 'openai-compat';
 
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
-  private readonly model: string;
-  private readonly timeout: number;
-  private readonly enabled: boolean;
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly settings: SettingsResolverService,
+  ) {}
 
-  constructor(private readonly httpService: HttpService, config: AppConfigService) {
-    this.baseUrl = (config.get('AI_OPENAI_COMPAT_BASE_URL') ?? '').replace(/\/+$/, '');
-    this.apiKey = config.get('AI_OPENAI_COMPAT_API_KEY') ?? '';
-    this.model = config.get('AI_OPENAI_COMPAT_MODEL') ?? 'gpt-4o-mini';
-    this.timeout = config.get('AI_EXTRACTION_TIMEOUT_MS') ?? 60000;
-    this.enabled = this.baseUrl.length > 0 && this.apiKey.length > 0;
+  private async runtimeConfig(): Promise<OpenAiRuntimeConfig> {
+    const baseUrl = (
+      (await this.settings.getEffectiveString('AI_OPENAI_COMPAT_BASE_URL')) ?? ''
+    ).replace(/\/+$/, '');
+    const apiKey = (await this.settings.getEffectiveString('AI_OPENAI_COMPAT_API_KEY')) ?? '';
+    const model = (await this.settings.getEffectiveString('AI_OPENAI_COMPAT_MODEL')) ?? 'gpt-4o-mini';
+    const timeout =
+      (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
+    const configured = baseUrl.length > 0 && apiKey.length > 0;
 
-    if (this.enabled && this.baseUrl.startsWith('http://')) {
+    if (configured && baseUrl.startsWith('http://')) {
       this.logger.warn(
         'AI_OPENAI_COMPAT_BASE_URL verwendet HTTP. Der API-Key wird im Klartext ' +
           'uebertragen. Verwende https:// fuer Produktionsumgebungen.',
       );
     }
-  }
 
-  private isConfigured(): boolean {
-    return this.enabled;
+    return { baseUrl, apiKey, model, timeout, configured };
   }
 
   private async chatCompletion(
     systemPrompt: string,
     userContent: string,
+    config: OpenAiRuntimeConfig,
   ): Promise<string | null> {
-    if (!this.isConfigured()) return null;
+    if (!config.configured) return null;
 
-    const url = `${this.baseUrl}/chat/completions`;
+    const url = `${config.baseUrl}/chat/completions`;
 
     const body: OpenAiChatRequest = {
-      model: this.model,
+      model: config.model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
@@ -104,10 +119,10 @@ export class OpenAiCompatAdapter implements IAIAdapter {
       const { data } = await firstValueFrom(
         this.httpService.post<OpenAiChatResponse>(url, body, {
           headers: {
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${config.apiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: this.timeout,
+          timeout: config.timeout,
         }),
       );
 
@@ -138,14 +153,16 @@ export class OpenAiCompatAdapter implements IAIAdapter {
 
     if (documentContents.length === 0) return null;
 
+    const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       EXTRACTION_SYSTEM_PROMPT,
       this.buildExtractionPrompt(documentContents),
+      config,
     );
 
     if (!raw) return null;
 
-    const parsed = tryParseExtractionResponse(raw, this.model);
+    const parsed = tryParseExtractionResponse(raw, config.model);
     if (!parsed) {
       this.logger.warn(`Konnte JSON nicht parsen aus AI-Antwort: ${raw.substring(0, 200)}`);
       return null;
@@ -166,9 +183,11 @@ export class OpenAiCompatAdapter implements IAIAdapter {
 
     if (documentContents.length === 0) return null;
 
+    const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       SUMMARIZE_SYSTEM_PROMPT,
       this.buildSummarizePrompt(documentContents),
+      config,
     );
 
     if (!raw) return null;
@@ -176,19 +195,20 @@ export class OpenAiCompatAdapter implements IAIAdapter {
     return {
       summaryMarkdown: raw,
       sourceDocumentRefs: [],
-      model: this.model,
+      model: config.model,
     };
   }
 
   async healthCheck(): Promise<boolean> {
-    if (!this.isConfigured()) return false;
+    const config = await this.runtimeConfig();
+    if (!config.configured) return false;
 
     try {
-      const url = `${this.baseUrl}/models`;
+      const url = `${config.baseUrl}/models`;
       const { status } = await firstValueFrom(
         this.httpService.get(url, {
           headers: {
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${config.apiKey}`,
             'Content-Type': 'application/json',
           },
           timeout: 5_000,

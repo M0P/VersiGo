@@ -19,13 +19,14 @@ import { SetUserPreferenceDto, UserPreferenceResponseDto } from './dto/user-pref
  * Data is scoped to the authenticated user – one user cannot read or write
  * another user's preferences.
  *
- * AP-16: Das Aendern von Einstellungen (Profil-/Theme-/Locale) ist nur
- * USER/ADMIN erlaubt. READ_ONLY darf lesen (die UI benoetigt z. B. die
- * Akzentfarbe zum Rendern), aber nichts veraendern.
+ * AP-17 (Berechtigungsmatrix): Persoenliche Profileinstellungen stehen nur
+ * USER und ADMIN zu. READ_ONLY erhaelt ueber direkte Anfragen keinerlei
+ * Profil-/Praeferenzwerte (RolesGuard, Rollenhierarchie ADMIN > USER > READ_ONLY).
  *
  * Route prefix: /user/preferences
  */
 @Controller('user/preferences')
+@Roles(GlobalRole.USER)
 export class UserPreferencesController {
   constructor(private readonly preferences: UserPreferencesService) {}
 
@@ -54,9 +55,8 @@ export class UserPreferencesController {
 
   /**
    * Set (create or update) a preference by key.
-   * PUT /user/preferences/:key – nur USER/ADMIN (AP-16).
+   * PUT /user/preferences/:key
    */
-  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   @Put(':key')
   async set(
     @CurrentUser() user: AuthenticatedUser,

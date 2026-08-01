@@ -3,10 +3,15 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import * as session from 'express-session';
 import * as cookieParser from 'cookie-parser';
-import { AppConfigService } from '@insura/foundation';
+import { AppConfigService, preloadRestartSettingsIntoEnv } from '@insura/foundation';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
+  // AP-17: Neustart-Settings (Kategorie "restart") vor dem Nest-Bootstrap
+  // aus der Datenbank in process.env laden, damit sie ab dem ersten
+  // Prozessstart wirken (fail-soft bei nicht erreichbarer DB).
+  await preloadRestartSettingsIntoEnv();
+
   const app = await NestFactory.create(AppModule);
   const config = app.get(AppConfigService);
 

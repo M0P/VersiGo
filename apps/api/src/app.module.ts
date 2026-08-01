@@ -18,6 +18,8 @@ import { NotificationsModule } from './features/notifications/notifications.modu
 import { PaperlessNgxModule } from './features/paperless-ngx/paperless-ngx.module';
 import { PolicyRegistryModule } from './features/policy-registry/policy-registry.module';
 import { PortalConnectorsModule } from './features/portal-connectors/portal-connectors.module';
+import { ProfileModule } from './features/profile/profile.module';
+import { SystemConfigModule } from './features/system-config/system-config.module';
 import { UserPreferencesModule } from './features/user-preferences/user-preferences.module';
 
 @Module({
@@ -43,6 +45,8 @@ import { UserPreferencesModule } from './features/user-preferences/user-preferen
     NotificationsModule,
     PaperlessNgxModule,
     UserPreferencesModule,
+    SystemConfigModule,
+    ProfileModule,
   ],
 })
 export class AppModule {}

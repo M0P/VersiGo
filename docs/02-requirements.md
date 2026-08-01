@@ -15,6 +15,10 @@
 - Login unterstützt OIDC (optionaler zweiter Login-Weg, gebunden an ein lokales Konto).
 - UI unterstützt Light/Dark Mode.
 - Einstellungen erfolgen primär über Admin-UI.
+- **Systemkonfiguration (AP-17):** versionierter Settings-Katalog (Allowlist)
+  mit deterministischer Priorität gültiger UI-Wert > `.env`-Fallback >
+  Code-Default/Degradation; `ADMIN`-UI für zentrale Systemeinstellungen,
+  Profil-/Präferenz-UI für `USER`/`ADMIN`, `READ_ONLY` ohne Einstellungszugriff.
 - Vollständige Auditierbarkeit relevanter Änderungen.
 
 ### Optional

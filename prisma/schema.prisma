@@ -67,6 +67,7 @@ model User {
   ownedPolicies    InsurancePolicy[]
   createdDocuments PolicyDocument[]
   userPreferences  UserPreference[]
+  updatedGlobalSettings GlobalIntegrationSetting[]
 
   @@unique([oidcIssuer, oidcSubject])
   @@map("users")
@@ -185,13 +186,16 @@ enum ObjectSharePermission {
 // Vergessen eines Scope-Feldes von vornherein aus.
 
 model GlobalIntegrationSetting {
-  id             String   @id @default(uuid())
-  key            String   @unique
-  valueEncrypted String?
-  valuePlain     String?
-  isSecret       Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String   @id @default(uuid())
+  key              String   @unique
+  valueEncrypted   String?
+  valuePlain       String?
+  isSecret         Boolean  @default(false)
+  updatedByUserId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  updatedByUser User? @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@map("global_integration_settings")
 }

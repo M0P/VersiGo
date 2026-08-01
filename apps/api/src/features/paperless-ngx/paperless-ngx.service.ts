@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { AppConfigService, CapabilityFlagsService } from '@insura/foundation';
+import { SettingsResolverService } from '@insura/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import type {
@@ -38,52 +38,78 @@ interface PaperlessApiTag {
 
 const PAPERLESS_API_BASE = '/api';
 
+/**
+ * Paperless-ngx-Adapter (AP-17).
+ *
+ * Konfiguration (PAPERLESS_ENABLED, PAPERLESS_URL, PAPERLESS_API_TOKEN)
+ * wird pro Aufruf ueber die zentrale Settings-Aufloesung bezogen
+ * (UI > .env > Default). Admin-UI-Aenderungen wirken damit sofort, ohne
+ * Neustart. Bei deaktivierter oder unvollstaendiger Konfiguration
+ * degradiert der Adapter kontrolliert (null/leere Ergebnisse, kein Fehler).
+ * Secrets (API-Token) werden niemals geloggt.
+ */
 @Injectable()
 export class PaperlessNgxService implements IPaperlessAdapter {
   private readonly logger = new Logger(PaperlessNgxService.name);
-  private readonly baseUrl: string;
-  private readonly apiToken: string;
-  private readonly enabled: boolean;
+  /** Bereits gewarnte Basis-URLs (verhindert Log-Spam bei Nicht-HTTPS). */
+  private readonly warnedNonHttps = new Set<string>();
 
   constructor(
     private readonly httpService: HttpService,
-    private readonly config: AppConfigService,
-    private readonly capabilityFlags: CapabilityFlagsService,
-  ) {
-    this.enabled = this.capabilityFlags.isEnabled('paperless');
-    this.baseUrl = (this.config.get('PAPERLESS_URL') ?? '').replace(/\/+$/, '');
-    this.apiToken = this.config.get('PAPERLESS_API_TOKEN') ?? '';
+    private readonly settings: SettingsResolverService,
+  ) {}
 
-    if (this.enabled && this.baseUrl.length > 0 && !this.baseUrl.startsWith('https://')) {
+  private async runtimeConfig(): Promise<{
+    enabled: boolean;
+    baseUrl: string;
+    apiToken: string;
+  }> {
+    const enabled = (await this.settings.getEffectiveBoolean('PAPERLESS_ENABLED')) ?? false;
+    const baseUrl = (
+      (await this.settings.getEffectiveString('PAPERLESS_URL')) ?? ''
+    ).replace(/\/+$/, '');
+    const apiToken = (await this.settings.getEffectiveString('PAPERLESS_API_TOKEN')) ?? '';
+
+    if (
+      enabled &&
+      baseUrl.length > 0 &&
+      !baseUrl.startsWith('https://') &&
+      !this.warnedNonHttps.has(baseUrl)
+    ) {
+      this.warnedNonHttps.add(baseUrl);
       this.logger.warn(
         'PAPERLESS_URL verwendet kein HTTPS. Der API-Token wird im Klartext ' +
           'uebertragen. Verwende https:// fuer Produktionsumgebungen.',
       );
     }
+
+    return { enabled, baseUrl, apiToken };
   }
 
-  private isConfigured(): boolean {
-    return this.enabled && this.baseUrl.length > 0 && this.apiToken.length > 0;
+  private async isConfigured(): Promise<boolean> {
+    const { enabled, baseUrl, apiToken } = await this.runtimeConfig();
+    return enabled && baseUrl.length > 0 && apiToken.length > 0;
   }
 
-  private createHeaders(): Record<string, string> {
+  private createHeaders(apiToken: string): Record<string, string> {
     return {
-      Authorization: `Token ${this.apiToken}`,
+      Authorization: `Token ${apiToken}`,
       Accept: 'application/json;version=2',
     };
   }
 
   private async get<T>(path: string): Promise<T | null> {
-    if (!this.isConfigured()) {
+    const { enabled, baseUrl, apiToken } = await this.runtimeConfig();
+    if (!enabled || baseUrl.length === 0 || apiToken.length === 0) {
       this.logger.warn(`Paperless nicht konfiguriert – Anfrage ignoriert: GET ${path}`);
       return null;
     }
 
     try {
-      const url = `${this.baseUrl}${PAPERLESS_API_BASE}${path}`;
+      const url = `${baseUrl}${PAPERLESS_API_BASE}${path}`;
       const { data } = await firstValueFrom(
         this.httpService.get<T>(url, {
-          headers: this.createHeaders(),
+          headers: this.createHeaders(apiToken),
           timeout: 10_000,
         }),
       );
@@ -98,15 +124,16 @@ export class PaperlessNgxService implements IPaperlessAdapter {
     resource: 'correspondents' | 'document_types' | 'tags',
     id: number,
   ): Promise<string | null> {
-    if (!this.isConfigured()) return null;
+    const { enabled, baseUrl, apiToken } = await this.runtimeConfig();
+    if (!enabled || baseUrl.length === 0 || apiToken.length === 0) return null;
 
     try {
-      const url = `${this.baseUrl}${PAPERLESS_API_BASE}/${resource}/${id}/`;
+      const url = `${baseUrl}${PAPERLESS_API_BASE}/${resource}/${id}/`;
       const { data } = await firstValueFrom(
         this.httpService.get<PaperlessApiCorrespondent | PaperlessApiDocumentType | PaperlessApiTag>(
           url,
           {
-            headers: this.createHeaders(),
+            headers: this.createHeaders(apiToken),
             timeout: 10_000,
           },
         ),
@@ -132,9 +159,9 @@ export class PaperlessNgxService implements IPaperlessAdapter {
       .map((r) => r.value);
   }
 
-  private buildDeepLink(paperlessId: number): string {
-    const base = this.baseUrl;
-    return `${base}/documents/${paperlessId}/`;
+  private async buildDeepLink(paperlessId: number): Promise<string> {
+    const { baseUrl } = await this.runtimeConfig();
+    return `${baseUrl}/documents/${paperlessId}/`;
   }
 
   private logError(method: string, path: string, err: unknown): void {
@@ -152,7 +179,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
   }
 
   async getDeepLink(paperlessId: number): Promise<string | null> {
-    if (!this.isConfigured()) return null;
+    if (!(await this.isConfigured())) return null;
 
     const doc = await this.get<PaperlessApiDocument>(`/documents/${paperlessId}/`);
     if (!doc) return null;
@@ -161,7 +188,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
   }
 
   async getDocumentMetadata(paperlessId: number): Promise<PaperlessDocumentMetadata | null> {
-    if (!this.isConfigured()) return null;
+    if (!(await this.isConfigured())) return null;
 
     const doc = await this.get<PaperlessApiDocument>(`/documents/${paperlessId}/`);
     if (!doc) return null;
@@ -195,7 +222,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
   }
 
   async syncDocument(paperlessId: number): Promise<PaperlessSyncResult> {
-    if (!this.isConfigured()) {
+    if (!(await this.isConfigured())) {
       return {
         success: false,
         paperlessId: null,
@@ -217,7 +244,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
     return {
       success: true,
       paperlessId: doc.id,
-      deepLink: this.buildDeepLink(doc.id),
+      deepLink: await this.buildDeepLink(doc.id),
     };
   }
 
@@ -230,7 +257,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
    * Paginierungsparameter (page, pageSize) einfuehren.
    */
   async searchDocuments(query: string): Promise<PaperlessSearchResult[]> {
-    if (!this.isConfigured()) return [];
+    if (!(await this.isConfigured())) return [];
 
     const result = await this.get<{ results: PaperlessApiDocument[] }>(
       `/documents/?query=${encodeURIComponent(query)}`,
@@ -252,7 +279,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
         return {
           paperlessId: doc.id,
           title: doc.title ?? '(kein Titel)',
-          deepLink: this.buildDeepLink(doc.id),
+          deepLink: await this.buildDeepLink(doc.id),
           tags,
           correspondent,
         } satisfies PaperlessSearchResult;
@@ -265,13 +292,14 @@ export class PaperlessNgxService implements IPaperlessAdapter {
   }
 
   async healthCheck(): Promise<boolean> {
-    if (!this.isConfigured()) return false;
+    const { enabled, baseUrl, apiToken } = await this.runtimeConfig();
+    if (!enabled || baseUrl.length === 0 || apiToken.length === 0) return false;
 
     try {
-      const url = `${this.baseUrl}${PAPERLESS_API_BASE}/`;
+      const url = `${baseUrl}${PAPERLESS_API_BASE}/`;
       const { status } = await firstValueFrom(
         this.httpService.get(url, {
-          headers: this.createHeaders(),
+          headers: this.createHeaders(apiToken),
           timeout: 5_000,
         }),
       );

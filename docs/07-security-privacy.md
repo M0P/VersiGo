@@ -94,3 +94,40 @@
 - Nur technische Bootstrap-Secrets in Docker-Umgebung.
 - API-Keys im verschlüsselten Settings-Store in der Datenbank.
 - Rotation über Admin-UI.
+
+## Zentrale Systemkonfiguration (AP-17)
+
+### Verschlüsselung
+- UI-gesetzte Secrets werden mit **AES-256-GCM** verschlüsselt
+  (`SETTINGS_ENCRYPTION_KEY`, 64 Hex-Zeichen) in
+  `GlobalIntegrationSetting.valueEncrypted` persistiert.
+- Secrets werden **niemals** im Klartext zurückgegeben, geloggt oder in
+  Audit-Diffs gespeichert. Die API liefert nur `secretSet` (gesetzt/nicht
+  gesetzt); die UI zeigt ausschließlich „••••••••" bzw. „Nicht gesetzt".
+- `.env`-Secret-Werte werden nie vollständig oder als Teilwerte offenbart;
+  Konfigurationsmetadaten enthalten keine Infrastruktur- oder Secret-Leaks.
+
+### Allowlist und Infrastruktur-Grenze
+- Nur katalogisierte Schlüssel sind setzbar (versionierte Allowlist, siehe
+  `docs/13-settings-catalog.md`). Unbekannte `.env`-Namen/JSON werden
+  abgewiesen.
+- **Bootstrap-Schlüssel** (DB/Redis-Verbindungsstrings, Root-Secrets,
+  Session-/Verschlüsselungs-Schlüssel, Ports, Pfade, TLS/Proxy,
+  Auth-Boot-Flags) sind ausschließlich Environment/Compose: nie über die UI
+  speicher-, anzeige- oder überschreibbar (API: `ForbiddenException`).
+
+### Berechtigungsgrenzen
+- Systemeinstellungen: nur `ADMIN` (RolesGuard, serverseitig erzwungen).
+- Profil/Präferenzen: nur `USER`/`ADMIN`, ausschließlich auf den eigenen
+  Nutzer bezogen; `READ_ONLY` erhält über direkte Anfragen keinerlei Werte
+  (403).
+
+### Sichere Connectivity-Tests
+- Nur für als testbar markierte Schlüssel, mit 5-s-Abort und ohne Preisgabe
+  geheimer Werte. `HTTP < 500` gilt als „erreichbar" (auch 401/403 beweisen
+  Laufzeit, ohne Response-Inhalte zu verarbeiten).
+
+### Audit-Redaction
+- `SYSTEM_CONFIG_UPSERTED`/`SYSTEM_CONFIG_RESET`: `diffJson` enthält nur
+  `{ key, redacted: true }` – nie Werte oder Secrets.
+- `PROFILE_UPDATED`: nur Feldnamen.
