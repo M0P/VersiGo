@@ -265,6 +265,23 @@ model UserPreference {
   @@map("user_preferences")
 }
 
+// --- AP-19: Worker-Heartbeat fuer Health-/Readiness-Monitoring --------------
+//
+// Der Worker schreibt regelmaessig einen Heartbeat (Upsert auf workerId),
+// die API liest den aktuellsten Eintrag fuer GET /ready. Enthaelt keine
+// sensiblen Daten, nur Identitaet + Zeitstempel.
+
+model WorkerHeartbeat {
+  id            String   @id @default(uuid())
+  workerId      String   @unique
+  instanceLabel String
+  startedAt     DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+
+  @@index([lastSeenAt])
+  @@map("worker_heartbeats")
+}
+
 // --- Audit-Event-Grundstruktur ----------------------------------------------
 
 model AuditEvent {

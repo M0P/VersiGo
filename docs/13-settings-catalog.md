@@ -122,6 +122,9 @@ setzbar; die Admin-API lehnt diese Schlüssel ab (`ForbiddenException`):
 | `OIDC_ENABLED`, `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_CALLBACK_URL` | Authentifizierung | Boot-/Fail-Fast-Logik, Client-Secret |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Speicher | Infrastruktur-Secrets |
 | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Speicher | Infrastruktur-Secrets |
+| `WORKER_HEALTH_PORT` | Worker Health | Liveness-Port (intern, nicht publiziert) |
+| `WORKER_HEARTBEAT_INTERVAL_MS` | Worker Health | Heartbeat-Intervall (Grundlage für `GET /ready`) |
+| `WORKER_HEARTBEAT_TIMEOUT_MS` | Worker Health | Heartbeat-Timeout (`worker: down` in `GET /ready`) |
 
 ## Persönliche Profileinstellungen (versionierte Allowlist)
 

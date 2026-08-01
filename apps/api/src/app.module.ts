@@ -14,10 +14,12 @@ import { CostTrackingModule } from './features/cost-tracking/cost-tracking.modul
 import { DocumentsModule } from './features/documents/documents.module';
 import { FamilySharingModule } from './features/family-sharing/family-sharing.module';
 import { IdentityModule } from './features/identity/identity.module';
+import { MonitoringModule } from './features/monitoring/monitoring.module';
 import { NotificationsModule } from './features/notifications/notifications.module';
 import { PaperlessNgxModule } from './features/paperless-ngx/paperless-ngx.module';
 import { PolicyRegistryModule } from './features/policy-registry/policy-registry.module';
 import { PortalConnectorsModule } from './features/portal-connectors/portal-connectors.module';
+import { PrivacyModule } from './features/privacy/privacy.module';
 import { ProfileModule } from './features/profile/profile.module';
 import { SystemConfigModule } from './features/system-config/system-config.module';
 import { UserPreferencesModule } from './features/user-preferences/user-preferences.module';
@@ -42,6 +44,8 @@ import { UserPreferencesModule } from './features/user-preferences/user-preferen
     PortalConnectorsModule,
     AdminSettingsModule,
     AuditModule,
+    MonitoringModule,
+    PrivacyModule,
     NotificationsModule,
     PaperlessNgxModule,
     UserPreferencesModule,

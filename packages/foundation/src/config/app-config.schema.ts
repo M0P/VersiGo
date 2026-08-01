@@ -69,6 +69,15 @@ export const appConfigSchema = z
     APP_PORT: z.coerce.number().int().positive().default(3001),
     WEB_PORT: z.coerce.number().int().positive().default(3000),
 
+    // AP-19: Worker-Liveness-Server + Heartbeat. WORKER_HEALTH_PORT wird nur
+    // innerhalb des Container-Netzwerks genutzt (Compose-Healthcheck), nie
+    // nach aussen publiziert. WORKER_HEARTBEAT_TIMEOUT_MS bestimmt, ab wann
+    // die API den Worker in /ready als 'down' meldet (nicht als bereit-
+    // heitsrelevant fuer die API selbst, nur als Status-Information).
+    WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(3100),
+    WORKER_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(15_000),
+    WORKER_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
+
     // AP-16: Erlaubte Browser-Origins fuer CORS (Komma-separierte Liste).
     // Die Web-App (Standard: http://localhost:3000) ruft die API cross-origin
     // mit credentials:'include' auf; ohne enableCors blockiert der Browser

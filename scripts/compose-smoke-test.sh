@@ -472,6 +472,149 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   grep -qF '"available":false' /tmp/insura-smoke-plugin-health.json || { echo "FAILED: Plugin-Health muss available:false melden"; exit 1; }
   echo "   Katalog, Katalog-Eintrag, 404, Plugins, Plugin-Health: OK (degradiert, nie 500)"
   echo "   PASS"
+
+  # AP-19: Worker-Liveness-Endpunkt (nur intern, daher im Container geprueft).
+  # Der Port folgt WORKER_HEALTH_PORT (Default 3100) wie beim Compose-Healthcheck.
+  echo "8g. Testing worker liveness endpoint (WORKER_HEALTH_PORT/health)..."
+  WORKER_LIVENESS=$($COMPOSE exec -T worker node -e "
+    require('http').get('http://127.0.0.1:' + (process.env.WORKER_HEALTH_PORT || '3100') + '/health', (r) => {
+      let body = '';
+      r.on('data', (c) => (body += c));
+      r.on('end', () => { console.log(r.statusCode + ' ' + body); process.exit(r.statusCode === 200 ? 0 : 1); });
+    }).on('error', () => process.exit(1));
+  " 2>&1) || {
+    echo "FAILED: worker liveness endpoint not reachable"
+    printf '%s\n' "$WORKER_LIVENESS"
+    $COMPOSE logs worker
+    exit 1
+  }
+  echo "   Liveness: $WORKER_LIVENESS"
+  echo "$WORKER_LIVENESS" | grep -qF '"status":"ok"' || { echo "FAILED: worker liveness payload mismatch"; exit 1; }
+  echo "   PASS"
+
+  # AP-19: GET /ready weist den Worker aus dem DB-Heartbeat aus. Der Worker
+  # schreibt den Heartbeat direkt beim Boot; /ready wird daher fruehestens
+  # jetzt gepollt (der Worker lief bereits waehrend der Schritte 1-8).
+  echo "8h. Testing /ready worker heartbeat status (expect up)..."
+  READY_WORKER_UP=false
+  for i in $(seq 1 30); do
+    if curl -sf http://localhost:${APP_PORT:-3001}/ready 2>/dev/null | grep -qF '"worker":"up"'; then
+      READY_WORKER_UP=true
+      break
+    fi
+    sleep 2
+  done
+  if [ "$READY_WORKER_UP" != true ]; then
+    echo "FAILED: /ready did not report worker up (heartbeat missing?)"
+    curl -s http://localhost:${APP_PORT:-3001}/ready || true
+    exit 1
+  fi
+  echo "   Worker state: up"
+  echo "   PASS"
+
+  # AP-19: Admin-Audit-API (nur ADMIN).
+  echo "8i. Testing admin audit events API..."
+  AUDIT_STATUS=$(curl -s -o /tmp/insura-smoke-audit.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/admin/audit/events)
+  if [ "$AUDIT_STATUS" != "200" ]; then
+    echo "FAILED: /admin/audit/events returned HTTP $AUDIT_STATUS (expected 200 for ADMIN)"
+    exit 1
+  fi
+  grep -qF '"events"' /tmp/insura-smoke-audit.json || { echo "FAILED: audit list response missing events array"; exit 1; }
+  grep -qF '"total"' /tmp/insura-smoke-audit.json || { echo "FAILED: audit list response missing total"; exit 1; }
+  # Die Liste darf keine diffJson-Inhalte enthalten (hasDiff reicht).
+  if grep -qF '"diffJson"' /tmp/insura-smoke-audit.json; then
+    echo "FAILED: audit list response must not include diffJson content"
+    exit 1
+  fi
+  echo "   Audit-Liste: HTTP 200, ohne diffJson-Inhalte"
+  echo "   PASS"
+
+  # AP-19: Admin-Monitoring-API (nur ADMIN), keine Secrets/Payloads.
+  echo "8j. Testing admin monitoring API..."
+  QUEUES_STATUS=$(curl -s -o /tmp/insura-smoke-queues.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/admin/monitoring/queues)
+  if [ "$QUEUES_STATUS" != "200" ]; then
+    echo "FAILED: /admin/monitoring/queues returned HTTP $QUEUES_STATUS (expected 200 for ADMIN)"
+    exit 1
+  fi
+  grep -qF '"queue":"ai-extraction"' /tmp/insura-smoke-queues.json || { echo "FAILED: monitoring queues missing ai-extraction"; exit 1; }
+  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/insura-smoke-queues.json; then
+    echo "FAILED: secret leaked in monitoring queues response"
+    exit 1
+  fi
+  INTEG_STATUS=$(curl -s -o /tmp/insura-smoke-integrations.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/admin/monitoring/integrations)
+  if [ "$INTEG_STATUS" != "200" ]; then
+    echo "FAILED: /admin/monitoring/integrations returned HTTP $INTEG_STATUS (expected 200 for ADMIN)"
+    exit 1
+  fi
+  grep -qF '"ai"' /tmp/insura-smoke-integrations.json || { echo "FAILED: integrations response missing ai"; exit 1; }
+  grep -qF '"portalConnectors"' /tmp/insura-smoke-integrations.json || { echo "FAILED: integrations response missing portalConnectors"; exit 1; }
+  if [ -n "${PAPERLESS_API_TOKEN:-}" ] && grep -qF "$PAPERLESS_API_TOKEN" /tmp/insura-smoke-integrations.json; then
+    echo "FAILED: secret leaked in monitoring integrations response"
+    exit 1
+  fi
+  echo "   Monitoring: Queues + Integrations (inkl. Portal-Connectoren) HTTP 200, keine Secrets"
+  echo "   PASS"
+
+  # AP-19: Privacy-Export (ADMIN) – redigiert, ohne Secrets/Speicherpfade.
+  echo "8k. Testing privacy export (ADMIN)..."
+  PRIVACY_STATUS=$(curl -s -o /tmp/insura-smoke-privacy.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/privacy/export)
+  if [ "$PRIVACY_STATUS" != "200" ]; then
+    echo "FAILED: /privacy/export returned HTTP $PRIVACY_STATUS (expected 200 for ADMIN)"
+    exit 1
+  fi
+  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/insura-smoke-privacy.json || { echo "FAILED: privacy export missing username"; exit 1; }
+  if grep -qF '"passwordHash"' /tmp/insura-smoke-privacy.json; then
+    echo "FAILED: privacy export must not contain passwordHash"
+    exit 1
+  fi
+  if grep -qF '"storageRef"' /tmp/insura-smoke-privacy.json; then
+    echo "FAILED: privacy export must not contain storageRef"
+    exit 1
+  fi
+  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/insura-smoke-privacy.json; then
+    echo "FAILED: secret leaked in privacy export"
+    exit 1
+  fi
+  echo "   Privacy-Export: HTTP 200, redigiert (kein passwordHash/storageRef)"
+  echo "   PASS"
+
+  # AP-19: Privacy ohne Session -> 401.
+  echo "8l. Rejecting unauthenticated privacy access..."
+  PRIVACY_UNAUTH=$(curl -s -o /dev/null -w "%{http_code}" \
+    http://localhost:${APP_PORT:-3001}/privacy/export)
+  if [ "$PRIVACY_UNAUTH" != "401" ]; then
+    echo "FAILED: unauthenticated /privacy/export should return 401, got $PRIVACY_UNAUTH"
+    exit 1
+  fi
+  echo "   PASS"
+
+  # AP-19: Letzter-Admin-Schutz der Kontoloeschung (ADMIN ist der einzige
+  # aktive Admin -> 409 Conflict; es wird nichts geloescht).
+  echo "8m. Testing last-admin deletion protection (expect 409)..."
+  DELETE_ACCOUNT_STATUS=$(curl -s -o /tmp/insura-smoke-delete.json -w "%{http_code}" \
+    -X DELETE http://localhost:${APP_PORT:-3001}/privacy/account \
+    -b /tmp/insura-smoke-cookies-2.txt)
+  if [ "$DELETE_ACCOUNT_STATUS" != "409" ]; then
+    echo "FAILED: DELETE /privacy/account should return 409 for the last active admin, got $DELETE_ACCOUNT_STATUS"
+    cat /tmp/insura-smoke-delete.json
+    exit 1
+  fi
+  ADMIN_STILL_THERE=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" \
+    -tAc "SELECT count(*) FROM users WHERE username = '${ADMIN_USERNAME}' AND role = 'ADMIN' AND status = 'ACTIVE';" | tr -d '[:space:]')
+  if [ "$ADMIN_STILL_THERE" != "1" ]; then
+    echo "FAILED: last-admin protection did not prevent account deletion"
+    exit 1
+  fi
+  echo "   Last-Admin: 409, Konto unveraendert vorhanden"
+  echo "   PASS"
 else
   echo "5. Skipping local admin login check (LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD not configured)."
 fi

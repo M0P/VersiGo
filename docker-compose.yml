@@ -150,6 +150,10 @@ services:
       OIDC_ENABLED: "${OIDC_ENABLED:-}"
       AI_ENABLED: "${AI_ENABLED:-false}"
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      # AP-19: Worker-Health (Liveness-Port + Heartbeat-Intervall/Timeout)
+      WORKER_HEALTH_PORT: "${WORKER_HEALTH_PORT:-3100}"
+      WORKER_HEARTBEAT_INTERVAL_MS: "${WORKER_HEARTBEAT_INTERVAL_MS:-15000}"
+      WORKER_HEARTBEAT_TIMEOUT_MS: "${WORKER_HEARTBEAT_TIMEOUT_MS:-45000}"
     command: ["node", "apps/worker/dist/apps/worker/src/main.js"]
     volumes:
       - uploads-data:/data/uploads
@@ -160,6 +164,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      # Port aus WORKER_HEALTH_PORT lesen (Default 3100), damit der
+      # Healthcheck dem konfigurierten Liveness-Port folgt.
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:' + (process.env.WORKER_HEALTH_PORT || '3100') + '/health', r => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # ============================================================
   # Web (Next.js Frontend)

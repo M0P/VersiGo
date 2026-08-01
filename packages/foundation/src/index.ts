@@ -2,6 +2,7 @@ export * from './config';
 export * from './database';
 export * from './redis-health';
 export * from './health';
+export * from './worker-health';
 export * from './capabilities';
 export * from './encryption';
 export * from './queue';

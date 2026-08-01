@@ -90,6 +90,31 @@
 - Export- und Löschfunktionen für personenbezogene Daten.
 - Vollständiges Audit für Zugriff auf sensible Dokumente.
 
+## Datenschutz-Praxis (AP-19, GDPR)
+
+### Export (`GET /privacy/export`)
+- Nur die **eigene** Session-Identität (`@CurrentUser`), niemals Pfad- oder
+  Query-Parameter → kein IDOR.
+- Rollengrenze: `USER`/`ADMIN` (Rollenhierarchie); `READ_ONLY` erhält 403.
+- **Redaktion:** Der Export enthält nie Passwort-Hashes, verschlüsselte
+  Settings-Werte, Speicherpfade/`storageRef`, Portal-URLs oder
+  Portal-Zugangsdaten (nur `providerKey`/Sync-Metadaten), Binärdateien oder
+  rohe AI-Payloads. Keine Konfigurationswerte oder Secrets.
+
+### Kontolöschung (`DELETE /privacy/account`)
+- Letzter-Admin-Schutz: Der letzte aktive `ADMIN` kann sein Konto nicht
+  löschen (409 `ConflictException`), um einen System-Lockout zu verhindern.
+- **Audit vor der Löschung:** `PRIVACY_ACCOUNT_DELETED` wird *vor* dem
+  User-Delete geschrieben; `actorUserId` wird danach per `ON DELETE SET NULL`
+  neutralisiert, der Eintrag bleibt als revisionssicherer Trail erhalten.
+- Löschsemantik (eine Transaktion): eigene Policen kaskadieren
+  (versicherte Personen, Kosten, Dokumente, Portal-Links, AI-Jobs) →
+  Household-Mitgliedschaften auflösen → Household nur löschen, wenn weder
+  Mitglieder noch Policen verbleiben → User löschen.
+- **Physische Dateibereinigung nach DB-Commit:** Nur Dateien innerhalb des
+  Storage-Roots werden entfernt (Path-Traversal-Schutz); fehlende Dateien
+  (ENOENT) werden toleriert, Fehler werden geloggt und werfen nie.
+
 ## Secrets
 - Nur technische Bootstrap-Secrets in Docker-Umgebung.
 - API-Keys im verschlüsselten Settings-Store in der Datenbank.

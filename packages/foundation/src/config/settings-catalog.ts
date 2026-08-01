@@ -538,6 +538,54 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     connectivityTestable: false,
     permission: 'ADMIN',
   },
+
+  // ====================== Worker Health ======================
+  {
+    key: 'WORKER_HEALTH_PORT',
+    envVar: 'WORKER_HEALTH_PORT',
+    category: 'bootstrap',
+    type: 'number',
+    group: 'Worker Health',
+    description:
+      'Interner Port des minimalen Worker-Liveness-Servers (GET /health). ' +
+      'Nur Environment/Compose, wird nicht nach aussen publiziert.',
+    defaultValue: 3100,
+    min: 1024,
+    max: 65535,
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
+  {
+    key: 'WORKER_HEARTBEAT_INTERVAL_MS',
+    envVar: 'WORKER_HEARTBEAT_INTERVAL_MS',
+    category: 'bootstrap',
+    type: 'number',
+    group: 'Worker Health',
+    description:
+      'Intervall in Millisekunden, in dem der Worker seinen Heartbeat in ' +
+      'PostgreSQL schreibt (Grundlage fuer worker up/down in GET /ready). ' +
+      'Nur Environment/Compose.',
+    defaultValue: 15_000,
+    min: 1_000,
+    max: 3_600_000,
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
+  {
+    key: 'WORKER_HEARTBEAT_TIMEOUT_MS',
+    envVar: 'WORKER_HEARTBEAT_TIMEOUT_MS',
+    category: 'bootstrap',
+    type: 'number',
+    group: 'Worker Health',
+    description:
+      'Zeitfenster in Millisekunden, nach dem ein Heartbeat als veraltet gilt ' +
+      '(Worker wird in GET /ready als "down" ausgewiesen). Nur Environment/Compose.',
+    defaultValue: 45_000,
+    min: 1_000,
+    max: 3_600_000,
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
 ] as const;
 
 const CATALOG_BY_KEY: ReadonlyMap<string, SettingDefinition> = new Map(

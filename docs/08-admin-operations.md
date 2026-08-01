@@ -56,7 +56,23 @@ LOCAL_ADMIN_PASSWORD=change-me
 | Endpoint | Typ | Beschreibung |
 |----------|-----|-------------|
 | `GET /health` | Liveness | Gibt `{"status":"ok"}` zurück |
-| `GET /ready` | Readiness | Prüft DB, Redis und Capabilities; gibt `{"status":"ready","database":"up","redis":"up","capabilities":{...}}` zurück |
+| `GET /ready` | Readiness | Prüft DB, Redis und Capabilities; gibt `{"status":"ready","database":"up","redis":"up","capabilities":{...}}` zurück; zusätzlich `worker`-Feld (`up`/`down`/`unknown`) aus dem Heartbeat (AP-19, informativ) |
+| `GET :3100/health` (Worker) | Liveness | Worker-Liveness-Server auf `WORKER_HEALTH_PORT` (Standard 3100, nur intern); Grundlage des Compose-Healthchecks |
+
+### Admin-API (AP-19)
+
+| Endpoint | Rolle | Beschreibung |
+|----------|-------|-------------|
+| `GET /admin/audit/events` | `ADMIN` | Audit-Liste (ohne `diffJson`-Inhalte, Filter + Paginierung) |
+| `GET /admin/audit/events/:id` | `ADMIN` | Audit-Detail inkl. redigiertem Diff |
+| `GET /admin/monitoring/queues` | `ADMIN` | Queue-Zähler (BullMQ) |
+| `GET /admin/monitoring/queues/failed` | `ADMIN` | Fehlgeschlagene Jobs (redigiert) |
+| `POST /admin/monitoring/queues/failed/:jobId/retry` | `ADMIN` | Job erneut einreihen |
+| `GET /admin/monitoring/ai-jobs` | `ADMIN` | AI-Job-Übersicht (ohne Fehlermeldungen/Payloads) |
+| `GET /admin/monitoring/integrations` | `ADMIN` | Integrationsstatus ohne Secrets |
+
+Redaktions-Policy: Alle Monitoring-Antworten enthalten niemals Job-Payloads,
+URLs, Tokens oder Zugangsdaten (siehe `docs/05-feature-slices.md`).
 
 ### Backup
 
@@ -180,8 +196,9 @@ Migrationen laufen automatisch über den `migration`-Service.
   (ohne Werte/Secrets).
 
 ## Betriebsfunktionen
-- Health-Checks pro Modul
+- Health-Checks pro Modul (API `/health`, `/ready` inkl. Worker-Zustand; Worker-Liveness `:3100/health`)
 - Migrationsstatus
-- Queue-Status und Retry
-- Provider-Connectivity-Test
+- Queue-Status und Retry (`/admin/monitoring/*`, AP-19)
+- Integrations-/Connectivity-Status (`/admin/monitoring/integrations`, ohne Secrets;
+  inkl. Portal-Connector-Plugins mit `available`/`healthy`, gekürzter `reason`)
 - Konfigurationsvalidierung

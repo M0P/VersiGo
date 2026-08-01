@@ -7,6 +7,7 @@ import {
   CapabilityFlagsModule,
   QueueFoundationModule,
   SettingsFoundationModule,
+  WorkerHealthFoundationModule,
 } from '@insura/foundation';
 import { AiExtractionProcessor } from './ai-extraction.processor';
 
@@ -22,6 +23,7 @@ import { AiExtractionProcessor } from './ai-extraction.processor';
     CapabilityFlagsModule,
     QueueFoundationModule,
     SettingsFoundationModule,
+    WorkerHealthFoundationModule,
 
     // AI-Extraktions-Queue (muss mit API-Queue-Namen uebereinstimmen)
     BullModule.registerQueue({

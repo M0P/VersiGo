@@ -67,8 +67,22 @@ Empfohlen wird ein **modularer Monolith** mit vertikal geschnittenen Feature-Sli
 | redis | `redis-cli ping` | – |
 | api | `GET /health` (liveness), `GET /ready` (readiness) | db, redis |
 | web | HTTP 200 on `/` | api |
-| worker | – (kein HTTP) | db, redis |
+| worker | `GET :3100/health` (Liveness-Server, AP-19) | db, redis |
 | storage | MinIO health endpoint | – |
+
+### Worker Health (AP-19)
+- Der Worker startet beim Boot einen minimalen **Liveness-Server** auf
+  `WORKER_HEALTH_PORT` (Standard `3100`, nur intern, nicht nach außen
+  publiziert): `GET /health` und `GET /` antworten mit `{"status":"ok"}`,
+  alles andere mit 404. Grundlage für den Compose-Healthcheck des Workers.
+- Der Worker schreibt zusätzlich einen **Heartbeat** (Upsert auf `workerId`)
+  in die Tabelle `worker_heartbeats` (PostgreSQL, Intervall
+  `WORKER_HEARTBEAT_INTERVAL_MS`, Standard 15 s). Die API liest den
+  aktuellsten Heartbeat für `GET /ready` und weist den Worker-Zustand als
+  `up` / `down` / `unknown` aus – **informativ**, er kippt den Gesamtstatus
+  nie (die API bleibt ready, auch wenn der Worker fehlt).
+- `start()` wird ausschließlich im Worker-Prozess aufgerufen; die API injiziert
+  denselben Service, nutzt aber nur den lesenden `getStatus()`-Pfad.
 
 ### Startup-Reihenfolge
 1. `db` – PostgreSQL startet und wird healthy.

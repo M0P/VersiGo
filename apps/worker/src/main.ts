@@ -1,7 +1,11 @@
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { preloadRestartSettingsIntoEnv } from '@insura/foundation';
+import {
+  preloadRestartSettingsIntoEnv,
+  WorkerHeartbeatService,
+  WorkerLivenessService,
+} from '@insura/foundation';
 import { WorkerModule } from './worker.module';
 
 /**
@@ -14,6 +18,11 @@ import { WorkerModule } from './worker.module';
  * "restart") aus der Datenbank in process.env geschrieben, damit sie ab
  * dem ersten Prozessstart wirken (Fail-soft bei nicht erreichbarer DB).
  *
+ * AP-19: Nach dem Bootstrap startet der Worker seinen Heartbeat
+ * (Datenbank-Upsert fuer GET /ready der API) und einen minimalen
+ * Liveness-Server (WORKER_HEALTH_PORT, Standard 3100) fuer den
+ * Compose-Healthcheck.
+ *
  * Hinweis: createApplicationContext() emittiert – anders als der
  * HTTP-Server (`NestFactory.create`) – kein 'Nest application
  * successfully started'. Der Worker loggt daher nach erfolgreichem
@@ -25,6 +34,10 @@ async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.createApplicationContext(WorkerModule);
   app.enableShutdownHooks();
+
+  // AP-19: Health-/Readiness-Grundlage des Workers
+  app.get(WorkerHeartbeatService).start();
+  app.get(WorkerLivenessService).start();
 
   new Logger('WorkerBootstrap').log(
     'Worker bereit - Queue-Infrastruktur verbunden (PostgreSQL + Redis).',
