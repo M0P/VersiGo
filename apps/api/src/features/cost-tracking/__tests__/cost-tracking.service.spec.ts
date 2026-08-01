@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CostTrackingService } from '../cost-tracking.service';
 import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PaymentFrequency } from '@prisma/client';
+import { PaymentFrequency, GlobalRole, UserStatus } from '@prisma/client';
+import { AuthService } from '../../identity/auth.service';
 
 function createMockDb() {
   const db: Record<string, unknown> & {
@@ -28,10 +29,21 @@ describe('CostTrackingService', () => {
   const userId = 'user-1';
   const policyId = 'policy-1';
   const entryId = 'entry-1';
+  const user = {
+    id: userId,
+    username: 'user-1',
+    displayName: 'User 1',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [] as { householdId: string }[],
+  };
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new CostTrackingService(mockDb as never);
+    service = new CostTrackingService(
+      mockDb as never,
+      new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+    );
   });
 
   describe('create', () => {
@@ -112,7 +124,7 @@ describe('CostTrackingService', () => {
         { id: 'e2', policyId, grossAmount: 200, frequency: 'ANNUAL' },
       ]);
 
-      const result = await service.findAll(householdId, userId, policyId);
+      const result = await service.findAll(householdId, user, policyId);
 
       expect(result).toHaveLength(2);
       expect(mockDb.policyCostEntry.findMany).toHaveBeenCalledWith(
@@ -128,7 +140,7 @@ describe('CostTrackingService', () => {
       mockDb.policyCostEntry.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.findOne(householdId, userId, policyId, 'nonexistent'),
+        service.findOne(householdId, user, policyId, 'nonexistent'),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -142,7 +154,7 @@ describe('CostTrackingService', () => {
         frequency: 'QUARTERLY',
       });
 
-      const result = await service.findOne(householdId, userId, policyId, entryId);
+      const result = await service.findOne(householdId, user, policyId, entryId);
 
       expect(result.id).toBe(entryId);
     });
@@ -226,7 +238,7 @@ describe('CostTrackingService', () => {
         validTo: null,
       });
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result).not.toBeNull();
       expect(result!.annualGross).toBe(1200);
@@ -247,7 +259,7 @@ describe('CostTrackingService', () => {
         validTo: null,
       });
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result!.annualGross).toBe(5000);
       expect(result!.annualNet).toBe(4800);
@@ -265,7 +277,7 @@ describe('CostTrackingService', () => {
         validTo: null,
       });
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result!.annualGross).toBe(1200);
     });
@@ -282,7 +294,7 @@ describe('CostTrackingService', () => {
         validTo: null,
       });
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result!.annualGross).toBe(1200);
     });
@@ -292,7 +304,7 @@ describe('CostTrackingService', () => {
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyCostEntry.findFirst.mockResolvedValue(null);
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result).toBeNull();
     });
@@ -309,7 +321,7 @@ describe('CostTrackingService', () => {
         validTo: null,
       });
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result!.annualGross).toBe(2400);
       expect(result!.calculationBasis.entryId).toBe('newer-entry');
@@ -328,7 +340,7 @@ describe('CostTrackingService', () => {
           validTo: null,
         });
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result!.annualGross).toBe(2400);
       expect(result!.calculationBasis.entryId).toBe('active-entry');
@@ -349,7 +361,7 @@ describe('CostTrackingService', () => {
           validTo: new Date('2023-12-31'),
         });
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result!.annualGross).toBeCloseTo(1200, 0);
       expect(result!.calculationBasis.entryId).toBe('expired-entry');
@@ -367,7 +379,7 @@ describe('CostTrackingService', () => {
         validTo: new Date('2025-12-31'),
       });
 
-      const result = await service.getAnnualCost(householdId, userId, policyId);
+      const result = await service.getAnnualCost(householdId, user, policyId);
 
       expect(result).not.toBeNull();
       expect(result!.annualGross).toBeCloseTo(604.93, 1);
@@ -377,7 +389,7 @@ describe('CostTrackingService', () => {
   describe('getYearComparison', () => {
     it('wirft BadRequestException bei NaN-Jahr', async () => {
       await expect(
-        service.getYearComparison(householdId, userId, policyId, NaN),
+        service.getYearComparison(householdId, user, policyId, NaN),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -402,7 +414,7 @@ describe('CostTrackingService', () => {
           validTo: null,
         });
 
-      const result = await service.getYearComparison(householdId, userId, policyId, 2025);
+      const result = await service.getYearComparison(householdId, user, policyId, 2025);
 
       expect(result).not.toBeNull();
       expect(result!.currentYear.annualGross).toBe(2400);
@@ -417,7 +429,7 @@ describe('CostTrackingService', () => {
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyCostEntry.findFirst.mockResolvedValue(null);
 
-      const result = await service.getYearComparison(householdId, userId, policyId, 2025);
+      const result = await service.getYearComparison(householdId, user, policyId, 2025);
 
       expect(result).toBeNull();
     });
@@ -436,7 +448,7 @@ describe('CostTrackingService', () => {
         })
         .mockResolvedValueOnce(null);
 
-      const result = await service.getYearComparison(householdId, userId, policyId, 2025);
+      const result = await service.getYearComparison(householdId, user, policyId, 2025);
 
       expect(result).not.toBeNull();
       expect(result!.currentYear.annualGross).toBe(100);
@@ -458,7 +470,7 @@ describe('CostTrackingService', () => {
           validTo: new Date('2023-12-31'),
         });
 
-      const result = await service.getYearComparison(householdId, userId, policyId, 2025);
+      const result = await service.getYearComparison(householdId, user, policyId, 2025);
 
       expect(result).not.toBeNull();
       expect(result!.currentYear.annualGross).toBeCloseTo(703.56, 1);
@@ -485,7 +497,7 @@ describe('CostTrackingService', () => {
           validTo: null,
         });
 
-      const result = await service.getYearComparison(householdId, userId, policyId, 2025);
+      const result = await service.getYearComparison(householdId, user, policyId, 2025);
 
       expect(result!.absoluteChange).toBe(0);
       expect(result!.percentageChange).toBe(0);
@@ -515,7 +527,7 @@ describe('CostTrackingService', () => {
         },
       ]);
 
-      const result = await service.getHouseholdSummary(householdId, userId);
+      const result = await service.getHouseholdSummary(householdId, user);
 
       expect(result.policyCount).toBe(2);
       expect(result.totalAnnualGross).toBe(1700);
@@ -527,7 +539,7 @@ describe('CostTrackingService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([]);
 
-      const result = await service.getHouseholdSummary(householdId, userId);
+      const result = await service.getHouseholdSummary(householdId, user);
 
       expect(result.policyCount).toBe(0);
       expect(result.totalAnnualGross).toBe(0);
@@ -557,7 +569,7 @@ describe('CostTrackingService', () => {
         },
       ]);
 
-      const result = await service.getHouseholdSummary(householdId, userId);
+      const result = await service.getHouseholdSummary(householdId, user);
 
       expect(result.policyCount).toBe(2);
       expect(result.totalAnnualGross).toBe(1000);
@@ -576,7 +588,7 @@ describe('CostTrackingService', () => {
         },
       ]);
 
-      const result = await service.getHouseholdSummary(householdId, userId);
+      const result = await service.getHouseholdSummary(householdId, user);
 
       expect(result.policyCount).toBe(1);
       expect(result.perType).toHaveProperty('KFZ');
@@ -597,7 +609,7 @@ describe('CostTrackingService', () => {
         },
       ]);
 
-      const result = await service.getHouseholdSummary(householdId, userId);
+      const result = await service.getHouseholdSummary(householdId, user);
 
       expect(result.policyCount).toBe(1);
       expect(result.totalAnnualGross).toBe(2400);
@@ -609,7 +621,7 @@ describe('CostTrackingService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.findAll(householdId, userId, policyId),
+        service.findAll(householdId, user, policyId),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -617,7 +629,7 @@ describe('CostTrackingService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.getAnnualCost(householdId, userId, policyId),
+        service.getAnnualCost(householdId, user, policyId),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -625,7 +637,7 @@ describe('CostTrackingService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.getHouseholdSummary(householdId, userId),
+        service.getHouseholdSummary(householdId, user),
       ).rejects.toThrow(ForbiddenException);
     });
   });

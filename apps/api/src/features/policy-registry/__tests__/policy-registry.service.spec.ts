@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PolicyRegistryService } from '../policy-registry.service';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { GlobalRole, UserStatus } from '@prisma/client';
+import { AuthService } from '../../identity/auth.service';
 
 function createMockDb() {
   const db: Record<string, unknown> & {
@@ -28,10 +30,21 @@ describe('PolicyRegistryService', () => {
   const householdId = 'household-1';
   const userId = 'user-1';
   const policyId = 'policy-1';
+  const user = {
+    id: userId,
+    username: 'user-1',
+    displayName: 'User 1',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [] as { householdId: string }[],
+  };
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new PolicyRegistryService(mockDb as never);
+    service = new PolicyRegistryService(
+      mockDb as never,
+      new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+    );
   });
 
   describe('create', () => {
@@ -93,7 +106,7 @@ describe('PolicyRegistryService', () => {
         { id: 'p2', householdId, coveredPersons: [], portalLinks: [] },
       ]);
 
-      const result = await service.findAll(householdId, userId);
+      const result = await service.findAll(householdId, user);
 
       expect(result).toHaveLength(2);
       expect(mockDb.insurancePolicy.findMany).toHaveBeenCalledWith(
@@ -109,7 +122,7 @@ describe('PolicyRegistryService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
-      await expect(service.findOne(householdId, userId, 'nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne(householdId, user, 'nonexistent')).rejects.toThrow(NotFoundException);
     });
 
     it('gibt Policy mit allen Relationen zurueck', async () => {
@@ -123,7 +136,7 @@ describe('PolicyRegistryService', () => {
         portalLinks: [],
       });
 
-      const result = await service.findOne(householdId, userId, policyId);
+      const result = await service.findOne(householdId, user, policyId);
 
       expect(result.id).toBe(policyId);
       expect(result.coveredPersons).toHaveLength(1);

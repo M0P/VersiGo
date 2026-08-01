@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AiAssistController } from '../ai-assist.controller';
-import { UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../../identity/auth.service';
 
 type ServiceLike = {
@@ -29,8 +29,9 @@ function createMockService(): ServiceLike {
 
 const mockUser: AuthenticatedUser = {
   id: 'user-1',
-  email: 'a@example.com',
+  username: 'alice',
   displayName: 'A',
+  role: GlobalRole.USER,
   status: UserStatus.ACTIVE,
   memberships: [],
 };
@@ -70,7 +71,7 @@ describe('AiAssistController', () => {
     const result = await controller.listJobs(householdId, policyId, mockUser);
 
     expect(result).toHaveLength(1);
-    expect(service.listJobs).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
+    expect(service.listJobs).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
   it('getJobStatus delegiert an Service', async () => {
@@ -81,7 +82,7 @@ describe('AiAssistController', () => {
     const result = await controller.getJobStatus(householdId, policyId, 'job-1', mockUser);
 
     expect(result.status).toBe('COMPLETED');
-    expect(service.getJobStatus).toHaveBeenCalledWith(householdId, mockUser.id, policyId, 'job-1');
+    expect(service.getJobStatus).toHaveBeenCalledWith(householdId, mockUser, policyId, 'job-1');
   });
 
   it('summarize delegiert an Service', async () => {
@@ -111,7 +112,7 @@ describe('AiAssistController', () => {
 
     expect(result.summaryMarkdown).toBe('# Test');
     expect(result.sourceDocuments).toHaveLength(1);
-    expect(service.getLatestSummaryWithSources).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
+    expect(service.getLatestSummaryWithSources).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
   it('setDocumentExclusion delegiert an Service', async () => {

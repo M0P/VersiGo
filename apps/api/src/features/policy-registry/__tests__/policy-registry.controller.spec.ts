@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PolicyRegistryController } from '../policy-registry.controller';
-import { UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../../identity/auth.service';
 
 type ServiceLike = {
@@ -35,8 +35,9 @@ function createMockService(): ServiceLike {
 
 const mockUser: AuthenticatedUser = {
   id: 'user-1',
-  email: 'a@example.com',
+  username: 'alice',
   displayName: 'A',
+  role: GlobalRole.USER,
   status: UserStatus.ACTIVE,
   memberships: [],
 };
@@ -75,7 +76,7 @@ describe('PolicyRegistryController', () => {
     const result = await controller.findAll(householdId, mockUser);
 
     expect(result).toHaveLength(1);
-    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser.id);
+    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser);
   });
 
   it('findOne delegiert an Service', async () => {
@@ -86,7 +87,7 @@ describe('PolicyRegistryController', () => {
     const result = await controller.findOne(householdId, policyId, mockUser);
 
     expect(result).toEqual({ id: policyId });
-    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
+    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
   it('update delegiert an Service', async () => {

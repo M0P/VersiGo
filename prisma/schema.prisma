@@ -30,29 +30,35 @@ model Household {
   @@map("households")
 }
 
-// --- Identitaet (externe OIDC-Subjekt-Referenz) -----------------------------
+// --- Identitaet (lokal + OIDC) -----------------------------------------------
+//
+// AP-16/ADR-007: Der Benutzername (normalisiert: lowercase, getrimmt) ist der
+// eindeutige lokale Login-Identifier. Die E-Mail ist optional und KEIN
+// Login-Merkmal (kein eindeutiger Index).
 //
 // oidcSubject ist gemaess OIDC-Spezifikation nur innerhalb eines Issuers
 // eindeutig ("sub" ist issuer-scoped). Zwei unterschiedliche Provider
 // koennen denselben Subject-Wert vergeben. Die Eindeutigkeit wird daher
 // ausschliesslich ueber die Kombination (oidcIssuer, oidcSubject)
-// hergestellt, niemals ueber oidcSubject allein.
+// hergestellt, niemals ueber oidcSubject allein. PostgreSQL behandelt NULLs
+// in UNIQUE-Constraints als verschieden – daher koennen mehrere lokale
+// Konten ohne OIDC-Bindung koexistieren.
 //
-// HINWEIS Migration: Bestandsdaten aus der ersten AP2-Migration hatten
-// keinen oidcIssuer. Die Migration befuellt diese Datensaetze mit dem
-// Platzhalter 'unknown'. Vor dem produktiven OIDC-Rollout muss ein
-// Datenmigrationsskript diese Platzhalter durch den tatsaechlichen
-// Issuer ersetzen.
+// ADR-007: OIDC provisioniert keine Konten (kein Upsert mehr). oidcIssuer/
+// oidcSubject sind NULL, bis ein Admin die Bindung setzt. Die ehemaligen
+// Platzhalter-Issuer 'local'/'unknown' sind in der Migration entfernt worden.
 
 model User {
-  id           String   @id @default(uuid())
-  oidcIssuer   String
-  oidcSubject  String
-  email        String   @unique
+  id           String      @id @default(uuid())
+  username     String      @unique
+  role         GlobalRole  @default(USER)
+  oidcIssuer   String?
+  oidcSubject  String?
+  email        String?
   displayName  String
-  locale       String   @default("de-DE")
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime @default(now())
+  locale       String      @default("de-DE")
+  status       UserStatus  @default(ACTIVE)
+  createdAt    DateTime    @default(now())
 
   credential       Credential?
 
@@ -69,14 +75,23 @@ model User {
 enum UserStatus {
   ACTIVE
   DISABLED
+  PENDING_APPROVAL
 }
 
-// --- AP-14: Lokale Benutzeranmeldung (Benutzername/Passwort) -----------------
+// AP-16/ADR-007: Globale Rollen ersetzen die alte Household-Rolle. READ_ONLY
+// ist ein reiner Lesezugriff auf explizit freigegebene Objekte, USER ein
+// vollwertiger Household-Teilnehmer, ADMIN hat globale Admin-Rechte.
+enum GlobalRole {
+  READ_ONLY
+  USER
+  ADMIN
+}
+
+// --- AP-14/AP-16: Lokale Benutzeranmeldung (Benutzername/Passwort) -----------
 //
-// Speichert lokale Credentials fuer die Benutzeranmeldung mit Benutzername
-// und Passwort. Jeder User kann maximal einen Credential-Eintrag haben.
-// Der Identifier wird vor dem Speichern normalisiert (lowercase, getrimmt).
-// Das Passwort wird mit bcrypt gehasht; Plaintext wird nie gespeichert.
+// Speichert das lokale Passwort eines Users (1:1). Der eindeutige
+// Login-Identifier ist `users.username`; das Passwort wird mit bcrypt
+// gehasht, Plaintext wird nie gespeichert (ADR-006).
 //
 // Credentials sind unabhaengig von OIDC-Identitaeten: Ein User kann sowohl
 // ueber OIDC als auch ueber lokale Anmeldung authentifiziert werden, wenn
@@ -85,7 +100,6 @@ enum UserStatus {
 model Credential {
   id           String   @id @default(uuid())
   userId       String   @unique
-  identifier   String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -95,13 +109,16 @@ model Credential {
   @@map("credentials")
 }
 
-// --- Rollenbasis auf Household-Ebene ----------------------------------------
+// --- Mandantentrennung (reine Zugehoerigkeit, ohne Berechtigungsrolle) -------
+//
+// AP-16: Die fruehere Household-Rolle (OWNER/ADMIN/MEMBER/VIEWER) ist durch
+// die globale Rolle auf users.role ersetzt (ADR-007). Die Mitgliedschaft
+// dient ausschliesslich der Mandantenisolation.
 
 model HouseholdMembership {
   id          String   @id @default(uuid())
   householdId String
   userId      String
-  role        HouseholdRole
   createdAt   DateTime @default(now())
 
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -114,13 +131,6 @@ model HouseholdMembership {
   @@index([householdId])
   @@index([userId])
   @@map("household_memberships")
-}
-
-enum HouseholdRole {
-  OWNER
-  ADMIN
-  MEMBER
-  VIEWER
 }
 
 // --- Objektbezogene Freigaben (technische Grundlage) ------------------------

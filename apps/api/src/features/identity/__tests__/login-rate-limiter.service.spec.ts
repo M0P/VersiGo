@@ -72,6 +72,21 @@ describe('LoginRateLimiterService', () => {
       expect(client.pexpire).toHaveBeenCalledWith('login:attempts:192.168.1.1', 900_000);
     });
 
+    it('nutzt den register-Scope fuer getrennte Zaehler', async () => {
+      const client = {
+        incr: vi.fn().mockResolvedValue(1),
+        pexpire: vi.fn().mockResolvedValue('OK'),
+        get: vi.fn(),
+        del: vi.fn(),
+        status: 'ready',
+      } as unknown as Redis;
+      (service as unknown as { client: Redis }).client = client;
+
+      await service.recordAttempt('192.168.1.1', 'register');
+      expect(client.incr).toHaveBeenCalledWith('register:attempts:192.168.1.1');
+      expect(client.pexpire).toHaveBeenCalledWith('register:attempts:192.168.1.1', 900_000);
+    });
+
     it('gibt 1 bei Redis-Fehler zurueck (Fail-Open)', async () => {
       const client = {
         incr: vi.fn().mockRejectedValue(new Error('Redis down')),
@@ -130,6 +145,21 @@ describe('LoginRateLimiterService', () => {
       expect(blocked).toBe(false);
     });
 
+    it('prueft den register-Scope getrennt vom Login-Zaehler', async () => {
+      const client = {
+        incr: vi.fn(),
+        pexpire: vi.fn(),
+        get: vi.fn().mockResolvedValue('5'),
+        del: vi.fn(),
+        status: 'ready',
+      } as unknown as Redis;
+      (service as unknown as { client: Redis }).client = client;
+
+      const blocked = await service.isBlocked('192.168.1.1', 'register');
+      expect(client.get).toHaveBeenCalledWith('register:attempts:192.168.1.1');
+      expect(blocked).toBe(true);
+    });
+
     it('gibt false bei Redis-Fehler zurueck (Fail-Open)', async () => {
       const client = {
         incr: vi.fn(),
@@ -158,6 +188,20 @@ describe('LoginRateLimiterService', () => {
 
       await service.resetAttempts('192.168.1.1');
       expect(client.del).toHaveBeenCalledWith('login:attempts:192.168.1.1');
+    });
+
+    it('loescht den register-Scope-Eintrag getrennt', async () => {
+      const client = {
+        incr: vi.fn(),
+        pexpire: vi.fn(),
+        get: vi.fn(),
+        del: vi.fn().mockResolvedValue(1),
+        status: 'ready',
+      } as unknown as Redis;
+      (service as unknown as { client: Redis }).client = client;
+
+      await service.resetAttempts('192.168.1.1', 'register');
+      expect(client.del).toHaveBeenCalledWith('register:attempts:192.168.1.1');
     });
   });
 

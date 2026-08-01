@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FamilySharingController } from '../family-sharing.controller';
-import { UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import { ObjectShareScopeType, ObjectSharePermission } from '@prisma/client';
 import type { AuthenticatedUser } from '../../identity/auth.service';
 
@@ -28,8 +28,9 @@ function createMockService(): ServiceLike {
 
 const mockUser: AuthenticatedUser = {
   id: 'user-1',
-  email: 'a@example.com',
+  username: 'alice',
   displayName: 'A',
+  role: GlobalRole.USER,
   status: UserStatus.ACTIVE,
   memberships: [],
 };
@@ -68,7 +69,7 @@ describe('FamilySharingController', () => {
     const result = await controller.findAll(householdId, mockUser);
 
     expect(result).toHaveLength(1);
-    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser.id);
+    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser);
   });
 
   it('findIncoming delegiert an Service', async () => {
@@ -101,7 +102,7 @@ describe('FamilySharingController', () => {
     const result = await controller.findOne(householdId, shareId, mockUser);
 
     expect(result).toEqual({ id: shareId });
-    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser.id, shareId);
+    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser, shareId);
   });
 
   it('update delegiert an Service', async () => {
@@ -127,6 +128,6 @@ describe('FamilySharingController', () => {
     const result = await controller.remove(householdId, shareId, mockUser);
 
     expect(result.success).toBe(true);
-    expect(service.remove).toHaveBeenCalledWith(householdId, mockUser.id, shareId);
+    expect(service.remove).toHaveBeenCalledWith(householdId, mockUser, shareId);
   });
 });

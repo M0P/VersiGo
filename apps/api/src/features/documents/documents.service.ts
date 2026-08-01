@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { UploadDocumentDto, UpdateDocumentMetadataDto } from './dto/documents.dto';
 import { UploadedFile } from './documents.types';
+import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -47,6 +48,7 @@ export class DocumentsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly config: AppConfigService,
+    private readonly authService: AuthService,
   ) {
     this.storagePath = path.resolve(config.get('DOCUMENTS_STORAGE_PATH'));
   }
@@ -152,11 +154,12 @@ export class DocumentsService {
 
   async getDocumentAndPath(
     householdId: string,
-    userId: string,
+    user: AuthenticatedUser,
     policyId: string,
     docId: string,
   ): Promise<{ document: { id: string; fileName: string; mimeType: string | null }; filePath: string }> {
-    await this.assertPolicyAccess(householdId, userId, policyId);
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const document = await this.db.policyDocument.findFirst({
       where: { id: docId, policyId, archivedAt: null },
@@ -252,8 +255,9 @@ export class DocumentsService {
     });
   }
 
-  async findAll(householdId: string, userId: string, policyId: string) {
-    await this.assertPolicyAccess(householdId, userId, policyId);
+  async findAll(householdId: string, user: AuthenticatedUser, policyId: string) {
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     return this.db.policyDocument.findMany({
       where: { policyId, archivedAt: null },
@@ -262,8 +266,9 @@ export class DocumentsService {
     });
   }
 
-  async findOne(householdId: string, userId: string, policyId: string, docId: string) {
-    await this.assertPolicyAccess(householdId, userId, policyId);
+  async findOne(householdId: string, user: AuthenticatedUser, policyId: string, docId: string) {
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const document = await this.db.policyDocument.findFirst({
       where: { id: docId, policyId, archivedAt: null },

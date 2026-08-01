@@ -1,26 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RolesGuard } from '../roles.guard';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 
 type RequestLike = {
   user?: {
-    id?: string;
-    memberships: { householdId: string; role: HouseholdRole }[];
+    id: string;
+    username: string;
+    displayName: string;
+    role: GlobalRole;
+    status: UserStatus;
+    memberships: { householdId: string }[];
   };
-  params?: Record<string, string>;
-  body?: Record<string, string>;
 };
 
-function buildContext(
-  user: RequestLike['user'],
-  params: Record<string, string> = {},
-  body: Record<string, string> = {},
-): ExecutionContext {
+function buildContext(user: RequestLike['user']): ExecutionContext {
   return {
     switchToHttp: () => ({
-      getRequest: () => ({ user, params, body }),
+      getRequest: () => ({ user }),
     }),
     getHandler: () => ({}),
     getClass: () => ({}),
@@ -28,53 +26,80 @@ function buildContext(
 }
 
 describe('RolesGuard', () => {
-  const householdId = 'household-a';
-
-  const makeUser = (role: HouseholdRole) => ({
+  const makeUser = (role: GlobalRole) => ({
     id: 'user-1',
-    memberships: [{ householdId, role }],
+    username: 'u',
+    displayName: 'U',
+    role,
+    status: UserStatus.ACTIVE,
+    memberships: [],
   });
 
-  it('erlaubt Zugriff wenn Rolle ausreicht (OWNER erfuellt ADMIN-Anforderung)', () => {
-    const reflector = { getAllAndOverride: () => [HouseholdRole.ADMIN] } as unknown as Reflector;
+  it('erlaubt Zugriff wenn die globale Rolle in der Anforderung enthalten ist', () => {
+    const reflector = { getAllAndOverride: () => [GlobalRole.USER, GlobalRole.ADMIN] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
-    const ctx = buildContext(makeUser(HouseholdRole.OWNER), { householdId });
+    const ctx = buildContext(makeUser(GlobalRole.USER));
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
-  it('verweigert Zugriff wenn Rolle nicht ausreicht (VIEWER vs ADMIN)', () => {
-    const reflector = { getAllAndOverride: () => [HouseholdRole.ADMIN] } as unknown as Reflector;
+  it('erlaubt ADMIN Zugriff auf USER-Routen', () => {
+    const reflector = { getAllAndOverride: () => [GlobalRole.USER] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
-    const ctx = buildContext(makeUser(HouseholdRole.VIEWER), { householdId });
+    const ctx = buildContext(makeUser(GlobalRole.ADMIN));
+    expect(guard.canActivate(ctx)).toBe(true);
+  });
+
+  it('verweigert Zugriff wenn die Rolle nicht ausreicht (USER vs ADMIN)', () => {
+    const reflector = { getAllAndOverride: () => [GlobalRole.ADMIN] } as unknown as Reflector;
+    const guard = new RolesGuard(reflector);
+    const ctx = buildContext(makeUser(GlobalRole.USER));
+    expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
     expect(() => guard.canActivate(ctx)).toThrow('Rolle reicht');
   });
 
-  it('verweigert Zugriff ohne Membership im Ziel-Household', () => {
-    const reflector = { getAllAndOverride: () => [HouseholdRole.MEMBER] } as unknown as Reflector;
+  it('verweigert READ_ONLY Zugriff auf Schreib-Routen (nur USER/ADMIN)', () => {
+    const reflector = { getAllAndOverride: () => [GlobalRole.USER, GlobalRole.ADMIN] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
-    const ctx = buildContext(makeUser(HouseholdRole.OWNER), { householdId: 'household-b' });
-    expect(() => guard.canActivate(ctx)).toThrow('Kein Zugriff');
+    const ctx = buildContext(makeUser(GlobalRole.READ_ONLY));
+    expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
+  });
+
+  it('erlaubt READ_ONLY Zugriff auf reine Leserouten', () => {
+    const reflector = {
+      getAllAndOverride: () => [GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN],
+    } as unknown as Reflector;
+    const guard = new RolesGuard(reflector);
+    const ctx = buildContext(makeUser(GlobalRole.READ_ONLY));
+    expect(guard.canActivate(ctx)).toBe(true);
   });
 
   it('erlaubt Zugriff wenn keine Rollen gefordert sind', () => {
     const reflector = { getAllAndOverride: () => [] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
-    const ctx = buildContext(makeUser(HouseholdRole.VIEWER), { householdId });
+    const ctx = buildContext(makeUser(GlobalRole.READ_ONLY));
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
-  it.each([
-    [HouseholdRole.MEMBER, HouseholdRole.MEMBER, true],
-    [HouseholdRole.MEMBER, HouseholdRole.VIEWER, true],
-    [HouseholdRole.ADMIN, HouseholdRole.MEMBER, true],
-  ])('Rolle %s gegen Anforderung %s -> erlaubt=%s', (userRole, required, expected) => {
-    const reflector = { getAllAndOverride: () => [required] } as unknown as Reflector;
+  it('wirft ForbiddenException wenn kein User am Request haengt', () => {
+    const reflector = { getAllAndOverride: () => [GlobalRole.ADMIN] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
-    const ctx = buildContext(makeUser(userRole), { householdId });
+    const ctx = buildContext(undefined);
+    expect(() => guard.canActivate(ctx)).toThrow('Nicht authentifiziert');
+  });
+
+  it.each([
+    [GlobalRole.READ_ONLY, [GlobalRole.USER, GlobalRole.ADMIN], false],
+    [GlobalRole.USER, [GlobalRole.USER, GlobalRole.ADMIN], true],
+    [GlobalRole.ADMIN, [GlobalRole.ADMIN], true],
+    [GlobalRole.ADMIN, [GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN], true],
+  ])('Rolle %s gegen Anforderung %j -> erlaubt=%s', (userRole, required, expected) => {
+    const reflector = { getAllAndOverride: () => required } as unknown as Reflector;
+    const guard = new RolesGuard(reflector);
+    const ctx = buildContext(makeUser(userRole));
     if (expected) {
       expect(guard.canActivate(ctx)).toBe(true);
     } else {
-      expect(() => guard.canActivate(ctx)).toThrow();
+      expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
     }
   });
 });

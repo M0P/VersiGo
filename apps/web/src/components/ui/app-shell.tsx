@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from '../../contexts/theme-context';
+import { useCurrentUser, type CurrentUser } from '../../hooks/use-current-user';
 import { Icon } from './icons';
 import type { NavSection } from './nav-config';
 
@@ -12,6 +13,12 @@ type AppShellProps = {
   navSections: NavSection[];
   /** If true, the main content area uses full width. */
   wide?: boolean;
+  /**
+   * Bereits geladener User (z. B. vom Page-Level). Wenn gesetzt (auch null),
+   * loest AppShell keinen eigenen /auth/me-Request aus; ohne den Prop laedt
+   * AppShell den User selbst (ein Fetch pro Seitenaufruf, AP-16).
+   */
+  user?: CurrentUser | null;
 };
 
 /**
@@ -21,12 +28,31 @@ type AppShellProps = {
  * The sidebar is shown on tablet+ and hidden by default on mobile.
  * A hamburger toggle in the topbar opens/closes the sidebar overlay on mobile.
  */
-export function AppShell({ children, navSections, wide = false }: AppShellProps): ReactElement {
+export function AppShell({ children, navSections, wide = false, user: userProp }: AppShellProps): ReactElement {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const { toggleTheme, theme } = useTheme();
+  const hasExternalUser = userProp !== undefined;
+  // Kein zweiter /auth/me-Request, wenn der Aufrufer den User bereits kennt.
+  const { user: hookUser } = useCurrentUser({ enabled: !hasExternalUser });
+  const user = userProp !== undefined ? userProp : hookUser;
 
   const closeSidebar = () => setSidebarOpen(false);
+
+  // AP-16: Die Admin-Navigation ist nur fuer ADMIN sichtbar. READ_ONLY und
+  // USER sehen den Admin-Eintrag nicht (die Durchsetzung erfolgt serverseitig;
+  // dies ist nur eine UX-Massnahme). Solange der User noch nicht geladen ist
+  // (oder keine gueltige Session besteht), wird der Eintrag ebenfalls
+  // ausgeblendet, um kein Flackern eines unberechtigten Links zu zeigen.
+  const isAdmin = user?.role === 'ADMIN';
+  const visibleSections: NavSection[] = navSections
+    .map((section) => ({
+      ...section,
+      items: isAdmin
+        ? section.items
+        : section.items.filter((item) => item.href !== '/admin' && !item.href.startsWith('/admin/')),
+    }))
+    .filter((section) => section.items.length > 0);
 
   // Mobile drawer: lock background scrolling and close on Escape while open.
   // Also close the drawer when the viewport crosses the desktop breakpoint,
@@ -116,7 +142,7 @@ export function AppShell({ children, navSections, wide = false }: AppShellProps)
           <span className="logo-accent">In</span>sura
         </Link>
 
-        {navSections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.label}>
             <div className="nav-section-label">{section.label}</div>
             {section.items.map((item) => {

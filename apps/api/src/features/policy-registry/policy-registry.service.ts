@@ -1,12 +1,17 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { DatabaseService } from '@insura/foundation';
+import { GlobalRole } from '@prisma/client';
+import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { CreatePolicyDto, UpdatePolicyDto, CreateCoveredPersonDto, UpdateCoveredPersonDto, CreatePortalAccountLinkDto, UpdatePortalAccountLinkDto } from './dto/policy-registry.dto';
 
 @Injectable()
 export class PolicyRegistryService {
   private readonly logger = new Logger(PolicyRegistryService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly authService: AuthService,
+  ) {}
 
   private async assertHouseholdAccess(householdId: string, userId: string): Promise<void> {
     const membership = await this.db.householdMembership.findUnique({
@@ -66,11 +71,18 @@ export class PolicyRegistryService {
     });
   }
 
-  async findAll(householdId: string, userId: string) {
-    await this.assertHouseholdAccess(householdId, userId);
+  async findAll(householdId: string, user: AuthenticatedUser) {
+    await this.assertHouseholdAccess(householdId, user.id);
+
+    // READ_ONLY: nur explizit freigegebene Policies (ADR-007/AP-16)
+    const readableIds = await this.authService.getReadablePolicyIds(user, householdId);
+    const where =
+      user.role === GlobalRole.READ_ONLY && readableIds
+        ? { householdId, archivedAt: null, id: { in: readableIds } }
+        : { householdId, archivedAt: null };
 
     return this.db.insurancePolicy.findMany({
-      where: { householdId, archivedAt: null },
+      where,
       include: {
         coveredPersons: true,
         portalLinks: true,
@@ -79,8 +91,9 @@ export class PolicyRegistryService {
     });
   }
 
-  async findOne(householdId: string, userId: string, policyId: string) {
-    await this.assertHouseholdAccess(householdId, userId);
+  async findOne(householdId: string, user: AuthenticatedUser, policyId: string) {
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const policy = await this.db.insurancePolicy.findFirst({
       where: { id: policyId, householdId },

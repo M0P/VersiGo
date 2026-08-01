@@ -2,32 +2,35 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { AdminSettingsController } from '../admin-settings.controller';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { ForbiddenException } from '@nestjs/common';
 import type { AuthenticatedUser } from '../../identity/auth.service';
 
 const adminUser: AuthenticatedUser = {
   id: 'user-1',
-  email: 'admin@example.com',
+  username: 'admin',
   displayName: 'Admin',
+  role: GlobalRole.ADMIN,
   status: 'ACTIVE' as any,
-  memberships: [{ householdId: 'household-1', role: HouseholdRole.OWNER }],
+  memberships: [{ householdId: 'household-1' }],
 };
 
-const memberUser: AuthenticatedUser = {
+const userUser: AuthenticatedUser = {
   id: 'user-2',
-  email: 'member@example.com',
+  username: 'member',
   displayName: 'Member',
+  role: GlobalRole.USER,
   status: 'ACTIVE' as any,
-  memberships: [{ householdId: 'household-1', role: HouseholdRole.MEMBER }],
+  memberships: [{ householdId: 'household-1' }],
 };
 
-const viewerUser: AuthenticatedUser = {
+const readOnlyUser: AuthenticatedUser = {
   id: 'user-3',
-  email: 'viewer@example.com',
+  username: 'viewer',
   displayName: 'Viewer',
+  role: GlobalRole.READ_ONLY,
   status: 'ACTIVE' as any,
-  memberships: [{ householdId: 'household-1', role: HouseholdRole.VIEWER }],
+  memberships: [{ householdId: 'household-1' }],
 };
 
 function createMockSettingsStore() {
@@ -105,7 +108,7 @@ function createMockDb() {
 
 describe('AdminSettingsController', () => {
   describe('Global Admin Guard (assertIsGlobalAdmin)', () => {
-    it('erlaubt Zugriff fuer OWNER auf globale Admin-Endpoints', async () => {
+    it('erlaubt Zugriff fuer ADMIN auf globale Admin-Endpoints', async () => {
       const settingsStore = createMockSettingsStore();
       const featureFlags = createMockFeatureFlags();
       const config = createMockConfig();
@@ -116,26 +119,26 @@ describe('AdminSettingsController', () => {
       expect(result).toEqual([]);
     });
 
-    it('verweigert Zugriff fuer MEMBER auf globale Admin-Endpoints', async () => {
+    it('verweigert Zugriff fuer USER auf globale Admin-Endpoints', async () => {
       const settingsStore = createMockSettingsStore();
       const featureFlags = createMockFeatureFlags();
       const config = createMockConfig();
       const db = createMockDb();
       const controller = new AdminSettingsController(settingsStore as any, featureFlags as any, config, db);
 
-      await expect(controller.listGlobalSettings(memberUser)).rejects.toThrow(
+      await expect(controller.listGlobalSettings(userUser)).rejects.toThrow(
         ForbiddenException,
       );
     });
 
-    it('verweigert Zugriff fuer VIEWER auf globale Admin-Endpoints', async () => {
+    it('verweigert Zugriff fuer READ_ONLY auf globale Admin-Endpoints', async () => {
       const settingsStore = createMockSettingsStore();
       const featureFlags = createMockFeatureFlags();
       const config = createMockConfig();
       const db = createMockDb();
       const controller = new AdminSettingsController(settingsStore as any, featureFlags as any, config, db);
 
-      await expect(controller.listGlobalSettings(viewerUser)).rejects.toThrow(
+      await expect(controller.listGlobalSettings(readOnlyUser)).rejects.toThrow(
         ForbiddenException,
       );
     });
@@ -143,10 +146,11 @@ describe('AdminSettingsController', () => {
     it('erlaubt ADMIN-Rolle auf globale Admin-Endpoints', async () => {
       const adminUser2: AuthenticatedUser = {
         id: 'user-4',
-        email: 'admin2@example.com',
+        username: 'admin2',
         displayName: 'Admin 2',
+        role: GlobalRole.ADMIN,
         status: 'ACTIVE' as any,
-        memberships: [{ householdId: 'household-2', role: HouseholdRole.ADMIN }],
+        memberships: [{ householdId: 'household-2' }],
       };
       const settingsStore = createMockSettingsStore();
       const featureFlags = createMockFeatureFlags();

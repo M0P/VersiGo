@@ -33,7 +33,7 @@ describe('HouseholdMembershipGuard (Mandantentrennung)', () => {
 
   it('erlaubt Zugriff bei bestehender Membership im Ziel-Household', async () => {
     const authService: AuthServiceLike = {
-      getMembership: vi.fn().mockResolvedValue({ householdId: 'household-a', userId: 'user-a', role: 'MEMBER' }),
+      getMembership: vi.fn().mockResolvedValue({ householdId: 'household-a', userId: 'user-a' }),
     };
     const guard = new HouseholdMembershipGuard(authService as never);
     const ctx = buildContext({ id: 'user-a' }, { householdId: 'household-a' });

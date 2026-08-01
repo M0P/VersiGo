@@ -8,7 +8,7 @@ import {
   Param,
   UseGuards,
 } from '@nestjs/common';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { PolicyRegistryService } from './policy-registry.service';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
@@ -29,7 +29,7 @@ export class PolicyRegistryController {
   constructor(private readonly service: PolicyRegistryService) {}
 
   @Post()
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async create(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -39,26 +39,26 @@ export class PolicyRegistryController {
   }
 
   @Get()
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findAll(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.findAll(householdId, user.id);
+    return this.service.findAll(householdId, user);
   }
 
   @Get(':policyId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findOne(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.findOne(householdId, user.id, policyId);
+    return this.service.findOne(householdId, user, policyId);
   }
 
   @Patch(':policyId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async update(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -69,7 +69,7 @@ export class PolicyRegistryController {
   }
 
   @Delete(':policyId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async remove(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -79,7 +79,7 @@ export class PolicyRegistryController {
   }
 
   @Delete(':policyId/hard')
-  @Roles(HouseholdRole.OWNER)
+  @Roles(GlobalRole.ADMIN)
   async hardDelete(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -91,7 +91,7 @@ export class PolicyRegistryController {
   // Covered Persons
 
   @Post(':policyId/covered-persons')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async addCoveredPerson(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -102,7 +102,7 @@ export class PolicyRegistryController {
   }
 
   @Patch(':policyId/covered-persons/:personId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async updateCoveredPerson(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -114,7 +114,7 @@ export class PolicyRegistryController {
   }
 
   @Delete(':policyId/covered-persons/:personId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async removeCoveredPerson(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -127,7 +127,7 @@ export class PolicyRegistryController {
   // Portal Account Links
 
   @Post(':policyId/portal-links')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async createPortalLink(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -138,7 +138,7 @@ export class PolicyRegistryController {
   }
 
   @Patch(':policyId/portal-links/:linkId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async updatePortalLink(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -150,7 +150,7 @@ export class PolicyRegistryController {
   }
 
   @Delete(':policyId/portal-links/:linkId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async removePortalLink(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,

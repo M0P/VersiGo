@@ -41,14 +41,18 @@ Nach dem Start sind die Dienste erreichbar unter:
 In der lokalen Entwicklung ist die lokale Benutzer-/Passwort-Anmeldung der
 Standard (`LOCAL_AUTH_ENABLED=true`, `OIDC_ENABLED=false`). Beim ersten Start
 auf einer leeren Datenbank legt die API genau einen initialen Administrator aus
-den `LOCAL_ADMIN_*`-Variablen der `.env` an (idempotent, Passwort nur als
-bcrypt-Hash). Anmeldung:
+`LOCAL_ADMIN_USERNAME`/`LOCAL_ADMIN_PASSWORD` der `.env` an (idempotent,
+Passwort nur als bcrypt-Hash). Anmeldung:
 
 ```bash
 curl -sS -X POST http://localhost:3001/auth/local/login \
   -H 'Content-Type: application/json' \
-  -d '{"identifier":"admin@local.test","password":"<IHR_PASSWORT>"}'
+  -d '{"username":"localadmin","password":"<IHR_PASSWORT>"}'
 ```
+
+Neue Konten werden über `POST /auth/register` angelegt und müssen von einem
+Administrator über `POST /admin/users/:id/approve` freigeschaltet werden
+(Status `PENDING_APPROVAL`, siehe `docs/07-security-privacy.md`).
 
 In Produktion (`NODE_ENV=production`) greift der Fail-Fast: Ohne explizit
 gesetzte `OIDC_ENABLED=true`- oder `LOCAL_AUTH_ENABLED=true`-Konfiguration

@@ -16,6 +16,8 @@ Siehe `.env.example` für alle Konfigurationsvariablen. Erforderliche Variablen:
 | `REDIS_URL` | Redis-Verbindung | `redis://redis:6379` |
 | `SESSION_SECRET` | Session-Secret (min. 32 Zeichen) | `openssl rand -hex 32` |
 | `SETTINGS_ENCRYPTION_KEY` | AES-256-GCM Schlüssel (64 Hex-Zeichen) | `openssl rand -hex 32` |
+| `TRUST_PROXY` | Express `trust proxy`: nur `true`, wenn die API hinter einem vertrauenswürdigen Reverse-Proxy läuft (sonst fallen `req.ip` und die per-IP-Rate-Limits hinter dem Proxy auf die Proxy-IP zurück) | `false` |
+| `CORS_ORIGINS` | Erlaubte Browser-Origins für CORS (Komma-separiert). Die Web-App ruft die API cross-origin mit `credentials` auf; nur gelistete Origins dürfen Antworten lesen. Mehrere Origins mit Komma trennen. | `http://localhost:3000` |
 
 Optionale Variablen für OIDC, lokale Authentifizierung, AI, Paperless-ngx, S3 sind in `.env.example` dokumentiert.
 
@@ -27,13 +29,26 @@ Die lokale Benutzername/Passwort-Authentifizierung wird über die Umgebungsvaria
 Für die lokale Entwicklung kann die lokale Authentifizierung ohne OIDC-Provider genutzt werden:
 ```
 LOCAL_AUTH_ENABLED=true
+LOCAL_ADMIN_USERNAME=localadmin
+LOCAL_ADMIN_PASSWORD=change-me
 ```
+
+### Registrierung und Freischaltung (AP-16)
+- Neue Benutzer registrieren sich über die öffentliche Registrierungsseite (`/register`) mit Benutzername, Anzeigename und Passwort (mind. 12 Zeichen).
+- Neu registrierte Konten erhalten den Status `PENDING_APPROVAL` und können sich **nicht** anmelden, bis ein Admin sie freischaltet.
+- Die Freischaltung/Ablehnung erfolgt über die Admin-Nutzerverwaltung (`/admin/users`) bzw. die Admin-API (`POST /admin/users/:id/approve` | `reject`).
+- Abgelehnte Konten erhalten den Status `DISABLED`; die Unterscheidung zur Sperrung bleibt über das Audit-Log nachvollziehbar.
+
+### Initialer Administrator (Bootstrap)
+- Beim ersten Start legt die Anwendung automatisch einen initialen Admin an, sofern `LOCAL_ADMIN_USERNAME` und `LOCAL_ADMIN_PASSWORD` gesetzt sind (Audit `BOOTSTRAP_ADMIN`).
+- Der Benutzername wird normalisiert (lowercase + trim); bei erneutem Start wird das Konto nicht überschrieben und das Passwort nicht geändert.
+- **Sicherheitshinweis:** Der Bootstrap ist ausschließlich für lokale Entwicklung/Test vorgesehen und wird in `NODE_ENV=production` nicht ausgeführt. In Produktion sind Konten über die Admin-Oberfläche anzulegen.
 
 ### Betriebshinweise
 - Beide Authentifizierungsmethoden (OIDC und lokal) können gleichzeitig aktiv sein
 - Bei ausschließlicher Nutzung der lokalen Authentifizierung muss OIDC deaktiviert sein (`OIDC_ENABLED=false`)
 - Wenn keine Authentifizierungsmethode aktiviert ist, startet die Anwendung nicht (Konfigurationsfehler)
-- Benutzerkonten für die lokale Anmeldung müssen über die Admin-Oberfläche oder Skripte angelegt werden (derzeit kein Self-Service)
+- OIDC ist ein zweiter Login-Weg, der an ein bestehendes (freigeschaltetes) lokales Konto gebunden sein muss; die Bindung setzt ein Admin (`POST /admin/users/:id/oidc-binding`). OIDC provisioniert keine Konten.
 - Ein Passwort-Reset per E-Mail ist derzeit nicht implementiert (geplante Erweiterung)
 
 ### Health Checks
@@ -122,7 +137,7 @@ Migrationen laufen automatisch über den `migration`-Service.
 
 ## Admin-UI Bereiche
 - Allgemein
-- Haushalts- und Rollenregeln
+- Nutzerverwaltung (Liste, Status-Filter, Freischaltung, Ablehnung, Sperre, Rollenzuweisung, OIDC-Bindung)
 - OIDC Konfiguration
 - AI Provider
 - Dokumentenspeicher

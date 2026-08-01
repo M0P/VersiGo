@@ -81,16 +81,20 @@ services:
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY muss gesetzt sein}
       STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
       DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
+      # AP-16: Nur hinter einem vertrauenswuerdigen Reverse-Proxy auf true setzen
+      # (sonst faellt req.ip hinter dem Proxy auf die Proxy-IP zurueck und die
+      # per-IP-Rate-Limits sperren alle Clients global).
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+      # AP-16: Erlaubte Browser-Origins fuer CORS (Komma-separierte Liste).
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
       # Auth-Flags werden nur durchgereicht, wenn gesetzt; die Default-
       # Aufloesung (lokale Auth aktiv im Dev-Modus) uebernimmt die App.
       LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
       LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
       LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
       # Initialer lokaler Administrator (nur lokale Entwicklung)
-      LOCAL_ADMIN_EMAIL: "${LOCAL_ADMIN_EMAIL:-}"
+      LOCAL_ADMIN_USERNAME: "${LOCAL_ADMIN_USERNAME:-}"
       LOCAL_ADMIN_PASSWORD: "${LOCAL_ADMIN_PASSWORD:-}"
-      LOCAL_ADMIN_FIRST_NAME: "${LOCAL_ADMIN_FIRST_NAME:-}"
-      LOCAL_ADMIN_LAST_NAME: "${LOCAL_ADMIN_LAST_NAME:-}"
       OIDC_ENABLED: "${OIDC_ENABLED:-}"
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
@@ -142,6 +146,7 @@ services:
       LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
       LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
       LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
       OIDC_ENABLED: "${OIDC_ENABLED:-}"
       AI_ENABLED: "${AI_ENABLED:-false}"
       AI_PROVIDER: ${AI_PROVIDER:-ollama}

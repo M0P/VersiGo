@@ -1,19 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AuthService } from '../auth.service';
 import { HouseholdMembershipGuard } from '../household-membership.guard';
-import { HouseholdRole } from '@prisma/client';
 
 type MembershipRecord = {
   householdId: string;
   userId: string;
-  role: HouseholdRole;
 };
 
 function createMockDb(memberships: MembershipRecord[]) {
   return {
     user: {
       findUnique: vi.fn(),
-      upsert: vi.fn(),
     },
     householdMembership: {
       findUnique: vi.fn(
@@ -36,15 +33,15 @@ function createMockDb(memberships: MembershipRecord[]) {
 describe('Household-Isolation (Integration)', () => {
   const householdA = 'household-aaaa';
   const householdB = 'household-bbbb';
-  const userA = { id: 'user-aaaa', householdId: householdA, role: HouseholdRole.OWNER };
-  const userB = { id: 'user-bbbb', householdId: householdB, role: HouseholdRole.OWNER };
+  const userA = { id: 'user-aaaa', householdId: householdA };
+  const userB = { id: 'user-bbbb', householdId: householdB };
 
   let guard: HouseholdMembershipGuard;
 
   beforeEach(() => {
     const memberships: MembershipRecord[] = [
-      { householdId: householdA, userId: userA.id, role: userA.role },
-      { householdId: householdB, userId: userB.id, role: userB.role },
+      { householdId: householdA, userId: userA.id },
+      { householdId: householdB, userId: userB.id },
     ];
     const mockDb = createMockDb(memberships);
     const authService = new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never);

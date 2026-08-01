@@ -7,6 +7,7 @@ import { AiProviderRegistry } from './ai-provider-registry';
 import { AI_EXTRACTION_QUEUE } from './ai-assist.constants';
 import { toPrismaJson } from './ai-json.helper';
 import type { IAIAdapter } from './ai-assist.interface';
+import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 
 @Injectable()
 export class AiAssistService {
@@ -16,6 +17,7 @@ export class AiAssistService {
     private readonly db: DatabaseService,
     private readonly providerRegistry: AiProviderRegistry,
     private readonly capabilityFlags: CapabilityFlagsService,
+    private readonly authService: AuthService,
     @InjectQueue(AI_EXTRACTION_QUEUE) private readonly extractionQueue: Queue,
   ) {}
 
@@ -100,11 +102,12 @@ export class AiAssistService {
    */
   async getJobStatus(
     householdId: string,
-    userId: string,
+    user: AuthenticatedUser,
     policyId: string,
     jobId: string,
   ) {
-    await this.assertHouseholdAccess(householdId, userId);
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const job = await this.db.aiExtractionJob.findFirst({
       where: { id: jobId, policyId },
@@ -122,10 +125,11 @@ export class AiAssistService {
    */
   async listJobs(
     householdId: string,
-    userId: string,
+    user: AuthenticatedUser,
     policyId: string,
   ) {
-    await this.assertHouseholdAccess(householdId, userId);
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     return this.db.aiExtractionJob.findMany({
       where: { policyId },
@@ -140,10 +144,11 @@ export class AiAssistService {
    */
   async getLatestSummaryWithSources(
     householdId: string,
-    userId: string,
+    user: AuthenticatedUser,
     policyId: string,
   ) {
-    await this.assertHouseholdAccess(householdId, userId);
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const summary = await this.db.aiCoverageSummary.findFirst({
       where: { policyId },

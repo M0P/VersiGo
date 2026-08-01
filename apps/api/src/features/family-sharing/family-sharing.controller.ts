@@ -8,7 +8,7 @@ import {
   Param,
   UseGuards,
 } from '@nestjs/common';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { FamilySharingService } from './family-sharing.service';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
@@ -22,7 +22,7 @@ export class FamilySharingController {
   constructor(private readonly service: FamilySharingService) {}
 
   @Post()
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async create(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -32,16 +32,16 @@ export class FamilySharingController {
   }
 
   @Get()
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findAll(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.findAll(householdId, user.id);
+    return this.service.findAll(householdId, user);
   }
 
   @Get('incoming')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findIncoming(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -50,7 +50,7 @@ export class FamilySharingController {
   }
 
   @Get('outgoing')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findOutgoing(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -59,17 +59,17 @@ export class FamilySharingController {
   }
 
   @Get(':shareId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findOne(
     @Param('householdId') householdId: string,
     @Param('shareId') shareId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.findOne(householdId, user.id, shareId);
+    return this.service.findOne(householdId, user, shareId);
   }
 
   @Patch(':shareId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async update(
     @Param('householdId') householdId: string,
     @Param('shareId') shareId: string,
@@ -80,12 +80,12 @@ export class FamilySharingController {
   }
 
   @Delete(':shareId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async remove(
     @Param('householdId') householdId: string,
     @Param('shareId') shareId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.remove(householdId, user.id, shareId);
+    return this.service.remove(householdId, user, shareId);
   }
 }

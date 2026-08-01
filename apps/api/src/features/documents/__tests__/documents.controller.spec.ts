@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DocumentsController } from '../documents.controller';
-import { UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../../identity/auth.service';
 import type { UploadedFile } from '../documents.types';
 import { NotFoundException } from '@nestjs/common';
@@ -60,8 +60,9 @@ function createMockRes(): any {
 
 const mockUser: AuthenticatedUser = {
   id: '22222222-2222-4222-2222-222222222222',
-  email: 'a@example.com',
+  username: 'alice',
   displayName: 'A',
+  role: GlobalRole.USER,
   status: UserStatus.ACTIVE,
   memberships: [],
 };
@@ -103,7 +104,7 @@ describe('DocumentsController', () => {
     const result = await controller.findAll(householdId, policyId, mockUser);
 
     expect(result).toHaveLength(1);
-    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
+    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
   it('findOne delegiert an Service', async () => {
@@ -114,7 +115,7 @@ describe('DocumentsController', () => {
     const result = await controller.findOne(householdId, policyId, docId, mockUser);
 
     expect(result).toEqual({ id: docId });
-    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser.id, policyId, docId);
+    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser, policyId, docId);
   });
 
   it('updateMetadata delegiert an Service', async () => {
@@ -150,7 +151,7 @@ describe('DocumentsController', () => {
 
     await controller.download(householdId, policyId, docId, mockUser, res);
 
-    expect(service.getDocumentAndPath).toHaveBeenCalledWith(householdId, mockUser.id, policyId, docId);
+    expect(service.getDocumentAndPath).toHaveBeenCalledWith(householdId, mockUser, policyId, docId);
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({
         'Content-Disposition': expect.stringContaining('attachment'),

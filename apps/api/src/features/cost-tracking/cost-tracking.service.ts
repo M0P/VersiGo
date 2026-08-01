@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '@insura/foundation';
-import { PaymentFrequency } from '@prisma/client';
+import { GlobalRole, PaymentFrequency } from '@prisma/client';
+import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { CreateCostEntryDto, UpdateCostEntryDto } from './dto/cost-tracking.dto';
 
 const FREQUENCY_MAP: Record<PaymentFrequency, number> = {
@@ -16,7 +17,10 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
 export class CostTrackingService {
   private readonly logger = new Logger(CostTrackingService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly authService: AuthService,
+  ) {}
 
   private async assertHouseholdAccess(householdId: string, userId: string): Promise<void> {
     const membership = await this.db.householdMembership.findUnique({
@@ -102,8 +106,9 @@ export class CostTrackingService {
     });
   }
 
-  async findAll(householdId: string, userId: string, policyId: string) {
-    await this.assertPolicyAccess(householdId, userId, policyId);
+  async findAll(householdId: string, user: AuthenticatedUser, policyId: string) {
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     return this.db.policyCostEntry.findMany({
       where: { policyId },
@@ -111,8 +116,9 @@ export class CostTrackingService {
     });
   }
 
-  async findOne(householdId: string, userId: string, policyId: string, entryId: string) {
-    await this.assertPolicyAccess(householdId, userId, policyId);
+  async findOne(householdId: string, user: AuthenticatedUser, policyId: string, entryId: string) {
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const entry = await this.db.policyCostEntry.findFirst({
       where: { id: entryId, policyId },
@@ -214,8 +220,9 @@ export class CostTrackingService {
     });
   }
 
-  async getAnnualCost(householdId: string, userId: string, policyId: string) {
-    await this.assertPolicyAccess(householdId, userId, policyId);
+  async getAnnualCost(householdId: string, user: AuthenticatedUser, policyId: string) {
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const now = new Date();
 
@@ -302,12 +309,13 @@ export class CostTrackingService {
     return beforeYear ?? null;
   }
 
-  async getYearComparison(householdId: string, userId: string, policyId: string, year: number) {
+  async getYearComparison(householdId: string, user: AuthenticatedUser, policyId: string, year: number) {
     if (isNaN(year)) {
       throw new BadRequestException('Ungueltiges Jahr');
     }
 
-    await this.assertPolicyAccess(householdId, userId, policyId);
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const currentEntry = await this.findEntryForYear(policyId, year);
 
@@ -359,13 +367,20 @@ export class CostTrackingService {
     };
   }
 
-  async getHouseholdSummary(householdId: string, userId: string) {
-    await this.assertHouseholdAccess(householdId, userId);
+  async getHouseholdSummary(householdId: string, user: AuthenticatedUser) {
+    await this.assertHouseholdAccess(householdId, user.id);
 
     const now = new Date();
 
+    // READ_ONLY: Summe nur ueber explizit freigegebene Policies (ADR-007/AP-16)
+    const readableIds = await this.authService.getReadablePolicyIds(user, householdId);
+    const where =
+      user.role === GlobalRole.READ_ONLY && readableIds
+        ? { householdId, archivedAt: null, id: { in: readableIds } }
+        : { householdId, archivedAt: null };
+
     const policies = await this.db.insurancePolicy.findMany({
-      where: { householdId, archivedAt: null },
+      where,
       include: {
         costEntries: {
           orderBy: { validFrom: 'desc' },

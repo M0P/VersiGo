@@ -1,7 +1,11 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
+  HttpCode,
+  HttpException,
+  HttpStatus,
   Post,
   Req,
   Res,
@@ -13,6 +17,7 @@ import { Public } from '@insura/foundation';
 import { OidcStrategy } from './oidc.strategy';
 import { CapabilityFlagsService } from '@insura/foundation';
 import { LoginRateLimiterService } from './login-rate-limiter.service';
+import { LocalLoginDto, RegisterLocalAccountDto } from './auth.dto';
 
 type SessionRequest = Request & {
   user?: AuthenticatedUser;
@@ -36,7 +41,7 @@ export class AuthController {
 
   @Public()
   @Get('login')
-  login(@Req() req: SessionRequest, @Res() res: Response): void {
+  async login(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
     if (!this.oidc.isEnabled()) {
       res.status(501).json({
         message:
@@ -45,7 +50,7 @@ export class AuthController {
       return;
     }
 
-    const { url, codeVerifier, state } = this.oidc.getAuthorizationUrl();
+    const { url, codeVerifier, state } = await this.oidc.getAuthorizationUrl();
     req.session.oidcCodeVerifier = codeVerifier;
     req.session.oidcState = state;
     res.redirect(url);
@@ -53,11 +58,66 @@ export class AuthController {
 
   @Public()
   @Get('config')
-  getAuthConfig(): { oidcEnabled: boolean; localEnabled: boolean } {
+  getAuthConfig(): { oidcEnabled: boolean; localEnabled: boolean; registrationEnabled: boolean } {
     return {
-      oidcEnabled: this.capabilities.isEnabled('oidc'),
+      // AP-16/Review-4: oidcEnabled darf nicht nur das Capability-Flag melden,
+      // sondern muss anzeigen, ob die Strategie tatsaechlich einsatzbereit ist
+      // (Discovery erfolgreich, Client gesetzt). Sonst wuerde die Login-Seite
+      // den OIDC-Button anbieten, obwohl /auth/login 501 liefert.
+      oidcEnabled: this.oidc.isEnabled(),
       localEnabled: this.capabilities.isEnabled('local'),
+      registrationEnabled: this.capabilities.isEnabled('local'),
     };
+  }
+
+  @Public()
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(
+    @Req() req: SessionRequest,
+    @Body() body: RegisterLocalAccountDto,
+  ): Promise<{ status: 'PENDING_APPROVAL' }> {
+    if (!this.capabilities.isEnabled('local')) {
+      throw new ConflictException('Lokale Registrierung ist nicht konfiguriert');
+    }
+
+    // AP-16/ADR-007: Per-IP-Rate-Limit auf die Registrierung, damit die
+    // Admin-Freischalt-Warteschlange nicht durch Massen-Registrierungen
+    // ueberflutet werden kann (Scope "register", getrennt vom Login-Zaehler).
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    const blocked = await this.rateLimiter.isBlocked(ip, 'register');
+    if (blocked) {
+      throw new HttpException(
+        'Zu viele Registrierungsversuche. Bitte versuchen Sie es spaeter erneut.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    try {
+      await this.authService.registerLocalAccount({
+        username: body.username,
+        displayName: body.displayName,
+        password: body.password,
+      });
+    } catch (error) {
+      // Nur Konflikt-/Enumerationstreffer (409, z.B. "Benutzername bereits
+      // vergeben") zaehlen mit: Sie verraten, dass ein Konto existiert bzw.
+      // der Name belegt ist. Validierungsfehler (400) und unerwartete Fehler
+      // werden bewusst nicht gezahlt.
+      if (error instanceof ConflictException) {
+        await this.rateLimiter.recordAttempt(ip, 'register');
+      }
+      throw error;
+    }
+
+    // Auch erfolgreiche Registrierungen zaehlen: Eine IP kann pro Fenster nur
+    // eine begrenzte Anzahl neuer Pending-Konten erzeugen (kein Reset hier,
+    // sonst waere die Freischalt-Warteschlange weiterhin ueberflutbar).
+    await this.rateLimiter.recordAttempt(ip, 'register');
+
+    // Kein Account-Detail in der Antwort: Die Registrierung ist immer mit
+    // Status PENDING_APPROVAL; erst Admins schalten frei.
+    return { status: 'PENDING_APPROVAL' };
   }
 
   @Public()
@@ -65,7 +125,7 @@ export class AuthController {
   async localLogin(
     @Req() req: SessionRequest,
     @Res() res: Response,
-    @Body() body: { identifier: string; password: string },
+    @Body() body: LocalLoginDto,
   ): Promise<void> {
     if (!this.capabilities.isEnabled('local')) {
       res.status(501).json({
@@ -85,41 +145,44 @@ export class AuthController {
       return;
     }
 
-    const identifier = body?.identifier ?? '';
+    const username = body?.username ?? '';
     const password = body?.password ?? '';
 
-    if (!identifier || !password) {
+    if (!username || !password) {
       res.status(400).json({ message: 'Benutzername und Passwort sind erforderlich' });
       return;
     }
 
-    const user = await this.authService.localLogin(identifier, password);
+    const user = await this.authService.localLogin(username, password);
 
     if (!user) {
       await this.rateLimiter.recordAttempt(ip);
-      // Generic error - does not reveal whether identifier exists
+      // Generic error - does not reveal whether the username exists
       res.status(401).json({
         message: 'Anmeldedaten sind ungueltig.',
       });
       return;
     }
 
-    // Success - reset rate limit counter
-    await this.rateLimiter.resetAttempts(ip);
-
-    req.session.regenerate((err?: Error | null) => {
+    // Success: Der Zaehler wird erst nach bestaetigter Session-Rotation
+    // zurueckgesetzt (nur bei erfolgreicher Regeneration), damit ein Fehler
+    // beim Session-Neuaufbau den Lockout nicht vorzeitig aufhebt.
+    req.session.regenerate(async (err?: Error | null) => {
       if (err) {
         res.status(500).json({ message: 'Session-Fehler' });
         return;
       }
+      await this.rateLimiter.resetAttempts(ip);
       req.session.userId = user.id;
       // Clean up any stale OIDC flow data from previous session
       delete req.session.oidcCodeVerifier;
       delete req.session.oidcState;
       res.status(200).json({
         id: user.id,
-        email: user.email,
+        username: user.username,
         displayName: user.displayName,
+        role: user.role,
+        status: user.status,
         memberships: user.memberships,
       });
     });

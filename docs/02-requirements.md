@@ -9,9 +9,10 @@
 - Pro Versicherung existiert mindestens ein Portal-Link.
 - Kostenhistorien können jahresbezogen und mit Gültigkeitszeitraum gepflegt werden.
 - Das System berechnet Gesamtkosten pro Vertrag und aggregiert pro Haushalt, Person, Versicherungsart und Jahr.
-- Benutzerverwaltung mit Rollen ist vorhanden.
+- Benutzerverwaltung mit Rollen ist vorhanden (globale Rollen `READ_ONLY`/`USER`/`ADMIN`).
 - Familienfunktion erlaubt Freigaben auf Verträge und Dokumente zwischen Benutzern.
-- Login unterstützt OIDC.
+- Lokale Registrierung mit Benutzername/Passwort; neue Konten bleiben bis zur Admin-Freischaltung gesperrt.
+- Login unterstützt OIDC (optionaler zweiter Login-Weg, gebunden an ein lokales Konto).
 - UI unterstützt Light/Dark Mode.
 - Einstellungen erfolgen primär über Admin-UI.
 - Vollständige Auditierbarkeit relevanter Änderungen.

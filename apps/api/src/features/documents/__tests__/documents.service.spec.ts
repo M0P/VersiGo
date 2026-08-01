@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DocumentsService, MAX_FILE_SIZE } from '../documents.service';
 import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import type { UploadedFile } from '../documents.types';
+import { GlobalRole, UserStatus } from '@prisma/client';
+import { AuthService } from '../../identity/auth.service';
 
 vi.mock('fs/promises', () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
@@ -55,10 +57,22 @@ describe('DocumentsService', () => {
   const userId = '22222222-2222-4222-2222-222222222222';
   const policyId = '33333333-3333-4333-3333-333333333333';
   const docId = '44444444-4444-4444-4444-444444444444';
+  const user = {
+    id: userId,
+    username: 'user-1',
+    displayName: 'User 1',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [] as { householdId: string }[],
+  };
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new DocumentsService(mockDb as never, createMockConfig() as never);
+    service = new DocumentsService(
+      mockDb as never,
+      createMockConfig() as never,
+      new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+    );
   });
 
   describe('upload', () => {
@@ -189,7 +203,7 @@ describe('DocumentsService', () => {
         { id: 'd2', policyId, fileName: 'b.pdf' },
       ]);
 
-      const result = await service.findAll(householdId, userId, policyId);
+      const result = await service.findAll(householdId, user, policyId);
 
       expect(result).toHaveLength(2);
       expect(mockDb.policyDocument.findMany).toHaveBeenCalledWith(
@@ -205,7 +219,7 @@ describe('DocumentsService', () => {
       mockDb.policyDocument.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.findOne(householdId, userId, policyId, 'nonexistent'),
+        service.findOne(householdId, user, policyId, 'nonexistent'),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -214,7 +228,7 @@ describe('DocumentsService', () => {
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue({ id: docId, policyId, fileName: 'test.pdf' });
 
-      const result = await service.findOne(householdId, userId, policyId, docId);
+      const result = await service.findOne(householdId, user, policyId, docId);
 
       expect(result.id).toBe(docId);
     });
@@ -289,7 +303,7 @@ describe('DocumentsService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.findAll(householdId, userId, policyId),
+        service.findAll(householdId, user, policyId),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -297,7 +311,7 @@ describe('DocumentsService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.findOne(householdId, userId, policyId, docId),
+        service.findOne(householdId, user, policyId, docId),
       ).rejects.toThrow(ForbiddenException);
     });
 

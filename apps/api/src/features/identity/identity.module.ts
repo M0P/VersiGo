@@ -10,10 +10,12 @@ import { HouseholdMembershipGuard } from './household-membership.guard';
 import { PasswordHashingService } from './password-hashing.service';
 import { LoginRateLimiterService } from './login-rate-limiter.service';
 import { LocalAdminBootstrapService } from './local-admin.bootstrap';
+import { UserAdminController } from './user-admin.controller';
+import { UserAdminService } from './user-admin.service';
 
 @Global()
 @Module({
-  controllers: [AuthController],
+  controllers: [AuthController, UserAdminController],
   providers: [
     AuthService,
     OidcStrategy,
@@ -21,10 +23,11 @@ import { LocalAdminBootstrapService } from './local-admin.bootstrap';
     LoginRateLimiterService,
     HouseholdMembershipGuard,
     LocalAdminBootstrapService,
+    UserAdminService,
     { provide: APP_GUARD, useClass: SessionAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [AuthService, HouseholdMembershipGuard],
+  exports: [AuthService, HouseholdMembershipGuard, UserAdminService],
 })
 export class IdentityModule implements OnModuleInit {
   private readonly logger = new Logger(IdentityModule.name);

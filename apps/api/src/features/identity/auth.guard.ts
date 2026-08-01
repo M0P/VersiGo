@@ -11,6 +11,9 @@ import { AuthService } from './auth.service';
 
 // Global-Guard: verweigert jeden Request ohne gueltige Session, ausser die
 // Route ist explizit mit @Public() markiert (z. B. /auth/login, /health).
+// Nur aktive Konten (ACTIVE) duerfen geschuetzte Ressourcen nutzen –
+// gesperrte (DISABLED) und noch nicht freigeschaltete (PENDING_APPROVAL)
+// Konten werden abgewiesen.
 @Injectable()
 export class SessionAuthGuard implements CanActivate {
   constructor(
@@ -33,7 +36,7 @@ export class SessionAuthGuard implements CanActivate {
     }
 
     const user = await this.authService.findById(userId);
-    if (!user || user.status === UserStatus.DISABLED) {
+    if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('Benutzer nicht aktiv');
     }
 

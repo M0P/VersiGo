@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FamilySharingService } from '../family-sharing.service';
 import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
-import { ObjectShareScopeType, ObjectSharePermission } from '@prisma/client';
+import { ObjectShareScopeType, ObjectSharePermission, GlobalRole, UserStatus } from '@prisma/client';
+import { AuthService } from '../../identity/auth.service';
 
 function createMockDb() {
   const db: Record<string, unknown> & {
@@ -28,10 +29,29 @@ describe('FamilySharingService', () => {
   const userId = 'user-1';
   const targetUserId = 'user-2';
   const shareId = 'share-1';
+  const user = {
+    id: userId,
+    username: 'user-1',
+    displayName: 'User 1',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [] as { householdId: string }[],
+  };
+  const adminUser = {
+    id: userId,
+    username: 'user-1',
+    displayName: 'User 1',
+    role: GlobalRole.ADMIN,
+    status: UserStatus.ACTIVE,
+    memberships: [] as { householdId: string }[],
+  };
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new FamilySharingService(mockDb as never);
+    service = new FamilySharingService(
+      mockDb as never,
+      new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+    );
   });
 
   describe('create', () => {
@@ -188,7 +208,7 @@ describe('FamilySharingService', () => {
         { id: 's2', householdId, sourceUserId: 'user-3', targetUserId: userId },
       ]);
 
-      const result = await service.findAll(householdId, userId);
+      const result = await service.findAll(householdId, user);
 
       expect(result).toHaveLength(2);
       expect(mockDb.objectShare.findMany).toHaveBeenCalledWith(
@@ -243,7 +263,7 @@ describe('FamilySharingService', () => {
         targetUserId: 'user-3',
       });
 
-      const result = await service.findOne(householdId, userId, shareId);
+      const result = await service.findOne(householdId, user, shareId);
 
       expect(result.id).toBe(shareId);
     });
@@ -253,7 +273,7 @@ describe('FamilySharingService', () => {
       mockDb.objectShare.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.findOne(householdId, userId, 'nonexistent'),
+        service.findOne(householdId, user, 'nonexistent'),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -332,7 +352,7 @@ describe('FamilySharingService', () => {
       });
       mockDb.objectShare.delete.mockResolvedValue({ id: shareId });
 
-      const result = await service.remove(householdId, userId, shareId);
+      const result = await service.remove(householdId, user, shareId);
 
       expect(result.success).toBe(true);
       expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
@@ -345,9 +365,9 @@ describe('FamilySharingService', () => {
       );
     });
 
-    it('erlaubt OWNER das Loeschen fremder Freigaben', async () => {
+    it('erlaubt globalem ADMIN das Loeschen fremder Freigaben', async () => {
       mockDb.householdMembership.findUnique
-        .mockResolvedValueOnce({ householdId, userId, role: 'OWNER' })
+        .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' })
         .mockResolvedValueOnce({ householdId, userId, role: 'OWNER' });
       mockDb.objectShare.findFirst.mockResolvedValue({
         id: shareId,
@@ -357,7 +377,7 @@ describe('FamilySharingService', () => {
       });
       mockDb.objectShare.delete.mockResolvedValue({ id: shareId });
 
-      const result = await service.remove(householdId, userId, shareId);
+      const result = await service.remove(householdId, adminUser, shareId);
 
       expect(result.success).toBe(true);
     });
@@ -374,7 +394,7 @@ describe('FamilySharingService', () => {
       });
 
       await expect(
-        service.remove(householdId, userId, shareId),
+        service.remove(householdId, user, shareId),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -383,7 +403,7 @@ describe('FamilySharingService', () => {
       mockDb.objectShare.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.remove(householdId, userId, 'nonexistent'),
+        service.remove(householdId, user, 'nonexistent'),
       ).rejects.toThrow(NotFoundException);
     });
   });

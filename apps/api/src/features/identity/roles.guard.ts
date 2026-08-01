@@ -5,24 +5,28 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { ROLES_KEY } from './roles.decorator';
 import { AuthenticatedUser } from './auth.service';
 
-// Rollenrang fuer hierarchische Pruefung (OWNER deckt ADMIN-Anforderungen ab).
-const ROLE_RANK: Record<HouseholdRole, number> = {
-  VIEWER: 0,
-  MEMBER: 1,
-  ADMIN: 2,
-  OWNER: 3,
-};
-
+// Global-Guard: prueft die instance-weite Rolle (GlobalRole) des Users gegen
+// die @Roles(...)-Metadaten. Die Rollen sind hierarchisch:
+// ADMIN (3) > USER (2) > READ_ONLY (1). Ein User ist zugelassen, wenn seine
+// Rolle mindestens die niedrigste geforderte Rolle erreicht. Dadurch gilt
+// "ADMIN darf alles, was USER darf" auch fuer Routen, die nur mit
+// @Roles(GlobalRole.USER) ausgezeichnet sind.
 @Injectable()
 export class RolesGuard implements CanActivate {
+  private static readonly ROLE_RANK: Record<GlobalRole, number> = {
+    [GlobalRole.READ_ONLY]: 1,
+    [GlobalRole.USER]: 2,
+    [GlobalRole.ADMIN]: 3,
+  };
+
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<HouseholdRole[]>(
+    const requiredRoles = this.reflector.getAllAndOverride<GlobalRole[]>(
       ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
@@ -30,22 +34,16 @@ export class RolesGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user: AuthenticatedUser = request.user;
-    const householdId: string | undefined =
-      request.params?.householdId ?? request.body?.householdId;
 
-    if (!user || !householdId) {
-      throw new ForbiddenException('Household-Kontext fehlt');
+    if (!user) {
+      throw new ForbiddenException('Nicht authentifiziert');
     }
 
-    const membership = user.memberships.find((m) => m.householdId === householdId);
-    if (!membership) {
-      throw new ForbiddenException('Kein Zugriff auf dieses Household');
-    }
-
-    const minRequiredRank = Math.min(
-      ...requiredRoles.map((r) => ROLE_RANK[r]),
+    const minimumRank = Math.min(
+      ...requiredRoles.map((role) => RolesGuard.ROLE_RANK[role] ?? 0),
     );
-    if (ROLE_RANK[membership.role] < minRequiredRank) {
+
+    if ((RolesGuard.ROLE_RANK[user.role] ?? 0) < minimumRank) {
       throw new ForbiddenException('Rolle reicht fuer diese Aktion nicht aus');
     }
 

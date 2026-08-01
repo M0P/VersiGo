@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import { AiAssistService } from '../ai-assist.service';
 import { NoOpAIAdapter } from '../noop-ai.adapter';
 
@@ -62,23 +63,40 @@ function createMockQueue() {
   };
 }
 
+function createMockAuthService() {
+  return {
+    assertPolicyReadAccess: vi.fn().mockResolvedValue(undefined),
+    getReadablePolicyIds: vi.fn().mockResolvedValue(null),
+  };
+}
+
 describe('AiAssistService', () => {
   let mockDb: MockDb;
   let service: AiAssistService;
   const householdId = 'household-1';
   const userId = 'user-1';
   const policyId = 'policy-1';
+  const user = {
+    id: userId,
+    username: 'user-1',
+    displayName: 'User 1',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [] as { householdId: string }[],
+  };
 
   beforeEach(() => {
     mockDb = createMockDb();
     const mockRegistry = createMockProviderRegistry();
     const mockCapFlags = createMockCapabilityFlags(true);
     const mockQueue = createMockQueue();
+    const mockAuthService = createMockAuthService();
 
     service = new AiAssistService(
       mockDb as never,
       mockRegistry as never,
       mockCapFlags as never,
+      mockAuthService as never,
       mockQueue as never,
     );
   });
@@ -141,6 +159,7 @@ describe('AiAssistService', () => {
         mockDb as never,
         mockRegistry as never,
         mockCapFlags as never,
+        createMockAuthService() as never,
         mockQueue as never,
       );
 
@@ -160,7 +179,7 @@ describe('AiAssistService', () => {
         extractedFieldsJson: { insurerName: 'Test AG' },
       });
 
-      const result = await service.getJobStatus(householdId, userId, policyId, 'job-1');
+      const result = await service.getJobStatus(householdId, user, policyId, 'job-1');
 
       expect(result.status).toBe('COMPLETED');
       expect(result.extractedFieldsJson).toEqual({ insurerName: 'Test AG' });
@@ -171,7 +190,7 @@ describe('AiAssistService', () => {
       mockDb.aiExtractionJob.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.getJobStatus(householdId, userId, policyId, 'nonexistent'),
+        service.getJobStatus(householdId, user, policyId, 'nonexistent'),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -184,7 +203,7 @@ describe('AiAssistService', () => {
         { id: 'job-2', policyId, status: 'FAILED' },
       ]);
 
-      const result = await service.listJobs(householdId, userId, policyId);
+      const result = await service.listJobs(householdId, user, policyId);
 
       expect(result).toHaveLength(2);
       expect(mockDb.aiExtractionJob.findMany).toHaveBeenCalledWith(
@@ -218,6 +237,7 @@ describe('AiAssistService', () => {
         mockDb as never,
         mockRegistry as never,
         mockCapFlags as never,
+        createMockAuthService() as never,
         mockQueue as never,
       );
 
@@ -255,6 +275,7 @@ describe('AiAssistService', () => {
         mockDb as never,
         mockRegistry as never,
         mockCapFlags as never,
+        createMockAuthService() as never,
         mockQueue as never,
       );
 
@@ -298,7 +319,7 @@ describe('AiAssistService', () => {
         { id: 'doc-2', fileName: 'Allgemeine Bedingungen.pdf' },
       ]);
 
-      const result = await service.getLatestSummaryWithSources(householdId, userId, policyId);
+      const result = await service.getLatestSummaryWithSources(householdId, user, policyId);
 
       expect(result.sourceDocuments).toHaveLength(2);
       expect(result.sourceDocuments[0].fileName).toBe('Versicherungsschein.pdf');
@@ -318,7 +339,7 @@ describe('AiAssistService', () => {
         createdAt: new Date('2025-01-01'),
       });
 
-      const result = await service.getLatestSummaryWithSources(householdId, userId, policyId);
+      const result = await service.getLatestSummaryWithSources(householdId, user, policyId);
 
       expect(result.sourceDocuments).toEqual([]);
       expect(result.providerKey).toBe('openai-compat');
@@ -329,7 +350,7 @@ describe('AiAssistService', () => {
       mockDb.aiCoverageSummary.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.getLatestSummaryWithSources(householdId, userId, policyId),
+        service.getLatestSummaryWithSources(householdId, user, policyId),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -348,7 +369,7 @@ describe('AiAssistService', () => {
         { id: 'doc-exists', fileName: 'Vorhanden.pdf' },
       ]);
 
-      const result = await service.getLatestSummaryWithSources(householdId, userId, policyId);
+      const result = await service.getLatestSummaryWithSources(householdId, user, policyId);
 
       expect(result.sourceDocuments).toHaveLength(1);
       expect(result.sourceDocuments[0].id).toBe('doc-exists');
@@ -392,6 +413,7 @@ describe('AiAssistService', () => {
         mockDb as never,
         mockRegistry as never,
         mockCapFlags as never,
+        createMockAuthService() as never,
         mockQueue as never,
       );
 

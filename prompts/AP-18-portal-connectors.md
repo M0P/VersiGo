@@ -1,4 +1,4 @@
-# Arbeitspaket AP-11: portal-connectors
+# Arbeitspaket AP-18: portal-connectors
 
 ## Ziel
 Versicherungsportal-Katalog, Deeplinks und Plugin-Rahmen für optionale Connectoren.
@@ -6,13 +6,13 @@ Versicherungsportal-Katalog, Deeplinks und Plugin-Rahmen für optionale Connecto
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-11 im Projekt Insura.
+Du implementierst AP-18 im Projekt Insura.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`
 - Alle Dokumente unter `/docs`, insbesondere Architektur-ADRs, Sicherheit und Bibliothekspolitik
 
-Arbeite in einem neuen Branch `feat/AP-11-portal-connectors` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
+Arbeite in einem neuen Branch `feat/AP-18-portal-connectors` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
 
 Aufgabe:
 Versicherungsportal-Katalog, Deeplinks und Plugin-Rahmen für optionale Connectoren.
@@ -33,7 +33,7 @@ Vorgehen:
 6. Öffne einen Pull Request gegen `main`; niemals selbst mergen.
 
 PR-Titel:
-`feat(AP-11): portal-connectors`
+`feat(AP-18): portal-connectors`
 
 PR-Beschreibung muss enthalten:
 - Zweck und Architekturentscheidung

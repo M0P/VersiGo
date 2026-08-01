@@ -34,6 +34,10 @@ export default function AdminDashboardPage(): ReactElement {
           window.location.href = '/login';
           return Promise.resolve(null);
         }
+        if (res.status === 403) {
+          window.location.href = '/forbidden';
+          return Promise.resolve(null);
+        }
         if (!res.ok) throw new Error('Fehler beim Laden');
         return res.json();
       })

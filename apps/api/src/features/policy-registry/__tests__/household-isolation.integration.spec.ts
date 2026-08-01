@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PolicyRegistryService } from '../policy-registry.service';
 import { ForbiddenException } from '@nestjs/common';
+import { GlobalRole, UserStatus } from '@prisma/client';
+import { AuthService, AuthenticatedUser } from '../../identity/auth.service';
 
 function createMockDb() {
   const db: Record<string, unknown> & {
@@ -31,6 +33,14 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
   const householdB = 'household-bbbb';
   const userA = { id: 'user-aaaa' };
   const userB = { id: 'user-bbbb' };
+  const userBUser: AuthenticatedUser = {
+    id: userB.id,
+    username: 'user-bbbb',
+    displayName: 'User B',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [],
+  };
 
   let mockDb: ReturnType<typeof createMockDb>;
   let service: PolicyRegistryService;
@@ -48,7 +58,10 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new PolicyRegistryService(mockDb as never);
+    service = new PolicyRegistryService(
+      mockDb as never,
+      new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+    );
   });
 
   it('User A erstellt Policy in Household A (erlaubt)', async () => {
@@ -93,7 +106,7 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
     });
 
     await expect(
-      service.findOne(householdA, userB.id, 'p1'),
+      service.findOne(householdA, userBUser, 'p1'),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -105,7 +118,7 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
       { id: 'p2', householdId: householdB, coveredPersons: [], portalLinks: [] },
     ]);
 
-    const result = await service.findAll(householdB, userB.id);
+    const result = await service.findAll(householdB, userBUser);
 
     expect(result).toHaveLength(1);
     expect(mockDb.insurancePolicy.findMany).toHaveBeenCalledWith(

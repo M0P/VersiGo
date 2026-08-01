@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AuthController } from '../auth.controller';
-import { UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
+import { ConflictException, HttpException } from '@nestjs/common';
 import type { AuthenticatedUser } from '../auth.service';
 
 type OidcStrategyLike = {
@@ -12,6 +13,7 @@ type OidcStrategyLike = {
 
 type AuthServiceLike = {
   localLogin: ReturnType<typeof vi.fn>;
+  registerLocalAccount: ReturnType<typeof vi.fn>;
 };
 
 type CapabilitiesLike = {
@@ -51,8 +53,9 @@ type ResponseLike = {
 
 const mockUser: AuthenticatedUser = {
   id: 'user-1',
-  email: 'a@example.com',
+  username: 'alice',
   displayName: 'A',
+  role: GlobalRole.USER,
   status: UserStatus.ACTIVE,
   memberships: [],
 };
@@ -73,6 +76,7 @@ function createMockOidc(): OidcStrategyLike {
 function createMockAuthService(): AuthServiceLike {
   return {
     localLogin: vi.fn(),
+    registerLocalAccount: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -106,8 +110,9 @@ describe('AuthController', () => {
     const controller = createController();
     const user: AuthenticatedUser = {
       id: 'user-1',
-      email: 'a@example.com',
+      username: 'alice',
       displayName: 'A',
+      role: GlobalRole.USER,
       status: 'ACTIVE' as never,
       memberships: [],
     };
@@ -171,7 +176,7 @@ describe('AuthController', () => {
   });
 
   describe('GET /auth/login (OIDC redirect)', () => {
-    it('leitet zur OIDC-Provider-URL weiter und speichert codeVerifier/state in der Session', () => {
+    it('leitet zur OIDC-Provider-URL weiter und speichert codeVerifier/state in der Session', async () => {
       const oidc = createMockOidc();
       oidc.isEnabled.mockReturnValue(true);
       const controller = createController({ oidc });
@@ -185,7 +190,7 @@ describe('AuthController', () => {
         json: vi.fn(),
       } as ResponseLike;
 
-      controller.login(req as never, res as never);
+      await controller.login(req as never, res as never);
 
       expect(oidc.getAuthorizationUrl).toHaveBeenCalled();
       expect(res.redirect).toHaveBeenCalledWith('https://provider.example.com/auth');
@@ -193,7 +198,7 @@ describe('AuthController', () => {
       expect(req.session.oidcState).toBe('state');
     });
 
-    it('gibt 501 wenn OIDC deaktiviert ist (bleibt unabhaengig von lokaler Auth)', () => {
+    it('gibt 501 wenn OIDC deaktiviert ist (bleibt unabhaengig von lokaler Auth)', async () => {
       const oidc = createMockOidc();
       oidc.isEnabled.mockReturnValue(false);
       const controller = createController({ oidc });
@@ -204,7 +209,7 @@ describe('AuthController', () => {
         json: vi.fn(),
       } as ResponseLike;
 
-      controller.login(req as never, res as never);
+      await controller.login(req as never, res as never);
 
       expect(res.status).toHaveBeenCalledWith(501);
       expect(res.json).toHaveBeenCalledWith(
@@ -217,19 +222,132 @@ describe('AuthController', () => {
     it('gibt verfuegbare Authentifizierungsmethoden zurueck', () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockImplementation((key: string) => key === 'local');
-      const controller = createController({ capabilities });
+      const oidc = createMockOidc();
+      oidc.isEnabled.mockReturnValue(false);
+      const controller = createController({ capabilities, oidc });
 
       const result = controller.getAuthConfig();
-      expect(result).toEqual({ oidcEnabled: false, localEnabled: true });
+      expect(result).toEqual({ oidcEnabled: false, localEnabled: true, registrationEnabled: true });
     });
 
     it('zeigt beide Methoden wenn aktiviert', () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockReturnValue(true);
-      const controller = createController({ capabilities });
+      const oidc = createMockOidc();
+      oidc.isEnabled.mockReturnValue(true);
+      const controller = createController({ capabilities, oidc });
 
       const result = controller.getAuthConfig();
-      expect(result).toEqual({ oidcEnabled: true, localEnabled: true });
+      expect(result).toEqual({ oidcEnabled: true, localEnabled: true, registrationEnabled: true });
+    });
+
+    it('meldet OIDC als deaktiviert, wenn die Strategie trotz Capability nicht bereit ist (Discovery fehlgeschlagen)', () => {
+      const capabilities = createMockCapabilities();
+      capabilities.isEnabled.mockImplementation((key: string) => key === 'oidc');
+      const oidc = createMockOidc();
+      oidc.isEnabled.mockReturnValue(false);
+      const controller = createController({ capabilities, oidc });
+
+      const result = controller.getAuthConfig();
+      expect(result).toEqual({ oidcEnabled: false, localEnabled: false, registrationEnabled: false });
+    });
+  });
+
+  describe('POST /auth/register', () => {
+    const registerReq = {
+      ip: '1.2.3.4',
+      socket: { remoteAddress: '1.2.3.4' },
+      session: { regenerate: vi.fn() },
+    };
+
+    it('registriert einen lokalen Account und meldet PENDING_APPROVAL', async () => {
+      const capabilities = createMockCapabilities();
+      capabilities.isEnabled.mockReturnValue(true);
+      const authService = createMockAuthService();
+      const rateLimiter = createMockRateLimiter();
+      const controller = createController({ capabilities, authService, rateLimiter });
+
+      const result = await controller.register(
+        registerReq as never,
+        {
+          username: 'newuser',
+          displayName: 'New User',
+          password: 'supersecret123',
+        },
+      );
+
+      expect(authService.registerLocalAccount).toHaveBeenCalledWith({
+        username: 'newuser',
+        displayName: 'New User',
+        password: 'supersecret123',
+      });
+      expect(rateLimiter.isBlocked).toHaveBeenCalledWith('1.2.3.4', 'register');
+      expect(rateLimiter.recordAttempt).toHaveBeenCalledWith('1.2.3.4', 'register');
+      expect(result).toEqual({ status: 'PENDING_APPROVAL' });
+    });
+
+    it('gibt 409 wenn lokale Registrierung nicht konfiguriert ist', async () => {
+      const capabilities = createMockCapabilities();
+      capabilities.isEnabled.mockReturnValue(false);
+      const authService = createMockAuthService();
+      const controller = createController({ capabilities, authService });
+
+      await expect(
+        controller.register(
+          registerReq as never,
+          {
+            username: 'newuser',
+            displayName: 'New User',
+            password: 'supersecret123',
+          },
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(authService.registerLocalAccount).not.toHaveBeenCalled();
+    });
+
+    it('gibt 429 wenn die IP registrierungs-limitiert ist (Scope register)', async () => {
+      const capabilities = createMockCapabilities();
+      capabilities.isEnabled.mockReturnValue(true);
+      const authService = createMockAuthService();
+      const rateLimiter = createMockRateLimiter();
+      rateLimiter.isBlocked.mockResolvedValue(true);
+      const controller = createController({ capabilities, authService, rateLimiter });
+
+      await expect(
+        controller.register(
+          registerReq as never,
+          {
+            username: 'newuser',
+            displayName: 'New User',
+            password: 'supersecret123',
+          },
+        ),
+      ).rejects.toThrow(HttpException);
+      expect(rateLimiter.isBlocked).toHaveBeenCalledWith('1.2.3.4', 'register');
+      expect(authService.registerLocalAccount).not.toHaveBeenCalled();
+    });
+
+    it('zaehlt fehlgeschlagene Registrierungen (409) im Scope register', async () => {
+      const capabilities = createMockCapabilities();
+      capabilities.isEnabled.mockReturnValue(true);
+      const authService = createMockAuthService();
+      authService.registerLocalAccount.mockRejectedValue(
+        new ConflictException('Benutzername ist bereits vergeben'),
+      );
+      const rateLimiter = createMockRateLimiter();
+      const controller = createController({ capabilities, authService, rateLimiter });
+
+      await expect(
+        controller.register(
+          registerReq as never,
+          {
+            username: 'newuser',
+            displayName: 'New User',
+            password: 'supersecret123',
+          },
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(rateLimiter.recordAttempt).toHaveBeenCalledWith('1.2.3.4', 'register');
     });
   });
 
@@ -244,7 +362,7 @@ describe('AuthController', () => {
         json: vi.fn(),
       } as ResponseLike;
 
-      await controller.localLogin(req as never, res as never, { identifier: 'test', password: 'pass' });
+      await controller.localLogin(req as never, res as never, { username: 'test', password: 'pass' });
       expect(res.status).toHaveBeenCalledWith(501);
     });
 
@@ -260,7 +378,7 @@ describe('AuthController', () => {
         json: vi.fn(),
       } as ResponseLike;
 
-      await controller.localLogin(req as never, res as never, { identifier: 'test', password: 'pass' });
+      await controller.localLogin(req as never, res as never, { username: 'test', password: 'pass' });
       expect(res.status).toHaveBeenCalledWith(429);
     });
 
@@ -274,7 +392,7 @@ describe('AuthController', () => {
         json: vi.fn(),
       } as ResponseLike;
 
-      await controller.localLogin(req as never, res as never, { identifier: '', password: '' });
+      await controller.localLogin(req as never, res as never, { username: '', password: '' });
       expect(res.status).toHaveBeenCalledWith(400);
     });
 
@@ -290,7 +408,7 @@ describe('AuthController', () => {
         json: vi.fn(),
       } as ResponseLike;
 
-      await controller.localLogin(req as never, res as never, { identifier: 'test', password: 'wrong' });
+      await controller.localLogin(req as never, res as never, { username: 'test', password: 'wrong' });
       expect(res.status).toHaveBeenCalledWith(401);
     });
 
@@ -308,7 +426,7 @@ describe('AuthController', () => {
         json: vi.fn(),
       } as ResponseLike;
 
-      await controller.localLogin(req as never, res as never, { identifier: 'test', password: 'correct' });
+      await controller.localLogin(req as never, res as never, { username: 'test', password: 'correct' });
       expect(regenerate).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(rateLimiter.resetAttempts).toHaveBeenCalledWith('1.2.3.4');
@@ -327,7 +445,7 @@ describe('AuthController', () => {
         json: vi.fn(),
       } as ResponseLike;
 
-      await controller.localLogin(req as never, res as never, { identifier: 'test', password: 'wrong' });
+      await controller.localLogin(req as never, res as never, { username: 'test', password: 'wrong' });
       expect(rateLimiter.recordAttempt).toHaveBeenCalledWith('1.2.3.4');
     });
   });
