@@ -11,6 +11,7 @@ import { InlineSpinner } from '../../../components/ui/loading';
 type AuthConfig = {
   oidcEnabled: boolean;
   localEnabled: boolean;
+  registrationEnabled: boolean;
 };
 
 type LoginError = {
@@ -18,15 +19,43 @@ type LoginError = {
   status: number;
 };
 
+/**
+ * Normalisiert den redirectTo-Query-Parameter der Middleware zu einem
+ * sicheren internen Pfad (Open-Redirect-Schutz): Nur Pfade, die mit einem
+ * einzelnen "/" beginnen, werden akzeptiert; scheme-relativ ("//host"),
+ * Backslash-Varianten ("/\\host"), externe Schemata und ungueltiges
+ * Prozent-Encoding fallen auf "/" zurueck.
+ */
+function safeRedirectPath(value: string | null): string {
+  if (!value) return '/';
+  let path = value.trim();
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    return '/';
+  }
+  if (!path.startsWith('/')) return '/';
+  if (path.startsWith('//') || path.startsWith('/\\') || path.startsWith('\\')) return '/';
+  if (path.length > 2048) return '/';
+  return path;
+}
+
 export default function LoginPage(): ReactElement {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
   const [config, setConfig] = useState<AuthConfig | null>(null);
-  const [identifier, setIdentifier] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<LoginError | null>(null);
   const [loading, setLoading] = useState(false);
   const [configError, setConfigError] = useState(false);
+  // Ziel nach erfolgreichem Login: von der Middleware gesetzter redirectTo-
+  // Query-Parameter (sanitisiert) oder "/".
+  const [redirectTo] = useState<string>(() =>
+    typeof window === 'undefined'
+      ? '/'
+      : safeRedirectPath(new URLSearchParams(window.location.search).get('redirectTo')),
+  );
 
   useEffect(() => {
     async function fetchConfig() {
@@ -54,12 +83,13 @@ export default function LoginPage(): ReactElement {
       const res = await fetch(`${apiBaseUrl}/auth/local/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
+        body: JSON.stringify({ username, password }),
         credentials: 'include',
       });
 
       if (res.ok) {
-        window.location.href = '/';
+        // Originales Ziel der Middleware ehren (sanitisiert, sonst "/").
+        window.location.href = redirectTo;
         return;
       }
 
@@ -135,11 +165,11 @@ export default function LoginPage(): ReactElement {
             <fieldset disabled={loading} style={{ border: 'none', padding: 0, margin: 0 }}>
               <FormField label="Benutzername" required>
                 <Input
-                  id="login-identifier"
+                  id="login-username"
                   type="text"
                   autoComplete="username"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   required
                   placeholder="Ihr Benutzername"
                 />
@@ -157,11 +187,20 @@ export default function LoginPage(): ReactElement {
                 />
               </FormField>
 
-              <Button type="submit" disabled={loading || !identifier || !password} style={{ width: '100%' }}>
+              <Button type="submit" disabled={loading || !username || !password} style={{ width: '100%' }}>
                 {loading ? <><InlineSpinner /> Anmelden...</> : 'Anmelden'}
               </Button>
             </fieldset>
           </form>
+        )}
+
+        {config.localEnabled && config.registrationEnabled && (
+          <p className="text-sm text-muted" style={{ textAlign: 'center', marginTop: 'var(--insura-space-4)' }}>
+            Noch kein Konto?{' '}
+            <a href="/register" style={{ color: 'var(--insura-accent)' }}>
+              Registrieren
+            </a>
+          </p>
         )}
 
         {config.localEnabled && config.oidcEnabled && (

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService, AppConfigService } from '@insura/foundation';
-import { UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import { PasswordHashingService } from './password-hashing.service';
 import { normalizeIdentifier } from './auth.service';
 
@@ -10,14 +10,18 @@ import { normalizeIdentifier } from './auth.service';
  * Laueft ausschliesslich in lokalen Entwicklungs-/Testumgebungen
  * (NODE_ENV ungleich "production") und nur, wenn die lokale
  * Authentifizierung aktiv ist. Beim ersten Start auf leerer Datenbank
- * wird genau ein Admin aus LOCAL_ADMIN_* angelegt; weitere Starts
- * legen kein Duplikat an und ueberschreiben das Passwort eines
- * bereits existierenden Kontos nicht.
+ * wird genau ein Admin aus LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD
+ * angelegt; weitere Starts legen kein Duplikat an und ueberschreiben
+ * das Passwort eines bereits existierenden Kontos nicht.
  *
  * In Produktion wird der Bootstrap nie ausgefuehrt: Dort ist kein
  * ueber Umgebungsvariablen bekanntes Default-Passwort zulaessig.
  * Passwoerter werden ausschliesslich als bcrypt-Hash gespeichert;
  * Klartextwerte werden weder gespeichert noch geloggt.
+ *
+ * ADR-007: Der User erhaelt die globale Rolle ADMIN und den Status ACTIVE.
+ * Der ehemalige OIDC-Platzhalter-Issuer "local" entfaellt (Bindungen nur
+ * noch ueber echte OIDC-Provider, siehe ADR-007).
  */
 @Injectable()
 export class LocalAdminBootstrapService {
@@ -49,22 +53,22 @@ export class LocalAdminBootstrapService {
       return;
     }
 
-    const email = this.config.get('LOCAL_ADMIN_EMAIL');
+    const username = this.config.get('LOCAL_ADMIN_USERNAME');
     const password = this.config.get('LOCAL_ADMIN_PASSWORD');
 
-    if (!email || !password) {
+    if (!username || !password) {
       this.logger.warn(
-        'LOCAL_ADMIN_EMAIL/LOCAL_ADMIN_PASSWORD nicht gesetzt – ' +
+        'LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD nicht gesetzt – ' +
           'es wird kein initialer lokaler Administrator angelegt.',
       );
       return;
     }
 
-    const identifier = normalizeIdentifier(email);
+    const identifier = normalizeIdentifier(username);
 
     try {
-      const existing = await this.db.credential.findUnique({
-        where: { identifier },
+      const existing = await this.db.user.findUnique({
+        where: { username: identifier },
         select: { id: true },
       });
 
@@ -76,26 +80,13 @@ export class LocalAdminBootstrapService {
       }
 
       const passwordHash = await this.passwordHashing.hash(password);
-      const displayName = [
-        this.config.get('LOCAL_ADMIN_FIRST_NAME'),
-        this.config.get('LOCAL_ADMIN_LAST_NAME'),
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' ')
-        .trim();
 
       await this.db.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
-            // Getrimmt gespeichert, damit E-Mail und normalisierter
-            // Credential-Identifier konsistent bleiben.
-            email: email.trim(),
-            displayName: displayName || email.trim(),
-            // Lokale Benutzer haben keine OIDC-Identitaet. Der Issuer
-            // "local" und der normalisierte Identifier als Subject
-            // halten die UNIQUE-Constraint (oidcIssuer, oidcSubject) ein.
-            oidcIssuer: 'local',
-            oidcSubject: identifier,
+            username: identifier,
+            displayName: identifier,
+            role: GlobalRole.ADMIN,
             status: UserStatus.ACTIVE,
           },
         });
@@ -103,21 +94,30 @@ export class LocalAdminBootstrapService {
         await tx.credential.create({
           data: {
             userId: user.id,
-            identifier,
             passwordHash,
+          },
+        });
+
+        await tx.auditEvent.create({
+          data: {
+            actorUserId: null,
+            entityType: 'User',
+            entityId: user.id,
+            action: 'BOOTSTRAP_ADMIN',
+            diffJson: { username: identifier },
           },
         });
       });
 
       this.logger.log(
-        `Initialer lokaler Administrator angelegt (${email.trim()}). ` +
+        `Initialer lokaler Administrator angelegt (${identifier}). ` +
           'Passwort wird nur als Hash gespeichert.',
       );
     } catch (error) {
-      // P2002 (UNIQUE-Constraint) ist erwartbar: users.email ist bereits
-      // durch einen OIDC-Benutzer belegt oder ein paralleles Replica hat
-      // den Admin zeitgleich angelegt (Check-then-Insert-Race). In dem
-      // Fall warnen und ueberspringen.
+      // P2002 (UNIQUE-Constraint) ist erwartbar: Der Benutzername ist
+      // bereits belegt oder ein paralleles Replica hat den Admin
+      // zeitgleich angelegt (Check-then-Insert-Race). In dem Fall
+      // warnen und ueberspringen.
       if ((error as { code?: string }).code === 'P2002') {
         this.logger.warn(
           `Initialer Admin-Bootstrap uebersprungen (Duplikat): ` +

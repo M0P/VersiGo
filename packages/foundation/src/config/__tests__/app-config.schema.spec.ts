@@ -100,33 +100,64 @@ describe('parseAppConfig', () => {
   it('parst die LOCAL_ADMIN_*-Variablen', () => {
     const env = {
       ...baseEnv,
-      LOCAL_ADMIN_EMAIL: 'admin@local.test',
+      LOCAL_ADMIN_USERNAME: 'localadmin',
       LOCAL_ADMIN_PASSWORD: 'super-secret',
-      LOCAL_ADMIN_FIRST_NAME: 'Local',
-      LOCAL_ADMIN_LAST_NAME: 'Admin',
     };
     const config = parseAppConfig(env);
-    expect(config.LOCAL_ADMIN_EMAIL).toBe('admin@local.test');
+    expect(config.LOCAL_ADMIN_USERNAME).toBe('localadmin');
     expect(config.LOCAL_ADMIN_PASSWORD).toBe('super-secret');
-    expect(config.LOCAL_ADMIN_FIRST_NAME).toBe('Local');
-    expect(config.LOCAL_ADMIN_LAST_NAME).toBe('Admin');
   });
 
   it('behandelt leere LOCAL_ADMIN-Strings wie nicht gesetzte Variablen', () => {
     const env = {
       ...baseEnv,
-      LOCAL_ADMIN_EMAIL: '',
+      LOCAL_ADMIN_USERNAME: '',
       LOCAL_ADMIN_PASSWORD: '',
-      LOCAL_ADMIN_FIRST_NAME: '',
-      LOCAL_ADMIN_LAST_NAME: '',
     };
     const config = parseAppConfig(env);
-    expect(config.LOCAL_ADMIN_EMAIL).toBeUndefined();
+    expect(config.LOCAL_ADMIN_USERNAME).toBeUndefined();
     expect(config.LOCAL_ADMIN_PASSWORD).toBeUndefined();
   });
 
-  it('wirft einen Fehler bei ungueltiger LOCAL_ADMIN_EMAIL', () => {
-    const env = { ...baseEnv, LOCAL_ADMIN_EMAIL: 'keine-mail' };
-    expect(() => parseAppConfig(env)).toThrow(/LOCAL_ADMIN_EMAIL/);
+  it('wirft einen Fehler bei ungueltigem LOCAL_ADMIN_USERNAME', () => {
+    const env = { ...baseEnv, LOCAL_ADMIN_USERNAME: 'kein-@-zeichen' };
+    expect(() => parseAppConfig(env)).toThrow(/LOCAL_ADMIN_USERNAME/);
+  });
+
+  it('setzt TRUST_PROXY auf false, wenn nicht gesetzt', () => {
+    const config = parseAppConfig(baseEnv);
+    expect(config.TRUST_PROXY).toBe(false);
+  });
+
+  it('gibt einer explizit gesetzten TRUST_PROXY-Variable Vorrang', () => {
+    const env = { ...baseEnv, TRUST_PROXY: 'true' };
+    const config = parseAppConfig(env);
+    expect(config.TRUST_PROXY).toBe(true);
+  });
+
+  it('behandelt leere TRUST_PROXY-Strings wie nicht gesetzte Variablen', () => {
+    const config = parseAppConfig({ ...baseEnv, TRUST_PROXY: '' });
+    expect(config.TRUST_PROXY).toBe(false);
+  });
+
+  it('setzt CORS_ORIGINS auf den Web-Default, wenn nicht gesetzt', () => {
+    const config = parseAppConfig(baseEnv);
+    expect(config.CORS_ORIGINS).toEqual(['http://localhost:3000']);
+  });
+
+  it('parst CORS_ORIGINS als Komma-separierte Liste und trimmt Eintraege', () => {
+    const config = parseAppConfig({
+      ...baseEnv,
+      CORS_ORIGINS: ' http://localhost:3000 , https://insura.example.com ',
+    });
+    expect(config.CORS_ORIGINS).toEqual([
+      'http://localhost:3000',
+      'https://insura.example.com',
+    ]);
+  });
+
+  it('faellt bei leerem CORS_ORIGINS auf den Web-Default zurueck', () => {
+    const config = parseAppConfig({ ...baseEnv, CORS_ORIGINS: '' });
+    expect(config.CORS_ORIGINS).toEqual(['http://localhost:3000']);
   });
 });

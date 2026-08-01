@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { CostTrackingService } from './cost-tracking.service';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
@@ -23,7 +23,7 @@ export class CostTrackingController {
   constructor(private readonly service: CostTrackingService) {}
 
   @Post()
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async create(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -34,49 +34,49 @@ export class CostTrackingController {
   }
 
   @Get()
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findAll(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.findAll(householdId, user.id, policyId);
+    return this.service.findAll(householdId, user, policyId);
   }
 
   @Get('annual')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async getAnnualCost(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.getAnnualCost(householdId, user.id, policyId);
+    return this.service.getAnnualCost(householdId, user, policyId);
   }
 
   @Get('compare')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async getYearComparison(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Query('year') year: string,
   ) {
-    return this.service.getYearComparison(householdId, user.id, policyId, Number(year));
+    return this.service.getYearComparison(householdId, user, policyId, Number(year));
   }
 
   @Get(':entryId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findOne(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @Param('entryId') entryId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.findOne(householdId, user.id, policyId, entryId);
+    return this.service.findOne(householdId, user, policyId, entryId);
   }
 
   @Patch(':entryId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async update(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -88,7 +88,7 @@ export class CostTrackingController {
   }
 
   @Delete(':entryId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async remove(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -105,11 +105,11 @@ export class CostTrackingHouseholdController {
   constructor(private readonly service: CostTrackingService) {}
 
   @Get('summary')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async getSummary(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.getHouseholdSummary(householdId, user.id);
+    return this.service.getHouseholdSummary(householdId, user);
   }
 }

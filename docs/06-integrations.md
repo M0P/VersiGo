@@ -32,5 +32,5 @@ Technisch realistisch in Stufen:
 ## OIDC
 Unterstützte Modi:
 - Externer Issuer via Discovery
-- Claim-Mapping im Admin-UI
-- Rollen-/Gruppen-Mapping auf Household- oder Systemrollen
+- OIDC ist ein zweiter Login-Weg, der an ein bestehendes lokales Konto gebunden ist (`(oidcIssuer, oidcSubject)` auf `users`, AP-16/ADR-007)
+- Kein Account-/Rollen-Provisioning aus Claims: Bindung setzt ein Admin (`POST /admin/users/:id/oidc-binding`), fehlgeschlagene Logins liefern generische Fehler

@@ -16,7 +16,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { Response } from 'express';
 import * as fs from 'fs';
 import { DocumentsService, MAX_FILE_SIZE } from './documents.service';
@@ -35,7 +35,7 @@ export class DocumentsController {
   constructor(private readonly service: DocumentsService) {}
 
   @Post()
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE } }))
   async upload(
     @Param('householdId') householdId: string,
@@ -55,36 +55,36 @@ export class DocumentsController {
   }
 
   @Get()
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findAll(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.findAll(householdId, user.id, policyId);
+    return this.service.findAll(householdId, user, policyId);
   }
 
   @Get(':docId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findOne(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @Param('docId') docId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.findOne(householdId, user.id, policyId, docId);
+    return this.service.findOne(householdId, user, policyId, docId);
   }
 
   private async streamFile(
     householdId: string,
-    userId: string,
+    user: AuthenticatedUser,
     policyId: string,
     docId: string,
     disposition: 'inline' | 'attachment',
     res: Response,
   ) {
     try {
-      const { document, filePath } = await this.service.getDocumentAndPath(householdId, userId, policyId, docId);
+      const { document, filePath } = await this.service.getDocumentAndPath(householdId, user, policyId, docId);
 
       const safeName = this.service.sanitizeFilename(document.fileName);
       const stat = await fs.promises.stat(filePath);
@@ -114,7 +114,7 @@ export class DocumentsController {
   }
 
   @Get(':docId/download')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async download(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -122,11 +122,11 @@ export class DocumentsController {
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
   ) {
-    return this.streamFile(householdId, user.id, policyId, docId, 'attachment', res);
+    return this.streamFile(householdId, user, policyId, docId, 'attachment', res);
   }
 
   @Get(':docId/preview')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async preview(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -134,11 +134,11 @@ export class DocumentsController {
     @CurrentUser() user: AuthenticatedUser,
     @Res() res: Response,
   ) {
-    return this.streamFile(householdId, user.id, policyId, docId, 'inline', res);
+    return this.streamFile(householdId, user, policyId, docId, 'inline', res);
   }
 
   @Patch(':docId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async updateMetadata(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -150,7 +150,7 @@ export class DocumentsController {
   }
 
   @Delete(':docId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async remove(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,

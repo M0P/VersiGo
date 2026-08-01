@@ -1,4 +1,4 @@
-# Arbeitspaket AP-12: audit-privacy-monitoring
+# Arbeitspaket AP-19: audit-privacy-monitoring
 
 ## Ziel
 Audit, Datenschutzexport/-löschung, Health Checks, Monitoring und Produktionshärtung.
@@ -6,13 +6,13 @@ Audit, Datenschutzexport/-löschung, Health Checks, Monitoring und Produktionsh�
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-12 im Projekt Insura.
+Du implementierst AP-19 im Projekt Insura.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`
 - Alle Dokumente unter `/docs`, insbesondere Architektur-ADRs, Sicherheit und Bibliothekspolitik
 
-Arbeite in einem neuen Branch `feat/AP-12-audit-privacy-monitoring` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
+Arbeite in einem neuen Branch `feat/AP-19-audit-privacy-monitoring` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
 
 Aufgabe:
 Audit, Datenschutzexport/-löschung, Health Checks, Monitoring und Produktionshärtung.
@@ -33,7 +33,7 @@ Vorgehen:
 6. Öffne einen Pull Request gegen `main`; niemals selbst mergen.
 
 PR-Titel:
-`feat(AP-12): audit-privacy-monitoring`
+`feat(AP-19): audit-privacy-monitoring`
 
 PR-Beschreibung muss enthalten:
 - Zweck und Architekturentscheidung

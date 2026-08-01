@@ -11,25 +11,27 @@
 
 ### User
 - id
-- oidcSubject
-- email
+- username (unique, normalisiert: lowercase + getrimmt; lokaler Login-Identifier, AP-16/ADR-007)
+- email (optional, kein Login-Merkmal, kein eindeutiger Index)
 - displayName
+- role (`GlobalRole`: `READ_ONLY` | `USER` | `ADMIN`)
+- status (`UserStatus`: `ACTIVE` | `PENDING_APPROVAL` | `DISABLED`)
+- oidcIssuer (nullable, optional gebundene OIDC-Identität, AP-16/ADR-007)
+- oidcSubject (nullable, UNIQUE zusammen mit oidcIssuer)
 - locale
-- status
 - credential (optional 1:1 relation)
 
 ### Credential
 - id
 - userId (FK -> users.id, unique, cascading delete)
-- identifier (unique, normalisiert: lowercase + getrimmt)
-- passwordHash (bcrypt, niemals Plaintext)
+- passwordHash (bcrypt, Kostenfaktor 12, niemals Plaintext)
 - createdAt
 - updatedAt
 
 ### HouseholdMembership
 - householdId
 - userId
-- role (`owner`, `admin`, `member`, `viewer`)
+- (dient ausschließlich der Mandantentrennung; keine Rolle mehr, AP-16/ADR-007)
 
 ### FamilyShare
 - id
@@ -140,3 +142,6 @@
 - Dokumente sind versionierbar.
 - AI-Ergebnisse sind abgeleitete Daten und stets neu erzeugbar.
 - Freigaben referenzieren Fachobjekte, nicht Speicherorte.
+- Globale Rollen (`GlobalRole`) gelten instanzweit; `HouseholdMembership` entkoppelt fachliche Mitgliedschaft von der Berechtigungsrolle.
+- Neue lokale Konten starten mit `PENDING_APPROVAL` und sind bis zur Admin-Freischaltung gesperrt.
+- OIDC-Identitäten werden an lokale Konten gebunden (kein Provisioning); `(oidcIssuer, oidcSubject)` ist eindeutig.

@@ -7,7 +7,7 @@ import {
   UseGuards,
   NotFoundException,
 } from '@nestjs/common';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { AiAssistService } from './ai-assist.service';
 import { StartExtractionDto, SetDocumentExclusionDto } from './ai-assist.dto';
 import { CurrentUser } from '../identity/current-user.decorator';
@@ -24,7 +24,7 @@ export class AiAssistController {
    * Startet einen asynchronen AI-Extraktions-Job.
    */
   @Post('extract')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async startExtraction(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -37,7 +37,7 @@ export class AiAssistController {
    * Fuehrt eine Extraktion sofort durch (synchron, fuer Debug).
    */
   @Post('extract-now')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async extractNow(
     @Param('householdId') householdId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -54,34 +54,34 @@ export class AiAssistController {
    * Listet alle Extraktions-Jobs einer Police auf.
    */
   @Get(':policyId/jobs')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async listJobs(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.aiAssistService.listJobs(householdId, user.id, policyId);
+    return this.aiAssistService.listJobs(householdId, user, policyId);
   }
 
   /**
    * Ruft den Status eines bestimmten Extraktions-Jobs ab.
    */
   @Get(':policyId/jobs/:jobId')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async getJobStatus(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @Param('jobId') jobId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.aiAssistService.getJobStatus(householdId, user.id, policyId, jobId);
+    return this.aiAssistService.getJobStatus(householdId, user, policyId, jobId);
   }
 
   /**
    * Erstellt eine Zusammenfassung des Versicherungsschutzes.
    */
   @Post(':policyId/summarize')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async summarize(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -98,13 +98,13 @@ export class AiAssistController {
    * Ruft die letzte Zusammenfassung einer Police inklusive Quelldokument-Informationen ab.
    */
   @Get(':policyId/summary')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async getLatestSummary(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.aiAssistService.getLatestSummaryWithSources(householdId, user.id, policyId);
+    return this.aiAssistService.getLatestSummaryWithSources(householdId, user, policyId);
   }
 
   /**
@@ -112,7 +112,7 @@ export class AiAssistController {
    * Leichtgewichtiger Check ohne Policy-Kontext fuer die UI.
    */
   @Get('status')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER, HouseholdRole.VIEWER)
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async aiStatus(
     @Param('householdId') _householdId: string,
   ) {
@@ -123,7 +123,7 @@ export class AiAssistController {
    * Markiert ein Dokument als von AI-Verarbeitung ausgeschlossen.
    */
   @Post(':policyId/documents/exclusion')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN, HouseholdRole.MEMBER)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async setDocumentExclusion(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
@@ -143,7 +143,7 @@ export class AiAssistController {
    * Prueft die Verbindung zum AI-Provider.
    */
   @Get('health')
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   async healthCheck(
     @Param('householdId') _householdId: string,
   ) {

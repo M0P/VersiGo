@@ -91,9 +91,17 @@ if [ -f .env ]; then
       WEB_PORT) WEB_PORT="${WEB_PORT:-$value}" ;;
       POSTGRES_USER) POSTGRES_USER="${POSTGRES_USER:-$value}" ;;
       POSTGRES_DB) POSTGRES_DB="${POSTGRES_DB:-$value}" ;;
-      LOCAL_ADMIN_EMAIL) LOCAL_ADMIN_EMAIL="${LOCAL_ADMIN_EMAIL:-$value}" ;;
+      LOCAL_ADMIN_USERNAME) LOCAL_ADMIN_USERNAME="${LOCAL_ADMIN_USERNAME:-$value}" ;;
       LOCAL_ADMIN_PASSWORD) LOCAL_ADMIN_PASSWORD="${LOCAL_ADMIN_PASSWORD:-$value}" ;;
       REDIS_URL) REDIS_URL="${REDIS_URL:-$value}" ;;
+      # AP-16: TRUST_PROXY wird von der App/Compose ausgewertet (req.ip hinter
+      # einem Reverse-Proxy). Der Smoke-Test reicht den Wert nur als Umgebungs-
+      # variable an Compose weiter; ein Proxy wird hier nicht aufgebaut.
+      TRUST_PROXY) TRUST_PROXY="${TRUST_PROXY:-$value}" ;;
+      # AP-16: CORS_ORIGINS wird von der App/Compose ausgewertet (erlaubte
+      # Browser-Origins fuer die Web-App). Der Smoke-Test reicht den Wert nur
+      # als Umgebungsvariable an Compose weiter (Future-Feature Contract).
+      CORS_ORIGINS) CORS_ORIGINS="${CORS_ORIGINS:-$value}" ;;
     esac
   done < .env
 fi
@@ -234,25 +242,25 @@ echo "   Database status: up"
 echo "   PASS"
 
 # 5. Local admin bootstrap + login (if admin credentials are configured)
-ADMIN_EMAIL="${LOCAL_ADMIN_EMAIL:-}"
+ADMIN_USERNAME="${LOCAL_ADMIN_USERNAME:-}"
 ADMIN_PASSWORD="${LOCAL_ADMIN_PASSWORD:-}"
-# The bootstrap stores the email trimmed (users.email) and the credential
-# identifier lowercased; normalize once so all checks below stay
-# consistent even if .env contains surrounding whitespace. The password
-# is intentionally NOT trimmed (it is hashed verbatim by the bootstrap).
-ADMIN_EMAIL=$(printf '%s' "$ADMIN_EMAIL" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+# The bootstrap stores the username trimmed and lowercased; normalize once
+# so all checks below stay consistent even if .env contains surrounding
+# whitespace or uppercase letters. The password is intentionally NOT
+# trimmed (it is hashed verbatim by the bootstrap).
+ADMIN_USERNAME=$(printf '%s' "$ADMIN_USERNAME" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
 # The .env.example placeholder is a well-known value; using it for the
 # login smoke check is acceptable for the local dev path, but make it
 # visible so it cannot pass unnoticed.
 if [ "$ADMIN_PASSWORD" = "CHANGE_ME_FOR_LOCAL_DEVELOPMENT" ]; then
   echo "WARNING: LOCAL_ADMIN_PASSWORD is still the .env.example placeholder (CHANGE_ME_FOR_LOCAL_DEVELOPMENT)."
 fi
-if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
-  echo "5. Testing local admin login (${ADMIN_EMAIL})..."
+if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
+  echo "5. Testing local admin login (${ADMIN_USERNAME})..."
   LOGIN_STATUS=$(curl -s -o /tmp/insura-login-response.json -w "%{http_code}" \
     -X POST http://localhost:${APP_PORT:-3001}/auth/local/login \
     -H 'Content-Type: application/json' \
-    -d "{\"identifier\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
+    -d "{\"username\":\"${ADMIN_USERNAME}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
     -c /tmp/insura-smoke-cookies.txt)
   if [ "$LOGIN_STATUS" != "200" ]; then
     echo "FAILED: local login returned HTTP $LOGIN_STATUS"
@@ -261,14 +269,15 @@ if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
     exit 1
   fi
   echo "   Login: HTTP $LOGIN_STATUS"
-  grep -qF "\"email\":\"${ADMIN_EMAIL}\"" /tmp/insura-login-response.json || { echo "FAILED: login response email mismatch"; exit 1; }
+  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/insura-login-response.json || { echo "FAILED: login response username mismatch"; exit 1; }
+  grep -qF '"role":"ADMIN"' /tmp/insura-login-response.json || { echo "FAILED: login response role is not ADMIN"; exit 1; }
   echo "   PASS"
 
   echo "6. Rejecting wrong password..."
   WRONG_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
     -X POST http://localhost:${APP_PORT:-3001}/auth/local/login \
     -H 'Content-Type: application/json' \
-    -d "{\"identifier\":\"${ADMIN_EMAIL}\",\"password\":\"wrong-password\"}")
+    -d "{\"username\":\"${ADMIN_USERNAME}\",\"password\":\"wrong-password\"}")
   if [ "$WRONG_STATUS" != "401" ]; then
     echo "FAILED: wrong password should return 401, got $WRONG_STATUS"
     exit 1
@@ -277,17 +286,19 @@ if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
 
   echo "7. Checking exactly one admin user in database..."
   ADMIN_COUNT=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" \
-    -tAc "SELECT count(*) FROM users WHERE email = '${ADMIN_EMAIL}';" | tr -d '[:space:]')
+    -tAc "SELECT count(*) FROM users WHERE username = '${ADMIN_USERNAME}' AND role = 'ADMIN' AND status = 'ACTIVE';" | tr -d '[:space:]')
   if [ "$ADMIN_COUNT" != "1" ]; then
-    echo "FAILED: expected exactly 1 admin user, found $ADMIN_COUNT"
+    echo "FAILED: expected exactly 1 active admin user, found $ADMIN_COUNT"
     $COMPOSE logs api
     exit 1
   fi
   echo "   Admin count: $ADMIN_COUNT"
 
-  # Stored password must be a bcrypt hash (never plaintext)
+  # Stored password must be a bcrypt hash (never plaintext). The
+  # credential lookup goes through users.username (AP-16: credentials
+  # carries no identifier anymore; users.username is the source of truth).
   ADMIN_HASH=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" \
-    -tAc "SELECT \"passwordHash\" FROM credentials WHERE identifier = btrim(lower('${ADMIN_EMAIL}'));" | tr -d '[:space:]')
+    -tAc "SELECT c.\"passwordHash\" FROM credentials c JOIN users u ON u.id = c.\"userId\" WHERE u.username = '${ADMIN_USERNAME}';" | tr -d '[:space:]')
   case "$ADMIN_HASH" in
     \$2[aby]\$*) : ;;
     *)
@@ -321,7 +332,7 @@ if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
     exit 1
   fi
   ADMIN_COUNT_AFTER=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" \
-    -tAc "SELECT count(*) FROM users WHERE email = '${ADMIN_EMAIL}';" | tr -d '[:space:]')
+    -tAc "SELECT count(*) FROM users WHERE username = '${ADMIN_USERNAME}' AND role = 'ADMIN';" | tr -d '[:space:]')
   if [ "$ADMIN_COUNT_AFTER" != "1" ]; then
     echo "FAILED: admin count changed after restart (expected 1, found $ADMIN_COUNT_AFTER)"
     $COMPOSE logs api
@@ -330,7 +341,7 @@ if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
   echo "   Admin count after restart: $ADMIN_COUNT_AFTER"
   echo "   PASS"
 else
-  echo "5. Skipping local admin login check (LOCAL_ADMIN_EMAIL/LOCAL_ADMIN_PASSWORD not configured)."
+  echo "5. Skipping local admin login check (LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD not configured)."
 fi
 
 # Verify the worker started successfully (connects to PostgreSQL/Redis and
@@ -381,8 +392,12 @@ echo "   PASS"
 #     NOTE: The fachliche Verarbeitung (DB-Statuswechsel bis COMPLETED/
 #     SKIPPED) wird durch die Worker-Unit-Tests abgedeckt
 #     (apps/worker/src/__tests__/ai-extraction.processor.spec.ts). Die
-#     ai_extraction_jobs-Tabelle existiert erst ab einer spaeteren
-#     Migration; der Smoke-Test erzeugt daher bewusst keinen DB-Eintrag.
+#     ai_extraction_jobs-Tabelle existiert seit der AP-16-Migration
+#     "20260801120000_ap16_ai_extraction_jobs_schema_drift" (behebt einen
+#     vorbestehenden Schema-Drift aus AP-09); der Smoke-Test erzeugt fuer
+#     den Job dennoch bewusst keinen DB-Eintrag. Der Worker laeuft dann
+#     ueber seinen toleranten Pfad (fehlende DB-Zeile => success:false ohne
+#     weiteren DB-Zugriff) und der Job erreicht einen terminalen Zustand.
 echo "10. Testing worker job consumption (BullMQ round-trip)..."
 SMOKE_JOB_ID="smoke-job-$(date +%s)"
 # The BullMQ job id must be passed as an add() option; otherwise BullMQ
@@ -460,7 +475,8 @@ $COMPOSE exec -T redis redis-cli ZREM "bull:ai-extraction:completed" "$SMOKE_JOB
 # NOTE: The DB-success path (RUNNING -> SKIPPED/COMPLETED) is covered by
 # the worker unit tests (apps/worker/src/__tests__/ai-extraction.processor
 # .spec.ts); the smoke round-trip deliberately verifies only the queue
-# lifecycle, since the ai_extraction_jobs table needs a later migration.
+# lifecycle (the ai_extraction_jobs table is created by the AP-16
+# schema-drift migration, but the smoke job intentionally has no DB row).
 echo "   PASS"
 
 echo ""

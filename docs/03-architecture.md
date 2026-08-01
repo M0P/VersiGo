@@ -16,7 +16,7 @@ Empfohlen wird ein **modularer Monolith** mit vertikal geschnittenen Feature-Sli
 - Objekt-/Dateispeicher: S3-kompatibel, initial MinIO optional; alternativ lokales Volume.
 - Queue/Jobs: Redis + BullMQ.
 - Suche optional: PostgreSQL Full Text zuerst, keine zusätzliche Suchmaschine in V1.
-- Auth: OIDC via Keycloak, Authentik oder externer IdP.
+- Auth: Lokale Benutzername/Passwort-Authentifizierung (Default für Entwicklung) plus optional OIDC via Keycloak, Authentik oder externer IdP als zweiter, an ein lokales Konto gebundener Login-Weg (ADR-007).
 - UI-Architektur: **CSS Custom Properties** mit @layer-Kaskade für das Design System (siehe `docs/11-ui-ux.md`). React-Komponenten in `apps/web/src/components/ui/`. Theme-Provider in `apps/web/src/contexts/` für Farbwahl.
 
 ## Strukturelle Regeln

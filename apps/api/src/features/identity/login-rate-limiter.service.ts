@@ -3,12 +3,15 @@ import Redis from 'ioredis';
 import { AppConfigService } from '@insura/foundation';
 
 /**
- * Redis-based rate limiter for local login attempts.
+ * Redis-based rate limiter for authentication endpoints (login, register).
  *
- * Tracks failed attempts by IP address to prevent brute-force attacks.
+ * Tracks failed attempts by IP address to prevent brute-force attacks and
+ * registration flooding.
  * Uses Redis INCR + EXPIRE for atomic TTL-based counters.
  *
- * Key format: login:attempts:{ipAddress}
+ * Key format: {scope}:attempts:{ipAddress}
+ * Scope "login" (Default) und "register" nutzen getrennte Zaehler, damit
+ * sich die Endpunkte nicht gegenseitig ausbremsen.
  * TTL is configurable via LOCAL_AUTH_RATE_LIMIT_WINDOW_MS.
  * Max attempts per window is configurable via LOCAL_AUTH_MAX_ATTEMPTS.
  */
@@ -30,22 +33,22 @@ export class LoginRateLimiterService implements OnModuleDestroy {
     });
   }
 
-  private redisKey(ip: string): string {
+  private redisKey(scope: 'login' | 'register', ip: string): string {
     // The IP is used as-is in the Redis key. IPv6 addresses with colons
     // are valid Redis key characters and do not cause hierarchy issues.
     // IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) and their bare IPv4
     // equivalent will produce separate keys, which is acceptable for
     // best-effort rate limiting. Normalization could be added if needed.
-    return `login:attempts:${ip}`;
+    return `${scope}:attempts:${ip}`;
   }
 
   /**
-   * Record a failed login attempt for the given IP.
+   * Record a failed attempt for the given IP and scope.
    * Returns the current attempt count.
    */
-  async recordAttempt(ip: string): Promise<number> {
+  async recordAttempt(ip: string, scope: 'login' | 'register' = 'login'): Promise<number> {
     try {
-      const key = this.redisKey(ip);
+      const key = this.redisKey(scope, ip);
       const count = await this.client.incr(key);
       if (count === 1) {
         // First attempt, set expiry in milliseconds.
@@ -64,11 +67,11 @@ export class LoginRateLimiterService implements OnModuleDestroy {
   }
 
   /**
-   * Check whether the given IP is currently rate-limited.
+   * Check whether the given IP is currently rate-limited for the given scope.
    */
-  async isBlocked(ip: string): Promise<boolean> {
+  async isBlocked(ip: string, scope: 'login' | 'register' = 'login'): Promise<boolean> {
     try {
-      const key = this.redisKey(ip);
+      const key = this.redisKey(scope, ip);
       const count = await this.client.get(key);
       return count !== null && parseInt(count, 10) >= this.maxAttempts;
     } catch (err) {
@@ -78,11 +81,12 @@ export class LoginRateLimiterService implements OnModuleDestroy {
   }
 
   /**
-   * Reset the attempt counter for the given IP (e.g., after successful login).
+   * Reset the attempt counter for the given IP and scope
+   * (e.g., after successful login).
    */
-  async resetAttempts(ip: string): Promise<void> {
+  async resetAttempts(ip: string, scope: 'login' | 'register' = 'login'): Promise<void> {
     try {
-      await this.client.del(this.redisKey(ip));
+      await this.client.del(this.redisKey(scope, ip));
     } catch (err) {
       this.logger.warn('Rate limiter reset Redis error', (err as Error).message);
     }

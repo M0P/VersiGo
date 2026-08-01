@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { CostTrackingController, CostTrackingHouseholdController } from '../cost-tracking.controller';
-import { UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import { PaymentFrequency } from '@prisma/client';
 import type { AuthenticatedUser } from '../../identity/auth.service';
 
@@ -30,8 +30,9 @@ function createMockService(): ServiceLike {
 
 const mockUser: AuthenticatedUser = {
   id: 'user-1',
-  email: 'a@example.com',
+  username: 'alice',
   displayName: 'A',
+  role: GlobalRole.USER,
   status: UserStatus.ACTIVE,
   memberships: [],
 };
@@ -69,7 +70,7 @@ describe('CostTrackingController', () => {
     const result = await controller.findAll(householdId, policyId, mockUser);
 
     expect(result).toHaveLength(1);
-    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
+    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
   it('findOne delegiert an Service', async () => {
@@ -80,7 +81,7 @@ describe('CostTrackingController', () => {
     const result = await controller.findOne(householdId, policyId, entryId, mockUser);
 
     expect(result).toEqual({ id: entryId });
-    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser.id, policyId, entryId);
+    expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser, policyId, entryId);
   });
 
   it('update delegiert an Service', async () => {
@@ -118,7 +119,7 @@ describe('CostTrackingController', () => {
 
     expect(result).not.toBeNull();
     expect(result!.annualGross).toBe(1200);
-    expect(service.getAnnualCost).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
+    expect(service.getAnnualCost).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
   it('getYearComparison delegiert an Service', async () => {
@@ -130,7 +131,7 @@ describe('CostTrackingController', () => {
 
     expect(result).not.toBeNull();
     expect(result!.absoluteChange).toBe(100);
-    expect(service.getYearComparison).toHaveBeenCalledWith(householdId, mockUser.id, policyId, 2025);
+    expect(service.getYearComparison).toHaveBeenCalledWith(householdId, mockUser, policyId, 2025);
   });
 });
 
@@ -145,6 +146,6 @@ describe('CostTrackingHouseholdController', () => {
     const result = await controller.getSummary(householdId, mockUser);
 
     expect(result.totalAnnualGross).toBe(5000);
-    expect(service.getHouseholdSummary).toHaveBeenCalledWith(householdId, mockUser.id);
+    expect(service.getHouseholdSummary).toHaveBeenCalledWith(householdId, mockUser);
   });
 });

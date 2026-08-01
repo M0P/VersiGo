@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FamilySharingService } from '../family-sharing.service';
 import { ForbiddenException } from '@nestjs/common';
-import { ObjectShareScopeType, ObjectSharePermission } from '@prisma/client';
+import { ObjectShareScopeType, ObjectSharePermission, GlobalRole, UserStatus } from '@prisma/client';
+import { AuthService, AuthenticatedUser } from '../../identity/auth.service';
 
 function createMockDb() {
   const db: Record<string, unknown> & {
@@ -31,6 +32,14 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
   const userA = { id: 'user-aaaa' };
   const userB = { id: 'user-bbbb' };
   const targetUser = { id: 'user-target' };
+  const userBUser: AuthenticatedUser = {
+    id: userB.id,
+    username: 'user-bbbb',
+    displayName: 'User B',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [],
+  };
 
   let mockDb: ReturnType<typeof createMockDb>;
   let service: FamilySharingService;
@@ -48,7 +57,10 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new FamilySharingService(mockDb as never);
+    service = new FamilySharingService(
+      mockDb as never,
+      new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+    );
   });
 
   it('User A erstellt Freigabe in Household A (erlaubt)', async () => {
@@ -97,7 +109,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ]);
 
     await expect(
-      service.findAll(householdA, userB.id),
+      service.findAll(householdA, userBUser),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -127,7 +139,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ]);
 
     await expect(
-      service.findOne(householdA, userB.id, 'share-1'),
+      service.findOne(householdA, userBUser, 'share-1'),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -149,7 +161,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ]);
 
     await expect(
-      service.remove(householdA, userB.id, 'share-1'),
+      service.remove(householdA, userBUser, 'share-1'),
     ).rejects.toThrow(ForbiddenException);
   });
 

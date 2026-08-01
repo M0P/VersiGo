@@ -5,8 +5,10 @@ import {
   Param,
   Body,
 } from '@nestjs/common';
+import { GlobalRole } from '@prisma/client';
 import { UserPreferencesService } from './user-preferences.service';
 import { CurrentUser } from '../identity/current-user.decorator';
+import { Roles } from '../identity/roles.decorator';
 import type { AuthenticatedUser } from '../identity/auth.service';
 import { SetUserPreferenceDto, UserPreferenceResponseDto } from './dto/user-preferences.dto';
 
@@ -16,6 +18,10 @@ import { SetUserPreferenceDto, UserPreferenceResponseDto } from './dto/user-pref
  * All endpoints require authentication (handled by the global SessionAuthGuard).
  * Data is scoped to the authenticated user – one user cannot read or write
  * another user's preferences.
+ *
+ * AP-16: Das Aendern von Einstellungen (Profil-/Theme-/Locale) ist nur
+ * USER/ADMIN erlaubt. READ_ONLY darf lesen (die UI benoetigt z. B. die
+ * Akzentfarbe zum Rendern), aber nichts veraendern.
  *
  * Route prefix: /user/preferences
  */
@@ -48,8 +54,9 @@ export class UserPreferencesController {
 
   /**
    * Set (create or update) a preference by key.
-   * PUT /user/preferences/:key
+   * PUT /user/preferences/:key – nur USER/ADMIN (AP-16).
    */
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
   @Put(':key')
   async set(
     @CurrentUser() user: AuthenticatedUser,

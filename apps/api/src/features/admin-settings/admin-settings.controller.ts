@@ -9,7 +9,7 @@ import {
   UseGuards,
   ForbiddenException,
 } from '@nestjs/common';
-import { HouseholdRole } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { SettingsStoreService } from './settings-store.service';
 import { FeatureFlagsService } from './feature-flags.service';
 import { AppConfigService, DatabaseService } from '@insura/foundation';
@@ -30,13 +30,10 @@ import {
   ConnectivityTestResultDto,
 } from './dto/admin-settings.dto';
 
-// Hilfsfunktion: Prueft, ob der User mindestens eine OWNER/ADMIN-Mitgliedschaft hat
+// Hilfsfunktion: Prueft, ob der User die globale Rolle ADMIN hat (ADR-007)
 function assertIsGlobalAdmin(user: AuthenticatedUser): void {
-  const isAdmin = user.memberships.some(
-    (m) => m.role === HouseholdRole.OWNER || m.role === HouseholdRole.ADMIN,
-  );
-  if (!isAdmin) {
-    throw new ForbiddenException('Nur Household-OWNER oder ADMIN koennen globale Einstellungen verwalten');
+  if (user.role !== GlobalRole.ADMIN) {
+    throw new ForbiddenException('Nur globale Administratoren koennen diese Aktion ausfuehren');
   }
 }
 
@@ -343,7 +340,7 @@ export class AdminSettingsController {
 
   @Get('households/:householdId/admin/settings')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async listHouseholdSettings(
     @Param('householdId') householdId: string,
   ) {
@@ -352,7 +349,7 @@ export class AdminSettingsController {
 
   @Get('households/:householdId/admin/settings/:key')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async getHouseholdSetting(
     @Param('householdId') householdId: string,
     @Param('key') key: string,
@@ -362,7 +359,7 @@ export class AdminSettingsController {
 
   @Post('households/:householdId/admin/settings')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async createHouseholdSetting(
     @Param('householdId') householdId: string,
     @Body() dto: CreateHouseholdSettingDto,
@@ -377,7 +374,7 @@ export class AdminSettingsController {
 
   @Patch('households/:householdId/admin/settings/:key')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async updateHouseholdSetting(
     @Param('householdId') householdId: string,
     @Param('key') key: string,
@@ -393,7 +390,7 @@ export class AdminSettingsController {
 
   @Delete('households/:householdId/admin/settings/:key')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async deleteHouseholdSetting(
     @Param('householdId') householdId: string,
     @Param('key') key: string,
@@ -407,7 +404,7 @@ export class AdminSettingsController {
 
   @Get('households/:householdId/admin/feature-flags')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async listHouseholdFlags(
     @Param('householdId') householdId: string,
   ) {
@@ -416,7 +413,7 @@ export class AdminSettingsController {
 
   @Get('households/:householdId/admin/feature-flags/:key')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async getHouseholdFlag(
     @Param('householdId') householdId: string,
     @Param('key') key: string,
@@ -426,7 +423,7 @@ export class AdminSettingsController {
 
   @Post('households/:householdId/admin/feature-flags')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async createHouseholdFlag(
     @Param('householdId') householdId: string,
     @Body() dto: CreateHouseholdFeatureFlagDto,
@@ -440,7 +437,7 @@ export class AdminSettingsController {
 
   @Patch('households/:householdId/admin/feature-flags/:key')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async updateHouseholdFlag(
     @Param('householdId') householdId: string,
     @Param('key') key: string,
@@ -451,7 +448,7 @@ export class AdminSettingsController {
 
   @Delete('households/:householdId/admin/feature-flags/:key')
   @UseGuards(HouseholdMembershipGuard)
-  @Roles(HouseholdRole.OWNER, HouseholdRole.ADMIN)
+  @Roles(GlobalRole.ADMIN)
   async deleteHouseholdFlag(
     @Param('householdId') householdId: string,
     @Param('key') key: string,

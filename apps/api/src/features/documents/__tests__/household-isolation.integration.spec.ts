@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DocumentsService } from '../documents.service';
 import { ForbiddenException } from '@nestjs/common';
 import type { UploadedFile } from '../documents.types';
+import { GlobalRole, UserStatus } from '@prisma/client';
+import { AuthService, AuthenticatedUser } from '../../identity/auth.service';
 
 vi.mock('fs/promises', () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
@@ -60,6 +62,14 @@ describe('Documents Household-Isolation (Integration)', () => {
   const docInA = 'eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee';
   const userA = { id: '11111111-1111-4111-1111-111111111111' };
   const userB = { id: '22222222-2222-4222-2222-222222222222' };
+  const userBUser: AuthenticatedUser = {
+    id: userB.id,
+    username: 'user-bbbb',
+    displayName: 'User B',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [],
+  };
 
   let mockDb: ReturnType<typeof createMockDb>;
   let service: DocumentsService;
@@ -77,7 +87,11 @@ describe('Documents Household-Isolation (Integration)', () => {
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new DocumentsService(mockDb as never, createMockConfig() as never);
+    service = new DocumentsService(
+      mockDb as never,
+      createMockConfig() as never,
+      new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+    );
   });
 
   it('User A laedt Dokument in Household A hoch (erlaubt)', async () => {
@@ -113,7 +127,7 @@ describe('Documents Household-Isolation (Integration)', () => {
     ]);
 
     await expect(
-      service.findAll(householdA, userB.id, policyInA),
+      service.findAll(householdA, userBUser, policyInA),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -123,7 +137,7 @@ describe('Documents Household-Isolation (Integration)', () => {
     ]);
 
     await expect(
-      service.findOne(householdA, userB.id, policyInA, docInA),
+      service.findOne(householdA, userBUser, policyInA, docInA),
     ).rejects.toThrow(ForbiddenException);
   });
 

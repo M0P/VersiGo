@@ -1,15 +1,19 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '@insura/foundation';
-import { HouseholdRole, ObjectShareScopeType, ObjectSharePermission } from '@prisma/client';
+import { GlobalRole, ObjectShareScopeType, ObjectSharePermission } from '@prisma/client';
 import { CreateShareDto, UpdateShareDto } from './dto/family-sharing.dto';
+import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 
 @Injectable()
 export class FamilySharingService {
   private readonly logger = new Logger(FamilySharingService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly authService: AuthService,
+  ) {}
 
-  private async assertHouseholdAccess(householdId: string, userId: string): Promise<{ householdId: string; userId: string; role: HouseholdRole }> {
+  private async assertHouseholdAccess(householdId: string, userId: string): Promise<{ householdId: string; userId: string }> {
     const membership = await this.db.householdMembership.findUnique({
       where: { householdId_userId: { householdId, userId } },
     });
@@ -123,12 +127,20 @@ export class FamilySharingService {
 
   /**
    * Listet alle Freigaben in einem Household.
+   * READ_ONLY sieht ausschliesslich Freigaben, an denen der User beteiligt
+   * ist (als Quelle oder Ziel) – er bekommt keinen Einblick in die
+   * Freigaben anderer Household-Mitglieder.
    */
-  async findAll(householdId: string, userId: string) {
-    await this.assertHouseholdAccess(householdId, userId);
+  async findAll(householdId: string, user: AuthenticatedUser) {
+    await this.assertHouseholdAccess(householdId, user.id);
+
+    const where =
+      user.role === GlobalRole.READ_ONLY
+        ? { householdId, OR: [{ sourceUserId: user.id }, { targetUserId: user.id }] }
+        : { householdId };
 
     return this.db.objectShare.findMany({
-      where: { householdId },
+      where,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -207,8 +219,8 @@ export class FamilySharingService {
    * Entzieht (löscht) eine Freigabe.
    * Der Entzug wirkt unmittelbar, da die Berechtigung zur Laufzeit geprüft wird.
    */
-  async remove(householdId: string, userId: string, shareId: string) {
-    const membership = await this.assertHouseholdAccess(householdId, userId);
+  async remove(householdId: string, user: AuthenticatedUser, shareId: string) {
+    await this.assertHouseholdAccess(householdId, user.id);
 
     const share = await this.db.objectShare.findFirst({
       where: { id: shareId, householdId },
@@ -218,11 +230,11 @@ export class FamilySharingService {
       throw new NotFoundException('Freigabe nicht gefunden');
     }
 
-    // Nur Source-User oder OWNER/ADMIN des Households können löschen
-    const isSource = share.sourceUserId === userId;
-    const isHouseholdAdmin = membership.role === HouseholdRole.OWNER || membership.role === HouseholdRole.ADMIN;
+    // Nur der Source-User oder ein globaler ADMIN kann eine Freigabe entziehen
+    const isSource = share.sourceUserId === user.id;
+    const isGlobalAdmin = user.role === GlobalRole.ADMIN;
 
-    if (!isSource && !isHouseholdAdmin) {
+    if (!isSource && !isGlobalAdmin) {
       throw new ForbiddenException('Nicht berechtigt, diese Freigabe zu entziehen');
     }
 
@@ -231,7 +243,7 @@ export class FamilySharingService {
 
       await tx.auditEvent.create({
         data: {
-          actorUserId: userId,
+          actorUserId: user.id,
           entityType: 'ObjectShare',
           entityId: shareId,
           action: 'DELETE',
@@ -311,9 +323,10 @@ export class FamilySharingService {
 
   /**
    * Findet eine einzelne Freigabe.
+   * READ_ONLY darf nur Freigaben sehen, an denen er beteiligt ist.
    */
-  async findOne(householdId: string, userId: string, shareId: string) {
-    await this.assertHouseholdAccess(householdId, userId);
+  async findOne(householdId: string, user: AuthenticatedUser, shareId: string) {
+    await this.assertHouseholdAccess(householdId, user.id);
 
     const share = await this.db.objectShare.findFirst({
       where: { id: shareId, householdId },
@@ -321,6 +334,14 @@ export class FamilySharingService {
 
     if (!share) {
       throw new NotFoundException('Freigabe nicht gefunden');
+    }
+
+    if (
+      user.role === GlobalRole.READ_ONLY &&
+      share.sourceUserId !== user.id &&
+      share.targetUserId !== user.id
+    ) {
+      throw new ForbiddenException('Nicht berechtigt, diese Freigabe zu sehen');
     }
 
     return share;

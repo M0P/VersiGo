@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LocalAdminBootstrapService } from '../local-admin.bootstrap';
-import { UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 
 function createMockTx() {
   return {
@@ -10,6 +10,9 @@ function createMockTx() {
     credential: {
       create: vi.fn().mockResolvedValue({ id: 'cred-1' }),
     },
+    auditEvent: {
+      create: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+    },
   };
 }
 
@@ -18,7 +21,7 @@ type MockTx = ReturnType<typeof createMockTx>;
 function createMockDb() {
   const tx = createMockTx();
   return {
-    credential: {
+    user: {
       findUnique: vi.fn(),
     },
     $transaction: vi.fn(
@@ -34,10 +37,8 @@ function createMockConfig(overrides: Record<string, unknown> = {}) {
   const values: Record<string, unknown> = {
     isProduction: false,
     LOCAL_AUTH_ENABLED: true,
-    LOCAL_ADMIN_EMAIL: 'Admin@Local.Test',
+    LOCAL_ADMIN_USERNAME: 'LocalAdmin',
     LOCAL_ADMIN_PASSWORD: 'local-dev-admin-pw-2026',
-    LOCAL_ADMIN_FIRST_NAME: 'Local',
-    LOCAL_ADMIN_LAST_NAME: 'Admin',
     ...overrides,
   };
   return {
@@ -72,32 +73,39 @@ describe('LocalAdminBootstrapService', () => {
     );
   }
 
-  it('legt den initialen Admin an, wenn kein Credential existiert', async () => {
-    mockDb.credential.findUnique.mockResolvedValue(null);
+  it('legt den initialen Admin an, wenn kein Benutzername existiert', async () => {
+    mockDb.user.findUnique.mockResolvedValue(null);
     service = createService(createMockConfig());
 
     await service.bootstrap();
 
-    // Identifier wird normalisiert (lowercase, getrimmt)
-    expect(mockDb.credential.findUnique).toHaveBeenCalledWith({
-      where: { identifier: 'admin@local.test' },
+    // Benutzername wird normalisiert (lowercase, getrimmt)
+    expect(mockDb.user.findUnique).toHaveBeenCalledWith({
+      where: { username: 'localadmin' },
       select: { id: true },
     });
 
     const tx = mockDb._tx;
     expect(tx.user.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        email: 'Admin@Local.Test',
-        displayName: 'Local Admin',
-        oidcIssuer: 'local',
-        oidcSubject: 'admin@local.test',
+        username: 'localadmin',
+        displayName: 'localadmin',
+        role: GlobalRole.ADMIN,
         status: UserStatus.ACTIVE,
       }),
     });
     expect(tx.credential.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        identifier: 'admin@local.test',
         userId: expect.any(String) as string,
+      }),
+    });
+    // AP-16: credentials hat kein identifier-Feld mehr
+    expect(tx.credential.create.mock.calls[0][0].data).not.toHaveProperty('identifier');
+    // Audit-Eintrag fuer den Bootstrap
+    expect(tx.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        entityType: 'User',
+        action: 'BOOTSTRAP_ADMIN',
       }),
     });
     // Nur der Hash wird gespeichert, niemals der Klartext
@@ -112,7 +120,7 @@ describe('LocalAdminBootstrapService', () => {
   });
 
   it('legt kein Duplikat an, wenn der Admin bereits existiert', async () => {
-    mockDb.credential.findUnique.mockResolvedValue({ id: 'cred-1' });
+    mockDb.user.findUnique.mockResolvedValue({ id: 'user-1' });
     service = createService(createMockConfig());
 
     await service.bootstrap();
@@ -124,7 +132,7 @@ describe('LocalAdminBootstrapService', () => {
   });
 
   it('ueberschreibt ein bestehendes Passwort nicht, wenn sich die Konfiguration aendert', async () => {
-    mockDb.credential.findUnique.mockResolvedValue({ id: 'cred-1' });
+    mockDb.user.findUnique.mockResolvedValue({ id: 'user-1' });
     service = createService(
       createMockConfig({ LOCAL_ADMIN_PASSWORD: 'neues-passwort-nach-erstem-start' }),
     );
@@ -141,7 +149,7 @@ describe('LocalAdminBootstrapService', () => {
 
     await service.bootstrap();
 
-    expect(mockDb.credential.findUnique).not.toHaveBeenCalled();
+    expect(mockDb.user.findUnique).not.toHaveBeenCalled();
     expect(mockDb._tx.user.create).not.toHaveBeenCalled();
   });
 
@@ -150,63 +158,24 @@ describe('LocalAdminBootstrapService', () => {
 
     await service.bootstrap();
 
-    expect(mockDb.credential.findUnique).not.toHaveBeenCalled();
+    expect(mockDb.user.findUnique).not.toHaveBeenCalled();
     expect(mockDb._tx.user.create).not.toHaveBeenCalled();
   });
 
   it('ueberspringt den Bootstrap, wenn Admin-Variablen fehlen', async () => {
     service = createService(
-      createMockConfig({ LOCAL_ADMIN_EMAIL: undefined, LOCAL_ADMIN_PASSWORD: undefined }),
+      createMockConfig({ LOCAL_ADMIN_USERNAME: undefined, LOCAL_ADMIN_PASSWORD: undefined }),
     );
 
     await service.bootstrap();
 
-    expect(mockDb.credential.findUnique).not.toHaveBeenCalled();
+    expect(mockDb.user.findUnique).not.toHaveBeenCalled();
     expect(mockDb._tx.user.create).not.toHaveBeenCalled();
   });
 
-  it('behandelt fehlenden Vornamen/Nachnamen ohne Absturz', async () => {
-    mockDb.credential.findUnique.mockResolvedValue(null);
-    service = createService(
-      createMockConfig({
-        LOCAL_ADMIN_FIRST_NAME: undefined,
-        LOCAL_ADMIN_LAST_NAME: undefined,
-      }),
-    );
-
-    await service.bootstrap();
-
-    const tx = mockDb._tx;
-    // displayName faellt auf die E-Mail zurueck
-    expect(tx.user.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ displayName: 'Admin@Local.Test' }),
-    });
-  });
-
-  it('wirft nicht, wenn die E-Mail bereits vergeben ist (P2002, z. B. durch OIDC-Benutzer)', async () => {
-    // findUnique findet kein LOCAL-Credential, aber users.email ist UNIQUE
-    // und wird von einem bestehenden (OIDC-)Benutzer gehalten.
-    mockDb.credential.findUnique.mockResolvedValue(null);
-    const conflict = new Error(
-      'Unique constraint failed on the fields: (`email`)',
-    );
-    (conflict as { code?: string }).code = 'P2002';
-    mockDb._tx.user.create.mockRejectedValueOnce(conflict);
-    service = createService(createMockConfig());
-
-    // Muss geloggt und uebersprungen werden – nie einen Throw ausloesen.
-    await expect(service.bootstrap()).resolves.toBeUndefined();
-
-    expect(mockDb._tx.credential.create).not.toHaveBeenCalled();
-  });
-
-  it('wirft nicht bei einer Check-then-Insert-Race zwischen Replikas (P2002)', async () => {
-    // Beide Replikas lesen "kein Credential vorhanden" und inserten dann –
-    // die UNIQUE-Constraint schlaegt fuer den zweiten Schlag zu.
-    mockDb.credential.findUnique.mockResolvedValue(null);
-    const conflict = new Error(
-      'Unique constraint failed on the fields: (`identifier`)',
-    );
+  it('wirft nicht, wenn der Benutzername bereits vergeben ist (P2002, Race zwischen Replikas)', async () => {
+    mockDb.user.findUnique.mockResolvedValue(null);
+    const conflict = new Error('Unique constraint failed on the fields: (`username`)');
     (conflict as { code?: string }).code = 'P2002';
     mockDb._tx.user.create.mockRejectedValueOnce(conflict);
     service = createService(createMockConfig());
@@ -219,30 +188,29 @@ describe('LocalAdminBootstrapService', () => {
   it('wirft bei Nicht-Duplikat-Fehlern (z. B. DB nicht erreichbar) nicht, loggt aber', async () => {
     const dbError = new Error('Can\'t reach database server');
     (dbError as { code?: string }).code = 'P1001';
-    mockDb.credential.findUnique.mockRejectedValueOnce(dbError);
+    mockDb.user.findUnique.mockRejectedValueOnce(dbError);
     service = createService(createMockConfig());
 
     await expect(service.bootstrap()).resolves.toBeUndefined();
   });
 
-  it('speichert die E-Mail getrimmt und normalisiert den Identifier', async () => {
-    mockDb.credential.findUnique.mockResolvedValue(null);
+  it('normalisiert den Benutzernamen (lowercase, getrimmt)', async () => {
+    mockDb.user.findUnique.mockResolvedValue(null);
     service = createService(
-      createMockConfig({ LOCAL_ADMIN_EMAIL: '  Admin@Local.Test  ' }),
+      createMockConfig({ LOCAL_ADMIN_USERNAME: '  LocalAdmin  ' }),
     );
 
     await service.bootstrap();
 
-    expect(mockDb.credential.findUnique).toHaveBeenCalledWith({
-      where: { identifier: 'admin@local.test' },
+    expect(mockDb.user.findUnique).toHaveBeenCalledWith({
+      where: { username: 'localadmin' },
       select: { id: true },
     });
     const tx = mockDb._tx;
     expect(tx.user.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        email: 'Admin@Local.Test',
-        displayName: 'Local Admin',
-        oidcSubject: 'admin@local.test',
+        username: 'localadmin',
+        displayName: 'localadmin',
       }),
     });
   });

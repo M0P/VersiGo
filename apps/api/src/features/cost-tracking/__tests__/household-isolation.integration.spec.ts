@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CostTrackingService } from '../cost-tracking.service';
 import { ForbiddenException } from '@nestjs/common';
-import { PaymentFrequency } from '@prisma/client';
+import { PaymentFrequency, GlobalRole, UserStatus } from '@prisma/client';
+import { AuthService, AuthenticatedUser } from '../../identity/auth.service';
 
 function createMockDb() {
   const db: Record<string, unknown> & {
@@ -32,6 +33,14 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
   const policyInB = 'policy-in-b';
   const userA = { id: 'user-aaaa' };
   const userB = { id: 'user-bbbb' };
+  const userBUser: AuthenticatedUser = {
+    id: userB.id,
+    username: 'user-bbbb',
+    displayName: 'User B',
+    role: GlobalRole.USER,
+    status: UserStatus.ACTIVE,
+    memberships: [],
+  };
 
   let mockDb: ReturnType<typeof createMockDb>;
   let service: CostTrackingService;
@@ -49,7 +58,10 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new CostTrackingService(mockDb as never);
+    service = new CostTrackingService(
+      mockDb as never,
+      new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+    );
   });
 
   it('User A erstellt CostEntry in Household A (erlaubt)', async () => {
@@ -91,7 +103,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     });
 
     await expect(
-      service.findAll(householdA, userB.id, policyInA),
+      service.findAll(householdA, userBUser, policyInA),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -104,7 +116,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     });
 
     await expect(
-      service.findOne(householdA, userB.id, policyInA, 'ce-1'),
+      service.findOne(householdA, userBUser, policyInA, 'ce-1'),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -143,7 +155,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     });
 
     await expect(
-      service.getAnnualCost(householdA, userB.id, policyInA),
+      service.getAnnualCost(householdA, userBUser, policyInA),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -153,7 +165,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ]);
 
     await expect(
-      service.getHouseholdSummary(householdA, userB.id),
+      service.getHouseholdSummary(householdA, userBUser),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -166,7 +178,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     });
 
     await expect(
-      service.getYearComparison(householdA, userB.id, policyInA, 2025),
+      service.getYearComparison(householdA, userBUser, policyInA, 2025),
     ).rejects.toThrow(ForbiddenException);
   });
 });

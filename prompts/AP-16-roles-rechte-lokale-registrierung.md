@@ -72,7 +72,7 @@ Halte den vollständigen unabhängigen Review-Loop ein: `@code-reviewer` read-on
 - Genau die drei globalen Rollen `READ_ONLY`, `USER`, `ADMIN` sind serverseitig durchgesetzt und korrekt migriert.
 - Jeder Nutzer besitzt Benutzername und Passwort; E-Mail ist nicht erforderlich.
 - Registrierung erzeugt gesperrte Pending-Konten; nur ein Admin kann sie freischalten.
-- `ADMIN` verwaltet Nutzer, Rollen und Systemeinstellungen; `USER` verwaltet ausschließlich eigene Verträge und eigenes Profil; `READ_ONLY` liest nur explizit freigegebene Verträge und ändert keinerlei Einstellungen.
+- `ADMIN` verwaltet Nutzer, Rollen und Systemeinstellungen; `USER` verwaltet ausschließlich eigene Verträge und eigenes Profil; `READ_ONLY` liest nur explizit freigegebene Verträge und ändert keinerlei Einstellungen. „Eigene Verträge" bedeutet die Verträge des eigenen Households (gemeinsame Verwaltung innerhalb des Households, Family-Sharing-Modell; `ownerUserId` ist Provenienz-Information, keine Zugriffsgrenze – siehe ADR-007).
 - Rechteverletzungen sind über UI, direkte Routen und APIs gleichermaßen verhindert; Datenisolation bleibt gewährleistet.
 - Passwort-, Session-, Audit- und Rate-Limit-Schutz ist vorhanden und getestet.
 - Migrationen, Dokumentation, unabhängiger Review und der vollständige Docker-Compose-Test-/CI-Pfad sind erfolgreich.
