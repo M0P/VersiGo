@@ -1,9 +1,9 @@
 # Next Work Package
 
 ## Status
-Work package **BugFix-01** (lokaler Docker- und Monorepo-Start vollständig lauffähig) is committed at hash `054702d` on branch `fix/BugFix-01-docker-setup`. Final review verdict: 0 Critical / 0 High / 0 Medium / 2 Minor (rounds 1–5 documented in `docs/reviews/BugFix-01-review-{1..5}.md`; the two R5 Minor findings were fixed and re-verified — the canonical Docker Compose test suite passed: "All checks passed!" and the compose smoke test ran 10/10 PASS, including the worker readiness marker and a live BullMQ round-trip).
+Work package **AP-16** (Rollen, Rechte, lokale Registrierung und Freischaltung) is committed at hash `39ca609` on branch `feat/AP-16-roles-rechte-lokale-registrierung`. Final review verdict: 0 Critical / 0 High / 0 Medium / 0 Minor (rounds 1–5 documented in `docs/reviews/AP-16-review-{1..5}.md`; round 4 returned 1 Minor which was fixed and re-verified in round 5). Both canonical gates are green: the docker-compose test suite passed ("All checks passed!", 34 test files / 414 tests, lint + typecheck + prisma migrate deploy + build) and `./scripts/compose-smoke-test.sh --build` passed all steps including worker startup and the BullMQ round-trip.
 
-AP-14 and AP-15 are already committed. The next work package in rising order is **AP-16 — Rollen, Rechte, lokale Registrierung und Freischaltung**.
+AP-13, AP-14, AP-15 and AP-16 are committed. The next work package in rising order is **AP-17 — Profil- und Systemeinstellungen in der UI**.
 
 ## Prompt for the next coding-agent
 
@@ -11,83 +11,93 @@ Below is the full content of the next work package. Implement only this work pac
 
 ---
 
-/prompts/AP-16-roles-rechte-lokale-registrierung.md
+/prompts/AP-17-profil-und-systemeinstellungen-ui.md
 
-# Feature: Rollen, Rechte, lokale Registrierung und Freischaltung
+# Feature: Profil- und Systemkonfiguration in der UI
 
 ## Ziel
 
-Ersetze das bisherige Household-Rollenmodell (`OWNER`, `ADMIN`, `MEMBER`, `VIEWER`) durch ein klar durchgesetztes globales Rollen- und Rechtekonzept mit genau drei Rollen: `READ_ONLY`, `USER` und `ADMIN`. Jede Person verwendet lokale Zugangsdaten aus Benutzername und Passwort; eine E-Mail-Adresse ist weder erforderlich noch abzufragen. Neue Registrierungen bleiben bis zur expliziten Freischaltung durch einen Admin gesperrt.
+Erweitere Insura um getrennte, sichere und responsive Profil- sowie System-Einstellungen. `USER` und `ADMIN` erhalten persönliche Profileinstellungen; `ADMIN` erhält zusätzlich eine zentrale Systemkonfiguration für alle fachlich und betrieblich konfigurierbaren Optionen. Datenbankgestützte UI-Konfiguration hat Vorrang vor `.env`; `.env` bleibt ausschließlich der dokumentierte Fallback. Für jeden Fallback muss die Admin-UI sichtbar machen, dass, warum und mit welchem effektiven Wert der Fallback greift.
 
-Dies ist ein vollständiger vertikaler Slice: Prisma-Migration, sichere lokale Credentials, Registrierung/Freischaltung, API- und Guard-Durchsetzung, UI, Audit, Tests, Docker-Compose-Testvertrag und Dokumentation gehören in denselben Änderungsumfang.
+Dies ist ein vollständiger vertikaler Slice aus Settings-Katalog, Prioritätsauflösung, Persistenz/Verschlüsselung, API, Admin- und Profil-UI, Audit, Tests, Compose/CI und Dokumentation. Die Änderung muss auf dem in der Rollen-/Rechte-Funktion etablierten Modell aufbauen; falls diese noch nicht umgesetzt ist, muss der Slice die erforderlichen Berechtigungsgrenzen explizit und kompatibel vorbereiten, ohne konkurrierende Rollenlogik einzuführen.
 
-## Vorbedingungen und verbindliche Referenzen
+## Verbindliche Referenzen
 
-Lies vor Planung und Umsetzung vollständig `AGENTS.md`, `prompts/00-gemeinsame-regeln.md`, alle Dateien unter `docs/` einschließlich ADRs, `dependency-policy.md`, `.opencode/agents/*`, `prompts/PR-REVIEW.md`, bestehende Identity-, Family-Sharing-, Policy-, Settings- und Audit-Implementierungen sowie die zugehörigen Tests und Migrationen.
+Lies vollständig `AGENTS.md`, `prompts/00-gemeinsame-regeln.md`, alle `docs/` und ADRs, `dependency-policy.md`, `.opencode/agents/*`, `prompts/PR-REVIEW.md`, die vorhandene Admin-Settings-Implementierung, Settings-Store/Feature-Flag-/Encryption-Code, Konfigurationsschema, `.env.example`, Docker-Compose-Dateien, API/Web/Worker-Consumers, Health-Checks und Tests.
 
-- Halte alle dortigen Regeln ein, einschließlich vertikaler Feature-Grenzen, Household-Isolation, objektbezogener Freigaben, Security/Privacy, Audit, Dependency Policy, unabhängiger Code Reviews und des verbindlichen Docker-Compose-Testvertrags.
-- Bestehende OIDC-Unterstützung darf nicht unbeabsichtigt beschädigt werden. Da alle Nutzer lokale Zugangsdaten benötigen, muss der Agent vor der Umsetzung eine explizite, dokumentierte Entscheidung treffen, ob OIDC entfernt, deaktiviert oder als optionaler, an ein lokales Konto gebundener zweiter Login-Weg erhalten bleibt. Ohne ausdrücklich dokumentierte, sichere Migrations- und Kompatibilitätsentscheidung keine Änderung am Identity-Modell.
-- Bereits vorhandene `OWNER`-, `ADMIN`-, `MEMBER`- und `VIEWER`-Daten benötigen eine dokumentierte, verlustfreie Migrationsstrategie. `OWNER` darf nicht stillschweigend zu weniger Rechten führen; der sichere Standard ist eine Migration auf `ADMIN`, sofern die Architekturprüfung keine begründete Alternative festlegt.
+Beachte alle Repository-Regeln, insbesondere Docker-Compose als verbindlichen Test- und CI-Standard, vertikale Slices, optionale Integrationen mit Degradation, Secret-Handling, Verschlüsselung, Audit, Household-Isolation und unabhängigen Code Review.
 
-## Rollenmodell
+## Berechtigungen und UI-Bereiche
 
-| Rolle | Erlaubt | Verboten |
-|---|---|---|
-| `ADMIN` | Alles, was `USER` darf; Nutzer verwalten; Registrierung freischalten/ablehnen; Rollen zuweisen und ändern; Nutzer deaktivieren; globale System- und Integrationskonfiguration verwalten; Feature Flags verwalten | Eigene letzte aktive Admin-Berechtigung oder letzten aktiven Admin entfernen/degradieren; Secrets im Klartext ansehen oder in Logs/API-Antworten offenlegen |
-| `USER` | Eigenes Profil und eigene Oberflächeneinstellungen ändern; eigene Verträge und zugehörige Vertragsinformationen vollständig erstellen, lesen, ändern, archivieren/löschen; zugehörige Kosten, Dokumente, Portal-Links und erlaubte Fachdaten im bestehenden Berechtigungsrahmen verwalten; explizit freigegebene Objekte im Umfang der Freigabe nutzen | Nutzer/Rollen/Systemeinstellungen ändern; fremde oder nur lesend freigegebene Verträge verändern; globale Konfiguration sehen oder ändern |
-| `READ_ONLY` | Ausschließlich explizit und einzeln bzw. über vorhandene Freigabe-Scopes lesend freigegebene Verträge und deren erlaubte Detaildaten lesen | Eigene oder fremde Verträge anlegen, ändern, archivieren oder löschen; Dokumente/Kosten/Portal-Links/Freigaben verändern; Profil-, Theme-, Locale- oder sonstige Einstellungen verändern; System-/Admin-UI aufrufen |
+| Bereich | `READ_ONLY` | `USER` | `ADMIN` |
+|---|---|---|---|
+| Profil | Kein Zugriff und keine Änderung | Eigenes Profil und persönliche UI-Präferenzen lesen/ändern | Eigenes Profil und persönliche UI-Präferenzen lesen/ändern |
+| Systemeinstellungen | Kein Zugriff | Kein Zugriff | Vollständiger Zugriff auf erlaubte zentrale Einstellungen |
+| Nutzerverwaltung | Kein Zugriff | Kein Zugriff | Gemäß Rollen-/Rechte-Modell |
 
-Die Durchsetzung erfolgt serverseitig in Guards/Policies und Datenabfragen; das Ausblenden von UI-Steuerelementen ist nur eine zusätzliche UX-Maßnahme. Household- und Objektfreigaben dürfen nicht durch globale Rollen umgangen werden. Ein `READ_ONLY`-Nutzer erhält ohne passende explizite `READ`-Freigabe keinen Zugriff auf Verträge, auch nicht auf eigene historische oder Household-Daten.
+Die API erzwingt diese Grenzen unabhängig von sichtbaren Navigationspunkten. Kein Settings-Endpunkt darf einem `READ_ONLY`- oder `USER`-Konto durch direkte Anfrage Konfigurationswerte, Secrets, Metadaten oder Änderungsmöglichkeiten preisgeben.
 
-## Funktionaler Umfang
+## Persönliche Profileinstellungen
 
-### Lokale Konten
+`USER` und `ADMIN` dürfen ausschließlich eigene profilbezogene Werte ändern, zum Beispiel Anzeigename, Sprache/Locale, Zeitzone sofern verwendet, Theme/Darstellung und weitere nachweislich persönliche UI-Präferenzen. Die konkrete Liste wird als versionierter Settings-Katalog implementiert und nicht als unvalidiertes JSON-Sammelfeld.
 
-- Implementiere ein eindeutiges, normalisiertes Benutzername-Feld; keine E-Mail-Pflicht, kein E-Mail-Versand und keine E-Mail-Rücksetzung als versteckte Voraussetzung.
-- Speichere ausschließlich zeitgemäß gehashte Passwörter mit per Passwort individuellem Salt; keine Klartextpasswörter in Datenbank, Logs, Audit, Fehlern, Testausgaben oder API-Responses.
-- Ergänze sichere Registrierung, Login, Logout und Session-Integration gemäß bestehender Session-, CSRF-, Cookie- und Proxy-Regeln.
-- Neue Registrierungen erhalten den Status `PENDING`/`PENDING_APPROVAL` und können sich nicht anmelden oder geschützte Ressourcen aufrufen, bis ein Admin sie aktiviert. Antworttexte dürfen weder Benutzerexistenz noch Freischaltstatus unnötig offenlegen.
-- Implementiere Brute-Force-Schutz/Rate Limiting, sichere Passwortvalidierung, generische Login-Fehler und Audit-Ereignisse ohne sensible Werte.
-- Definiere einen sicheren First-Admin-/Bootstrap-Pfad. Er muss explizit konfiguriert, einmalig bzw. sicher begrenzt, auditiert und für Produktion dokumentiert sein; niemals automatische Default-Zugangsdaten erzeugen.
+- Änderungen sind auf den aktuellen Nutzer begrenzt und dürfen Household- oder Systemkonfiguration nicht überschreiben.
+- `READ_ONLY` kann keine Profileinstellungen aufrufen, lesen oder ändern.
+- Validierung, sinnvolle Defaults, sichere Fehlerbehandlung und zugängliche responsive UI sind Pflicht.
+- Keine sensiblen Zugangsdaten, Rollen, Freigaben oder Systemwerte über die Profilseite editierbar machen.
 
-### Nutzerverwaltung
+## Zentrale Systemkonfiguration
 
-- Admin-UI und autorisierte API für Liste, Detailansicht, Suche/Filter nach Status/Rolle, Aktivierung, Ablehnung/Deaktivierung und Rollenzuweisung bereitstellen.
-- Rollenänderungen, Aktivierungen, Deaktivierungen und administrative Identitätsänderungen auditieren; Passwortwerte, Hashes, Sessions und Tokens niemals auditieren.
-- Verhindere zuverlässig, dass der letzte aktive Admin deaktiviert, gelöscht oder auf `USER`/`READ_ONLY` herabgestuft wird. Prüfe dies transaktional gegen Race Conditions.
-- Eine Rolle ist für die gesamte Instanz gültig. Falls HouseholdMembership für Mandantentrennung weiter erforderlich ist, entferne sie nicht ohne ADR und Migration; entkopple fachliche Mitgliedschaft von der neuen globalen Berechtigungsrolle sauber.
+Der Admin erhält eine UI für alle **nicht grundlegenden infrastrukturellen** Konfigurationen. Erfasse vor der Umsetzung einen vollständigen Konfigurationskatalog aus bestehenden `.env`-Variablen, App-Konfigurationsschema, Compose-Dateien, API/Web/Worker-Consumers und Integrationen. Ordne jede Variable genau einer Kategorie zu:
 
-### Verträge und Freigaben
+1. **Bootstrap/infrastrukturkritisch – nur Environment/Compose:** z. B. Datenbank- und Redis-Verbindungsstrings, Container-Service-DNS, DB-/Redis-Passwörter, Session-/Verschlüsselungs-Root-Secrets, Port-Bindings, Dateisystempfade, Reverse-Proxy-/TLS- und Startkonfiguration. Diese Werte dürfen nie über UI gespeichert, angezeigt oder überschrieben werden.
+2. **Zentral fachlich/betrieblich konfigurierbar – Admin-UI mit `.env`-Fallback:** z. B. Feature Flags, optionale AI-Provider/Modelle, AI-Endpunkte, Paperless-ngx, Portal-Connectoren, Storage-Optionen soweit keine Infrastruktur-Secrets betroffen sind, Limits, Funktionsschalter und weitere bereits vorhandene, zur Laufzeit sicher veränderbare Einstellungen.
+3. **Secret-Konfiguration innerhalb einer fachlichen Integration:** über Admin-UI setzbar, verschlüsselt persistiert, niemals als Klartext zurückgegeben, geloggt oder in Audit-Diffs gespeichert. Die UI zeigt nur „gesetzt/nicht gesetzt“, letzten Änderungszeitpunkt und ggf. eine sichere Connectivity-Prüfung.
+4. **Nicht dynamisch anwendbar:** Werte, die zwar fachlich konfigurierbar sind, aber einen kontrollierten Neustart benötigen. Die UI muss Änderung, wirksamen Wert, Quelle und „Neustart erforderlich“ anzeigen; der Wert darf nicht fälschlich als bereits aktiv dargestellt werden.
 
-- `USER`-CRUD für eigene Policies muss alle bereits implementierten Vertragsinformationen und verknüpften Daten abdecken, aber keine bestehenden Ownership-, Household- oder Objektfreigabegrenzen schwächen.
-- `READ_ONLY` erhält nur echte Leserechte auf explizit freigegebene Policy-Scopes. Detail-Endpunkte, Dokument-Downloads/Metadaten, Kosten, AI-Zusammenfassungen, Portal-Links und Exportpfade müssen jeweils serverseitig auf die Freigabe geprüft werden.
-- Bestehende `WRITE`-Freigaben dürfen nicht dazu führen, dass `READ_ONLY` schreibt. Für diese Rolle gilt immer die strengere Rollenregel.
+Kein Mechanismus darf beliebige `.env`-Namen, JSON oder unbekannte Schlüssel über die UI in die Laufzeitkonfiguration einschleusen. Der Katalog ist allowlist-basiert, typisiert, versionskontrolliert, mit DTO-/Schema-Validierung versehen und pro Schlüssel mit Datentyp, Scope, Geheimnis-Flag, Default/Fallback, Runtime-Anwendbarkeit, Rechteanforderung und sichtbarer Beschreibung dokumentiert.
 
-### UI
+## Priorität, Fallback und Transparenz
 
-- Ergänze responsive, zugängliche Seiten für Registrierung, lokale Anmeldung, Freischalt-Hinweis, Admin-Nutzerverwaltung und verbotene Zugriffe. Verwende das vorhandene bzw. nach AP-13 eingeführte zentrale UI-System, ohne parallel ein eigenes Styling-System zu schaffen.
-- `READ_ONLY` sieht nur seine lesbaren Inhalte und keine editierbaren Einstellungen. Direkte Route-Aufrufe und API-Anfragen bleiben trotzdem geschützt.
-- Nutzernamen, Status, Rolle und Aktionen müssen verständlich dargestellt werden; gefährliche Admin-Aktionen verlangen eine klare Bestätigung.
+Für jeden UI-konfigurierbaren Schlüssel gilt deterministisch:
 
-## Migration, Tests und Docker
+1. Gültiger, aktivierter, datenbankgestützter UI-Wert gewinnt.
+2. Fehlt, ist ungültig, deaktiviert oder nicht anwendbar, gilt der validierte `.env`-Wert als Fallback.
+3. Fehlt auch dieser, gilt ausschließlich ein sicherer, dokumentierter Code-Default oder die betroffene optionale Funktion wird degradiert/deaktiviert.
 
-- Liefere Prisma-Migrationen mit einer nachvollziehbaren Up-/Datenmigrationsstrategie, einer sicheren Zuordnung alter Rollen und Tests gegen bestehende Daten.
-- Ergänze Unit-, API-/Integrations-, UI- und Regressionstests für jede Rolle, jede verbotene Aktion, Household-Isolation, explizite Freigaben, Pending-Accounts, Admin-Freischaltung, letzte-Admin-Schutz, Login, Rate Limits und Audit-Redaction.
-- Führe den vollständigen, kanonischen Docker-Compose-Testvertrag aus. Node, pnpm, Prisma, Datenbank, Redis, Build und Tests dürfen in der verbindlichen Prüfung nicht vom Host abhängen.
-- Starte und smoke-teste den Laufzeitstack aus sauberem Insura-spezifischem Compose-Zustand. `docker compose up --build` bleibt funktionsfähig.
+- Die Admin-UI zeigt pro Schlüssel mindestens: effektiven Wert (bei Secrets maskiert), Quelle (`UI`, `.env`, `Default`), Fallback-Status und -Grund, letzten UI-Änderungszeitpunkt/Akteur soweit datenschutzkonform, Validierungsstatus, Neustartbedarf und bei Integrationen Connectivity-Status.
+- `.env`-Werte dürfen nie vollständig oder als Entropie-verringernde Teilwerte offenbart werden, wenn sie geheim sind. Auch Konfigurationsmetadaten dürfen keine Infrastruktur- oder Secret-Leaks ermöglichen.
+- Änderungen müssen atomar validiert werden. Ungültige UI-Werte aktivieren niemals einen defekten effektiven Zustand; die zuvor wirksame Konfiguration bleibt erhalten und der Fehler ist administrativ sichtbar.
+- UI-Werte überschreiben nur den jeweiligen katalogisierten Schlüssel, niemals implizit ganze Konfigurationsobjekte.
+- Änderungen, Zurücksetzen auf Fallback, Feature-Flag-Änderungen und Connectivity-Tests werden revisionssicher auditiert, ohne Secrets oder Klartextwerte in Audit, Logs oder Responses.
 
-## Dokumentation und Review
+## Laufzeit und Integrationen
 
-Aktualisiere nach erfolgreicher Umsetzung und erfolgreichem Docker-Compose-Test mindestens Datenmodell, Security/Privacy, Architektur, Admin Operations, README, `.env.example`, Compose-/CI-Konfiguration und die zentralen Regeln, sofern betroffen. Dokumentiere insbesondere die Rollenmatrix, Migrationszuordnung, Bootstrap-Absicherung, lokale Authentifizierung, Pending-Status, Freigabegrenzen und OIDC-Entscheidung.
+- Ergänze eine zentral verwendete Konfigurationsauflösung; API und Worker müssen denselben Prioritätsvertrag verwenden. Vermeide, dass einzelne Features direkt `process.env` lesen und damit UI-Overrides umgehen.
+- Optional konfigurierte Funktionen degradieren bei fehlender/ungültiger Konfiguration gezielt, nachvollziehbar und ohne Gesamtausfall.
+- Feature-Flags wirken nur auf ihre Feature-Grenze und nicht auf Auth, Datenisolation, Migrationen, Health oder andere Grundfunktionen.
+- Connectivity-Tests dürfen nur für die jeweilige Konfiguration laufen, müssen Timeouts/Fehler sicher behandeln und keine geheimen Werte preisgeben.
 
-Halte den vollständigen unabhängigen Review-Loop ein: `@code-reviewer` read-only aufrufen, jedes Ergebnis wortgetreu unter `docs/reviews/` speichern, Critical/High/Medium beheben und bis maximal fünf Runden wiederholen. Ein Commit/PR ist nur bei 0 Critical, 0 High, 0 Medium, höchstens 8 Minor, grüner Compose-CI und bestandenem kanonischem Compose-Testvertrag zulässig.
+## UI und Bedienbarkeit
+
+- Erstelle klare, responsive Bereiche für „Mein Profil“ und „Systemeinstellungen“. Admin-Einstellungen werden nach Kategorien gruppiert, mit Suche, Filter für Quelle/Fallback/Fehler/Neustartbedarf und verständlichen Hilfetexten.
+- Die UI zeigt bei Fallback auffällig, aber nicht störend, den effektiven Zustand und eine sichere Aktion zum Setzen, Ändern oder Zurücksetzen des UI-Werts.
+- Verwende das zentrale Design-System und erfülle Tastaturbedienung, Labels, Fokus, Kontrast, Fehlerzusammenfassungen, mobile/tablet/desktop-Verhalten sowie `prefers-reduced-motion`.
+
+## Tests, Docker und Dokumentation
+
+- Teste pro Einstellungskategorie Berechtigung, Allowlist, Typvalidierung, Vorrang UI vor `.env`, `.env`-Fallback, Default/Degradation, Reset, Maskierung, Verschlüsselung, Audit-Redaction, Runtime-Neuladen bzw. Neustart-Markierung und Fehlerfälle.
+- Teste API und Worker gegen denselben Resolver; ergänze Integrations- und UI-Tests für sichtbare Fallback-Quellen und verbotene Zugriffe.
+- Führe den vollständigen kanonischen Docker-Compose-Testvertrag einschließlich Prisma/Migrationen, Build und Laufzeit-Smoke-Test aus; keine Host-Node-/pnpm-/DB-/Redis-Abhängigkeit.
+- Aktualisiere nach erfolgreichem Test Datenmodell, Architektur, Security/Privacy, Admin Operations, UI/UX, README, `.env.example`, Compose-/CI- und Agenten-/Prompt-Guidance, sofern betroffen. Dokumentiere den vollständigen Konfigurationskatalog und markiere ausdrücklich, welche Werte UI-konfigurierbar und welche aus Sicherheits-/Infrastrukturgründen Environment-only sind.
+- Führe den unabhängigen, read-only `@code-reviewer`-Loop durch, speichere Reviews wortgetreu unter `docs/reviews/`, behebe alle Critical/High/Medium-Befunde und committe nur bei 0 Critical, 0 High, 0 Medium, höchstens 8 Minor sowie grüner Compose-CI.
 
 ## Akzeptanzkriterien
 
-- Genau die drei globalen Rollen `READ_ONLY`, `USER`, `ADMIN` sind serverseitig durchgesetzt und korrekt migriert.
-- Jeder Nutzer besitzt Benutzername und Passwort; E-Mail ist nicht erforderlich.
-- Registrierung erzeugt gesperrte Pending-Konten; nur ein Admin kann sie freischalten.
-- `ADMIN` verwaltet Nutzer, Rollen und Systemeinstellungen; `USER` verwaltet ausschließlich eigene Verträge und eigenes Profil; `READ_ONLY` liest nur explizit freigegebene Verträge und ändert keinerlei Einstellungen. „Eigene Verträge" bedeutet die Verträge des eigenen Households (gemeinsame Verwaltung innerhalb des Households, Family-Sharing-Modell; `ownerUserId` ist Provenienz-Information, keine Zugriffsgrenze – siehe ADR-007).
-- Rechteverletzungen sind über UI, direkte Routen und APIs gleichermaßen verhindert; Datenisolation bleibt gewährleistet.
-- Passwort-, Session-, Audit- und Rate-Limit-Schutz ist vorhanden und getestet.
-- Migrationen, Dokumentation, unabhängiger Review und der vollständige Docker-Compose-Test-/CI-Pfad sind erfolgreich.
+- `USER` und `ADMIN` können ausschließlich ihr eigenes Profil konfigurieren; `READ_ONLY` kann keinerlei Einstellungen lesen oder ändern.
+- Nur `ADMIN` kann zentrale Systemkonfiguration aufrufen oder ändern.
+- Jeder bestehende Konfigurationsschlüssel ist inventarisiert, kategorisiert und entweder UI-konfigurierbar mit sicherem Fallback oder begründet Environment-only.
+- UI-Werte haben nach Validierung Vorrang vor `.env`; `.env` ist ein sichtbarer Fallback; Default/Degradation ist ebenfalls sichtbar.
+- Secrets bleiben verschlüsselt und maskiert, werden nie offenbart oder geloggt und erscheinen nicht in Audits.
+- API und Worker verwenden dieselbe zentrale Auflösung; optionale Features degradieren kontrolliert.
+- Tests, Dokumentation, Compose-Laufzeit, Compose-Testvertrag, CI und unabhängiger Review sind vollständig erfolgreich.
