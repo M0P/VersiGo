@@ -105,3 +105,25 @@ Testdienste laufen in einer isolierten Compose-Umgebung (`docker-compose.test.ym
 - AI Provider nicht konfiguriert: Vertragserfassung bleibt nutzbar, nur Extraktion/Zusammenfassung wird ausgeblendet.
 - Paperless nicht verbunden: Dokumentenablage im lokalen Speicher bleibt nutzbar.
 - Portal-Mailbox-Connector fehlt: Portal-Link bleibt sichtbar, Inbox-Ansicht entfällt.
+
+## Portal-Connectors (AP-18)
+
+- **Vertikales Feature-Slice** `apps/api/src/features/portal-connectors/`:
+  Katalog (`portal-catalog.ts`), Plugin-Interface (`portal-connector.interface.ts`),
+  Registry (`portal-connector-registry.ts`), Fassaden-Service
+  (`portal-connector.service.ts`), Controller und Modul.
+- **Kernumfang** sind ausschließlich Deeplinks und Zugangshinweise aus dem
+  Katalog – kein externer Anruf, keine Anbieter-Schnittstelle.
+- **Optionale Connectoren** (Mailbox-/Dokumentenabruf) sind als Plugins in
+  der `PortalConnectorRegistry` modelliert. Jedes Plugin meldet
+  `isAvailable()` und `healthCheck()`; deaktivierte Plugins liefern
+  kontrollierte Degradation (`available: false`), nie 500.
+- **Policy-Registry-Integration:** Das Policy-Registry-Slice injiziert
+  `PortalConnectorService` (Modul-Import, kein Event-/Port-Umweg) und reichert
+  Portal-Links in `findAll`/`findOne`/CRUD an. Ein nicht verfügbarer Connector
+  beeinträchtigt den Portal-Link nicht (Resilienz-Kriterium).
+- **Datenhaltung:** `PortalAccountLink` trägt `accessHint`, `connectorKey`
+  und `credentialsEncrypted` (AES-256-GCM). Credentials verlassen die API
+  nie im Klartext.
+- **Rollen:** Katalog-/Plugin-Endpunkte sind für `READ_ONLY`/`USER`/`ADMIN`
+  lesbar; Portal-Link-Schreibpfade unterliegen der Household-Isolation.

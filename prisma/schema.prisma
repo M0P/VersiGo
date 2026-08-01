@@ -416,16 +416,26 @@ enum DocumentStorageType {
   PAPERLESS_LINK
 }
 
+// AP-18: Portal-Connectoren. Der Kernumfang umfasst Deeplinks und
+// Zugangshinweise (accessHint). credentialsEncrypted speichert optionale
+// Portal-Zugangsdaten ausschliesslich AES-256-GCM-verschluesselt
+// (EncryptionPort, nie Klartext). connectorKey referenziert ein optionales
+// Connector-Plugin (z. B. experimenteller Mailbox-/Dokumentenabruf);
+// ein nicht verfuegbares Plugin beeintraechtigt den Portal-Link nicht.
 model PortalAccountLink {
-  id                String      @id @default(uuid())
-  policyId          String
-  providerKey       String
-  portalUrl         String?
-  usernameHint      String?
-  mailboxCapability Boolean     @default(false)
-  lastSyncAt        DateTime?
-  syncStatus        SyncStatus @default(PENDING)
-  createdAt         DateTime    @default(now())
+  id                  String      @id @default(uuid())
+  policyId            String
+  providerKey         String
+  portalUrl           String?
+  accessHint          String?
+  usernameHint        String?
+  connectorKey        String?
+  credentialsEncrypted String?
+  mailboxCapability   Boolean     @default(false)
+  lastSyncAt          DateTime?
+  syncStatus          SyncStatus  @default(PENDING)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
 

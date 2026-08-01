@@ -423,9 +423,70 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   grep -qF '"role":"ADMIN"' /tmp/insura-smoke-profile.json || { echo "FAILED: Profilantwort ohne ADMIN-Rolle"; exit 1; }
   echo "   Profil: HTTP 200, korrekter Benutzername/Rolle"
   echo "   PASS"
+
+  # AP-18: Portal-Connector-Endpunkte (Katalog + Plugins). Rein lesende
+  # Endpunkte fuer alle authentifizierten Rollen (READ_ONLY/USER/ADMIN).
+  # Diese Pruefung benoetigt eine authentifizierte Session und bleibt daher
+  # im ADMIN-Block; die admin-unabhaengige 401-Pruefung laeuft als Schritt 9
+  # ausserhalb dieses Blocks.
+  echo "8f. Testing portal-connectors endpoints (AP-18)..."
+  CATALOG_STATUS=$(curl -s -o /tmp/insura-smoke-catalog.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/portal-connectors/catalog)
+  if [ "$CATALOG_STATUS" != "200" ]; then
+    echo "FAILED: /portal-connectors/catalog returned HTTP $CATALOG_STATUS (expected 200)"
+    exit 1
+  fi
+  grep -qF '"providerKey":"huk-coburg"' /tmp/insura-smoke-catalog.json || { echo "FAILED: Katalog ohne erwarteten Anbieter huk-coburg"; exit 1; }
+  ENTRY_STATUS=$(curl -s -o /tmp/insura-smoke-catalog-entry.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/portal-connectors/catalog/huk-coburg)
+  if [ "$ENTRY_STATUS" != "200" ]; then
+    echo "FAILED: /portal-connectors/catalog/huk-coburg returned HTTP $ENTRY_STATUS (expected 200)"
+    exit 1
+  fi
+  grep -qF '"displayName":"HUK-COBURG"' /tmp/insura-smoke-catalog-entry.json || { echo "FAILED: Katalog-Eintrag ohne displayName"; exit 1; }
+  MISSING_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/portal-connectors/catalog/gibt-es-nicht)
+  if [ "$MISSING_STATUS" != "404" ]; then
+    echo "FAILED: unbekannter Katalog-Eintrag sollte 404 liefern, got $MISSING_STATUS"
+    exit 1
+  fi
+  PLUGINS_STATUS=$(curl -s -o /tmp/insura-smoke-plugins.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/portal-connectors/plugins)
+  if [ "$PLUGINS_STATUS" != "200" ]; then
+    echo "FAILED: /portal-connectors/plugins returned HTTP $PLUGINS_STATUS (expected 200)"
+    exit 1
+  fi
+  grep -qF '"key":"mailbox-sync-browser-automation"' /tmp/insura-smoke-plugins.json || { echo "FAILED: Plugin-Liste ohne experimentelles Plugin"; exit 1; }
+  grep -qF '"available":false' /tmp/insura-smoke-plugins.json || { echo "FAILED: experimentelles Plugin muss available:false melden"; exit 1; }
+  HEALTH_STATUS=$(curl -s -o /tmp/insura-smoke-plugin-health.json -w "%{http_code}" \
+    -b /tmp/insura-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/portal-connectors/plugins/mailbox-sync-browser-automation/health)
+  if [ "$HEALTH_STATUS" != "200" ]; then
+    echo "FAILED: Plugin-Health sollte auch bei deaktiviertem Plugin 200 liefern, got $HEALTH_STATUS"
+    exit 1
+  fi
+  grep -qF '"available":false' /tmp/insura-smoke-plugin-health.json || { echo "FAILED: Plugin-Health muss available:false melden"; exit 1; }
+  echo "   Katalog, Katalog-Eintrag, 404, Plugins, Plugin-Health: OK (degradiert, nie 500)"
+  echo "   PASS"
 else
   echo "5. Skipping local admin login check (LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD not configured)."
 fi
+
+# AP-18: Unauthenticated portal-connectors access must be rejected. This
+# check is admin-independent (no credentials needed) and therefore runs
+# unconditionally, unlike 8f which needs an authenticated session.
+echo "9. Rejecting unauthenticated portal-connectors access..."
+UNAUTH_PC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  http://localhost:${APP_PORT:-3001}/portal-connectors/catalog)
+if [ "$UNAUTH_PC_STATUS" != "401" ]; then
+  echo "FAILED: unauthenticated /portal-connectors/catalog should return 401, got $UNAUTH_PC_STATUS"
+  exit 1
+fi
+echo "   PASS"
 
 # Verify the worker started successfully (connects to PostgreSQL/Redis and
 # registers its queues) instead of crash-looping unnoticed.

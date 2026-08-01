@@ -131,3 +131,27 @@
 - `SYSTEM_CONFIG_UPSERTED`/`SYSTEM_CONFIG_RESET`: `diffJson` enthält nur
   `{ key, redacted: true }` – nie Werte oder Secrets.
 - `PROFILE_UPDATED`: nur Feldnamen.
+
+## Portal-Zugangsdaten (AP-18)
+
+### Verschlüsselung
+- Optionale Portal-Zugangsdaten (`portalUsername`, `portalPassword`) werden
+  **AES-256-GCM** verschlüsselt in `PortalAccountLink.credentialsEncrypted`
+  persistiert (gleicher Schlüssel-Transport wie die Systemeinstellungen,
+  `SETTINGS_ENCRYPTION_KEY`).
+- Es wird **nie** Klartext gespeichert, geloggt, im Audit-Diff oder in
+  API-Antworten ausgegeben. Antworten enthalten ausschließlich
+  `credentialsSet: true/false`; `credentialsEncrypted` wird von der
+  API-Schicht strikt entfernt.
+- Audit-Events für Portal-Links (`CREATE`/`UPDATE`) enthalten nur
+  Feldnamen und `credentialsSet` – niemals Zugangsdaten-Werte.
+- `credentials: null` löscht gespeicherte Zugangsdaten (Update);
+  `credentials: {}` wird mit einem Validierungsfehler abgewiesen
+  (mindestens ein Feld erforderlich).
+
+### Zugriffsregeln
+- Portal-Connector-Endpunkte (`/portal-connectors/*`) sind reine
+  Lese-Endpunkte ohne Household-Bezug und für alle authentifizierten
+  Rollen (`READ_ONLY`, `USER`, `ADMIN`) zugänglich.
+- Portal-Link-Verwaltung bleibt vollständig an die Household-Isolation
+  des Policy-Registry-Slices gebunden.

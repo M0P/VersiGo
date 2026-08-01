@@ -90,15 +90,20 @@
 - documentDate
 - category
 
-### PortalAccountLink
+### PortalAccountLink (AP-18)
 - id
 - policyId
-- providerKey
-- portalUrl
+- providerKey (Schlüssel aus dem Portal-Katalog, siehe `docs/06-integrations.md`)
+- portalUrl (manuell gesetzte URL; hat Vorrang vor dem Katalog-Deeplink – nur `http(s)`-URLs; andere Schemata/ungültige Werte werden bei der Ausgabe verworfen und fallen auf die Katalog-Vorlage zurück)
+- accessHint (individueller Zugangshinweis; fällt sonst auf den Katalog-Hinweis zurück)
 - usernameHint
+- connectorKey (optionaler Schlüssel eines Connector-Plugins, z. B. `mailbox-sync-browser-automation`)
+- credentialsEncrypted (AES-256-GCM verschlüsselte Zugangsdaten, nie Klartext)
 - mailboxCapability
 - lastSyncAt
 - syncStatus
+- createdAt
+- updatedAt
 
 ### AiExtractionJob
 - id

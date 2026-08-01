@@ -6,6 +6,10 @@ import {
   IsNumber,
   Min,
   IsBoolean,
+  IsObject,
+  MaxLength,
+  ValidateNested,
+  IsUrl,
 } from 'class-validator';
 import { InsurancePolicyType, PolicyStatus, PaymentFrequency, PolicySource, SyncStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -168,17 +172,56 @@ export class UpdateCoveredPersonDto {
   birthDate?: string;
 }
 
+/**
+ * Optionale Portal-Zugangsdaten (AP-18).
+ *
+ * Werden NIE im Klartext gespeichert oder zurueckgegeben: Der Service
+ * verschluesselt sie AES-256-GCM in `PortalAccountLink.credentialsEncrypted`;
+ * Antworten enthalten ausschliesslich `credentialsSet: true/false`.
+ *
+ * Die "mindestens ein Feld" -Regel wird bewusst im Service durchgesetzt
+ * (`encryptCredentials`, Single Source of Truth), weil class-validator
+ * (0.14.x) keine typisierten Klassenebenen-Constraints bietet. Die DTO-Schicht
+ * validiert hier nur Typ und Laengen der einzelnen Felder.
+ *
+ * Hinweis (AP-18): Bei einem Update gilt Ersetz-Semantik – uebermittelte
+ * Felder ersetzen die gespeicherten Zugangsdaten vollstaendig; ein einzelnes
+ * Feld ueberschreibt damit beide gespeicherten Werte.
+ */
+export class PortalCredentialsDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  portalUsername?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  portalPassword?: string;
+}
+
 export class CreatePortalAccountLinkDto {
   @IsString()
   providerKey!: string;
 
   @IsOptional()
-  @IsString()
+  // AP-18: Nur http(s)-URLs – verhindert javascript:/data: im Deeplink-Target.
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   portalUrl?: string;
 
   @IsOptional()
   @IsString()
   usernameHint?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  accessHint?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  connectorKey?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -187,6 +230,12 @@ export class CreatePortalAccountLinkDto {
   @IsOptional()
   @IsEnum(SyncStatus)
   syncStatus?: SyncStatus;
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => PortalCredentialsDto)
+  credentials?: PortalCredentialsDto;
 }
 
 export class UpdatePortalAccountLinkDto {
@@ -195,12 +244,23 @@ export class UpdatePortalAccountLinkDto {
   providerKey?: string;
 
   @IsOptional()
-  @IsString()
+  // AP-18: Nur http(s)-URLs – verhindert javascript:/data: im Deeplink-Target.
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   portalUrl?: string;
 
   @IsOptional()
   @IsString()
   usernameHint?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  accessHint?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  connectorKey?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -209,4 +269,14 @@ export class UpdatePortalAccountLinkDto {
   @IsOptional()
   @IsEnum(SyncStatus)
   syncStatus?: SyncStatus;
+
+  /**
+   * Zugangsdaten setzen (Objekt) oder loeschen (`null`).
+   * Nicht angegeben => unveraendert lassen.
+   */
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => PortalCredentialsDto)
+  credentials?: PortalCredentialsDto | null;
 }

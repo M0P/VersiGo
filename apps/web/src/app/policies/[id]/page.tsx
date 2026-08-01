@@ -34,7 +34,15 @@ type PolicyDetail = {
   createdAt: string;
   archivedAt: string | null;
   coveredPersons: { id: string; personName: string; relationType: string }[];
-  portalLinks: { id: string; providerKey: string; portalUrl: string | null }[];
+  portalLinks: {
+    id: string;
+    providerKey: string;
+    portalUrl: string | null;
+    accessHint: string | null;
+    deepLinkUrl: string | null;
+    catalog: { providerKey: string; displayName: string } | null;
+    connector: { key: string; displayName: string; experimental: boolean; available: boolean } | null;
+  }[];
 };
 
 export default function PolicyDetailPage(): ReactElement {
@@ -146,17 +154,36 @@ export default function PolicyDetailPage(): ReactElement {
               <p>Keine Portal-Links vorhanden.</p>
             </EmptyState>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: 'var(--insura-space-4)' }}>
-              {policy.portalLinks.map((l) => (
-                <li key={l.id}>
-                  {l.providerKey}
-                  {l.portalUrl && (
-                    <a href={l.portalUrl} style={{ marginLeft: 'var(--insura-space-2)' }}>
-                      Portal öffnen
-                    </a>
-                  )}
-                </li>
-              ))}
+            <ul style={{ margin: 0, paddingLeft: 'var(--insura-space-4)', listStyle: 'none' }}>
+              {policy.portalLinks.map((l) => {
+                const displayName = l.catalog?.displayName ?? l.providerKey;
+                const targetUrl = l.deepLinkUrl ?? l.portalUrl;
+                return (
+                  <li key={l.id} style={{ marginBottom: 'var(--insura-space-3)' }}>
+                    <strong>{displayName}</strong>
+                    {l.connector && (
+                      <span className={`badge ${l.connector.available ? 'badge-success' : 'badge-neutral'}`}
+                        style={{ marginLeft: 'var(--insura-space-2)' }}
+                        title={`Plugin: ${l.connector.displayName}`}>
+                        {l.connector.experimental ? 'Experimentell' : 'Connector'}
+                        {!l.connector.available ? ' (deaktiviert)' : ''}
+                      </span>
+                    )}
+                    {targetUrl && (
+                      <div>
+                        <a href={targetUrl} target="_blank" rel="noopener noreferrer">
+                          Portal öffnen
+                        </a>
+                      </div>
+                    )}
+                    {l.accessHint && (
+                      <div className="text-xs text-muted" style={{ marginTop: 'var(--insura-space-1)' }}>
+                        {l.accessHint}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>

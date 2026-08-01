@@ -59,6 +59,25 @@ Dieser Modus ersetzt **nicht** den Docker-Compose-Testpfad. CI, Merge- und Relea
 6. Pull Request mit Checkliste öffnen.
 7. Erst nach erfolgreichem unabhängigen Review und grüner CI-Compose-Pipeline mergen lassen.
 
+## Aufräum-Pflicht am Ende jedes Arbeitspakets
+
+Vor dem Commit am Ende eines jeden Arbeitspakets müssen alle während der
+Session erzeugten Docker-/Podman-Artefakte entfernt werden, damit die Platte
+nicht vollläuft und das nächste Paket sauber startet:
+
+- **Debug-/Wegwerf-Container** entfernen (`podman ps -a`). Nur die selbst
+  erzeugten Container löschen — niemals vorbestehende Container wie
+  `tk-epa-ubuntu` oder `libation-env` anfassen.
+- **Build-/Test-Images** der Session löschen, nachdem der finale
+  Verifikationslauf abgeschlossen ist (`podman rmi localhost/insura:latest
+  localhost/insura-test:latest`), dazu alle verwaisten Images
+  (`podman image prune -f`).
+- **Scratch-Volumes** entfernen (`podman volume ls` + `podman volume rm` für
+  selbst erzeugte Volumes) sowie Compose-Reste (`docker compose down -v`).
+- **Nicht** entfernen: gemeinsame Basis-Images (node, postgres, redis, ubuntu,
+  fedora, ...) und Container, die bereits vor der Session liefen.
+- Abschließend mit `podman ps -a`, `podman images` und `df -h` verifizieren.
+
 ## Pflichtausgabe des Modells
 
 Vor jeder Implementierung: Ziel, Architekturentscheidung, Dateiliste, Abhängigkeiten, Risiken und Testplan. Nach der Implementierung: geänderte Dateien, ausgeführte Befehle, Testergebnisse, bekannte Grenzen und PR-Beschreibung.

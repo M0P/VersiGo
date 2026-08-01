@@ -91,6 +91,23 @@ have cost agents significant time in the past — read carefully:
    images and build cache; expect a full rebuild afterwards, including the
    `pnpm install` deps stage). Check with `df -h /var/home` and
    `podman system df`.
+9. **Clean up after every work package.** At the end of each work package,
+   before the commit, remove every Docker/Podman artifact you created during
+   the session so the next package starts with a clean slate and the disk
+   does not fill up:
+   - Debug/scratch containers you started manually (`podman ps -a`, remove
+     only the ones you created — never touch pre-existing containers such as
+     `tk-epa-ubuntu` or `libation-env`).
+   - Build/test images produced by your session
+     (`podman rmi localhost/insura:latest localhost/insura-test:latest` after
+     the final verification run) plus any dangling images
+     (`podman image prune -f`).
+   - Scratch volumes (`podman volume ls` + `podman volume rm` for volumes you
+     created) and any compose stack leftovers (`docker compose down -v`).
+   - Do **not** remove shared base images (node, postgres, redis, ubuntu,
+     fedora, ...) or containers that were already running before your
+     session. Verify with `podman ps -a`, `podman images` and `df -h`
+     afterwards.
 
 ## Required Future-Feature Contract
 

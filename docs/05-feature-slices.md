@@ -17,6 +17,23 @@ Optionales Feature für Extraktion und Zusammenfassungen über Provider-Adapter.
 
 ## 6. Portal Connectors
 Katalog von Versicherungsportalen, Deeplinks und optionalen Mailbox-/Dokumenten-Sync-Adaptern je Anbieter.
+- **AP-18:** Versicherungsportal-Katalog (`GET /portal-connectors/catalog`) mit
+  Deeplinks und Zugangshinweisen pro Anbieter (Kernumfang; lesbar für
+  `READ_ONLY`/`USER`/`ADMIN`).
+- **AP-18:** Portal-Link-Verwaltung pro Vertrag im Policy-Registry-Slice
+  (`createPortalLink`/`updatePortalLink`/`removePortalLink`). Die API
+  reichert Links mit aufgelöstem Deeplink, Katalog- und Connector-Sicht an.
+- **AP-18:** Plugin-Rahmen (`PortalConnectorPlugin`/`PortalConnectorRegistry`)
+  für optionale Connectoren. Mailbox-/Dokumentenabruf ist als
+  experimentelles, **deaktiviertes** Plugin (`mailbox-sync-browser-automation`)
+  modelliert und liefert kontrollierte Degradation statt Fehler.
+- **AP-18:** Optionale Portal-Zugangsdaten werden AES-256-GCM verschlüsselt
+  gespeichert (`credentialsEncrypted`); die API gibt nie Werte, nur
+  `credentialsSet`, zurück. Audit-Events enthalten ausschließlich
+  `credentialsSet` (redigiert).
+- **Resilienz:** Ein nicht verfügbarer oder unbekannter Connector
+  beeinträchtigt den Portal-Link nicht (Deeplink und Zugangshinweis bleiben
+  nutzbar).
 
 ## 7. Admin Settings
 Webbasierte Konfiguration von Feature-Flags, Integrationen, Speichern, AI-Providern und Systemparametern.
