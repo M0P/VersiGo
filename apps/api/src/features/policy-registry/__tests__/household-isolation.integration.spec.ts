@@ -3,6 +3,8 @@ import { PolicyRegistryService } from '../policy-registry.service';
 import { ForbiddenException } from '@nestjs/common';
 import { GlobalRole, UserStatus } from '@prisma/client';
 import { AuthService, AuthenticatedUser } from '../../identity/auth.service';
+import { PortalConnectorRegistry } from '../../portal-connectors/portal-connector-registry';
+import { PortalConnectorService } from '../../portal-connectors/portal-connector.service';
 
 function createMockDb() {
   const db: Record<string, unknown> & {
@@ -61,6 +63,8 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
     service = new PolicyRegistryService(
       mockDb as never,
       new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+      { encrypt: vi.fn(async (p: string) => `enc:${p}`), decrypt: vi.fn() } as never,
+      new PortalConnectorService(new PortalConnectorRegistry()) as never,
     );
   });
 

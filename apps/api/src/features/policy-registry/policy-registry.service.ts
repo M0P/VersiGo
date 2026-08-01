@@ -1,8 +1,24 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
-import { GlobalRole } from '@prisma/client';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  Inject,
+} from '@nestjs/common';
+import { DatabaseService, ENCRYPTION_PORT, EncryptionPort } from '@insura/foundation';
+import { GlobalRole, Prisma } from '@prisma/client';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
-import { CreatePolicyDto, UpdatePolicyDto, CreateCoveredPersonDto, UpdateCoveredPersonDto, CreatePortalAccountLinkDto, UpdatePortalAccountLinkDto } from './dto/policy-registry.dto';
+import { PortalConnectorService } from '../portal-connectors/portal-connector.service';
+import {
+  CreatePolicyDto,
+  UpdatePolicyDto,
+  CreateCoveredPersonDto,
+  UpdateCoveredPersonDto,
+  CreatePortalAccountLinkDto,
+  UpdatePortalAccountLinkDto,
+  PortalCredentialsDto,
+} from './dto/policy-registry.dto';
 
 @Injectable()
 export class PolicyRegistryService {
@@ -11,6 +27,8 @@ export class PolicyRegistryService {
   constructor(
     private readonly db: DatabaseService,
     private readonly authService: AuthService,
+    @Inject(ENCRYPTION_PORT) private readonly encryption: EncryptionPort,
+    private readonly portalConnectors: PortalConnectorService,
   ) {}
 
   private async assertHouseholdAccess(householdId: string, userId: string): Promise<void> {
@@ -81,7 +99,7 @@ export class PolicyRegistryService {
         ? { householdId, archivedAt: null, id: { in: readableIds } }
         : { householdId, archivedAt: null };
 
-    return this.db.insurancePolicy.findMany({
+    const policies = await this.db.insurancePolicy.findMany({
       where,
       include: {
         coveredPersons: true,
@@ -89,6 +107,16 @@ export class PolicyRegistryService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    // AP-18: Portal-Links anreichern (Deeplink-Aufloesung, Katalog-/Connector-
+    // Sicht, credentialsSet). Ein nicht verfuegbarer Connector faellt dabei
+    // kontrolliert weg, ohne den Portal-Link zu beeintraechtigen.
+    return policies.map((policy) => ({
+      ...policy,
+      portalLinks: policy.portalLinks.map((link) =>
+        this.portalConnectors.enrichPortalLink(link, policy.contractNumber),
+      ),
+    }));
   }
 
   async findOne(householdId: string, user: AuthenticatedUser, policyId: string) {
@@ -109,7 +137,13 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
-    return policy;
+    // AP-18: Portal-Links anreichern (analog findAll).
+    return {
+      ...policy,
+      portalLinks: policy.portalLinks.map((link) =>
+        this.portalConnectors.enrichPortalLink(link, policy.contractNumber),
+      ),
+    };
   }
 
   async update(householdId: string, userId: string, policyId: string, dto: UpdatePolicyDto) {
@@ -161,7 +195,14 @@ export class PolicyRegistryService {
         },
       });
 
-      return policy;
+      // AP-18: Portal-Links anreichern, damit `credentialsEncrypted` nie in
+      // der Antwort auftaucht (analog findAll/findOne).
+      return {
+        ...policy,
+        portalLinks: policy.portalLinks.map((link) =>
+          this.portalConnectors.enrichPortalLink(link, policy.contractNumber),
+        ),
+      };
     }).catch((err) => {
       this.logger.error(`update policy ${policyId} failed: ${err.message}`, err.stack);
       throw err;
@@ -362,6 +403,64 @@ export class PolicyRegistryService {
 
   // Portal Account Links
 
+  /**
+   * Verschluesselt optionale Portal-Zugangsdaten (AP-18).
+   * Liefert null, wenn keine Zugangsdaten angegeben sind. Credentials
+   * werden NIE im Klartext gespeichert, geloggt oder zurueckgegeben.
+   */
+  private async encryptCredentials(
+    credentials: PortalCredentialsDto | null | undefined,
+  ): Promise<string | null> {
+    if (!credentials) return null;
+    if (!credentials.portalUsername?.trim() && !credentials.portalPassword?.trim()) {
+      throw new BadRequestException(
+        'Mindestens ein Zugangsdatenfeld (portalUsername oder portalPassword) muss gesetzt sein',
+      );
+    }
+    // `!= null` statt `!== undefined`: null-Werte (leere Felder) werden
+    // ebenfalls verworfen, es wird nur echte Strings persistiert.
+    // Der Benutzername wird getrimmt; das Passwort wird BEWUSST ungetrimmt
+    // gespeichert (fuehrende/abschliessende Leerzeichen koennen signifikant
+    // sein). Nur rein-whitespace-Passwoerter entfallen.
+    const payload = JSON.stringify({
+      ...(credentials.portalUsername != null && credentials.portalUsername.trim() !== ''
+        ? { portalUsername: credentials.portalUsername.trim() }
+        : {}),
+      ...(credentials.portalPassword != null && credentials.portalPassword.trim() !== ''
+        ? { portalPassword: credentials.portalPassword }
+        : {}),
+    });
+    return this.encryption.encrypt(payload);
+  }
+
+  /**
+   * Baut ein redigiertes Audit-Diff fuer Portal-Links. Credentials-Werte
+   * duerfen niemals in Audit-Events auftauchen; nur `credentialsSet`.
+   * Der Rueckgabetyp ist auf Prisma `InputJsonValue` beschraenkt, damit
+   * das Diff direkt als `diffJson` (Json-Feld) nutzbar ist.
+   */
+  private portalLinkAuditDiff(
+    dto: CreatePortalAccountLinkDto | UpdatePortalAccountLinkDto,
+  ): Prisma.InputJsonValue {
+    const diff: Record<string, Prisma.InputJsonValue> = {};
+    for (const key of [
+      'providerKey',
+      'portalUrl',
+      'usernameHint',
+      'accessHint',
+      'connectorKey',
+      'mailboxCapability',
+      'syncStatus',
+    ] as const) {
+      const value = (dto as unknown as Record<string, Prisma.InputJsonValue | undefined>)[key];
+      if (value !== undefined) diff[key] = value;
+    }
+    if ('credentials' in dto && dto.credentials !== undefined) {
+      diff.credentialsSet = dto.credentials !== null;
+    }
+    return diff;
+  }
+
   async createPortalLink(householdId: string, userId: string, policyId: string, dto: CreatePortalAccountLinkDto) {
     await this.assertHouseholdAccess(householdId, userId);
 
@@ -373,13 +472,18 @@ export class PolicyRegistryService {
       throw new NotFoundException('Versicherung nicht gefunden');
     }
 
+    const credentialsEncrypted = await this.encryptCredentials(dto.credentials);
+
     return this.db.$transaction(async (tx) => {
       const link = await tx.portalAccountLink.create({
         data: {
           policyId,
           providerKey: dto.providerKey,
           portalUrl: dto.portalUrl,
+          accessHint: dto.accessHint,
           usernameHint: dto.usernameHint,
+          connectorKey: dto.connectorKey,
+          credentialsEncrypted,
           mailboxCapability: dto.mailboxCapability ?? false,
           syncStatus: dto.syncStatus ?? 'PENDING',
         },
@@ -391,11 +495,11 @@ export class PolicyRegistryService {
           entityType: 'PortalAccountLink',
           entityId: link.id,
           action: 'CREATE',
-          diffJson: { policyId, providerKey: dto.providerKey },
+          diffJson: this.portalLinkAuditDiff(dto),
         },
       });
 
-      return link;
+      return this.portalConnectors.enrichPortalLink(link, policy.contractNumber);
     }).catch((err) => {
       this.logger.error(`createPortalLink failed: ${err.message}`, err.stack);
       throw err;
@@ -421,13 +525,23 @@ export class PolicyRegistryService {
       throw new NotFoundException('Portal-Link nicht gefunden');
     }
 
+    // Credentials: Objekt => setzen/ersetzen, null => loeschen,
+    // nicht angegeben => unveraendert lassen. Nie Klartext speichern.
+    let credentialsEncrypted: string | null | undefined;
+    if ('credentials' in dto && dto.credentials !== undefined) {
+      credentialsEncrypted = await this.encryptCredentials(dto.credentials);
+    }
+
     return this.db.$transaction(async (tx) => {
       const link = await tx.portalAccountLink.update({
         where: { id: linkId },
         data: {
           providerKey: dto.providerKey,
           portalUrl: dto.portalUrl,
+          accessHint: dto.accessHint,
           usernameHint: dto.usernameHint,
+          connectorKey: dto.connectorKey,
+          credentialsEncrypted,
           mailboxCapability: dto.mailboxCapability,
           syncStatus: dto.syncStatus,
         },
@@ -439,11 +553,11 @@ export class PolicyRegistryService {
           entityType: 'PortalAccountLink',
           entityId: linkId,
           action: 'UPDATE',
-          diffJson: { ...dto },
+          diffJson: this.portalLinkAuditDiff(dto),
         },
       });
 
-      return link;
+      return this.portalConnectors.enrichPortalLink(link, policy.contractNumber);
     }).catch((err) => {
       this.logger.error(`updatePortalLink ${linkId} failed: ${err.message}`, err.stack);
       throw err;
