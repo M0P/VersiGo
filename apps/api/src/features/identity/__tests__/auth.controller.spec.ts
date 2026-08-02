@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AuthController } from '../auth.controller';
 import { GlobalRole, UserStatus } from '@prisma/client';
-import { ConflictException, HttpException } from '@nestjs/common';
+import { ConflictException, HttpException, HttpStatus } from '@nestjs/common';
 import type { AuthenticatedUser } from '../auth.service';
 
 type OidcStrategyLike = {
@@ -286,7 +286,7 @@ describe('AuthController', () => {
       expect(result).toEqual({ status: 'PENDING_APPROVAL' });
     });
 
-    it('gibt 409 wenn lokale Registrierung nicht konfiguriert ist', async () => {
+    it('gibt 501 wenn lokale Registrierung nicht konfiguriert ist', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockReturnValue(false);
       const authService = createMockAuthService();
@@ -301,7 +301,7 @@ describe('AuthController', () => {
             password: 'supersecret123',
           },
         ),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toMatchObject({ status: HttpStatus.NOT_IMPLEMENTED });
       expect(authService.registerLocalAccount).not.toHaveBeenCalled();
     });
 

@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Alert } from '../../components/ui/alert';
+import { useI18n } from '../../i18n';
 
 /**
  * AP-16: Seite fuer verbotene Zugriffe (403). Wird angezeigt, wenn eine
@@ -12,6 +13,8 @@ import { Alert } from '../../components/ui/alert';
  * erfolgt serverseitig; diese Seite ist nur die UX-Ebene.
  */
 export default function ForbiddenPage(): ReactElement {
+  const { t } = useI18n();
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
       <Card style={{ maxWidth: 420, width: '100%' }}>
@@ -19,20 +22,19 @@ export default function ForbiddenPage(): ReactElement {
           <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
             <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
           </h1>
-          <p className="text-muted">Zugriff verweigert</p>
+          <p className="text-muted">{t('forbidden.tagline')}</p>
         </div>
 
-        <Alert variant="danger" title="Zugriff verweigert">
-          Ihr Konto hat fuer diese Aktion nicht die erforderliche Berechtigung.
-          Falls Sie einen Fehler vermuten, wenden Sie sich an Ihre Administration.
+        <Alert variant="danger" title={t('forbidden.title')}>
+          {t('forbidden.body')}
         </Alert>
 
         <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', marginTop: 'var(--versigo-space-6)' }}>
           <a href="/" style={{ flex: 1, textDecoration: 'none' }}>
-            <Button variant="outline" style={{ width: '100%' }}>Zur Startseite</Button>
+            <Button variant="outline" style={{ width: '100%' }}>{t('forbidden.toHome')}</Button>
           </a>
           <a href="/login" style={{ flex: 1, textDecoration: 'none' }}>
-            <Button style={{ width: '100%' }}>Anmelden</Button>
+            <Button style={{ width: '100%' }}>{t('forbidden.login')}</Button>
           </a>
         </div>
       </Card>

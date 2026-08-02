@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/button';
 import { Input, Select, FormField } from '../../../components/ui/form-field';
 import { InlineSpinner } from '../../../components/ui/loading';
 import { NAV_SECTIONS } from '../../../components/ui/nav-config';
+import { useI18n } from '../../../i18n';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -16,19 +17,8 @@ const POLICY_TYPES = [
   'WOHNGEBAEUDE', 'UNFALL', 'LEBEN', 'BERUFSUNFAEHIGKEIT', 'SONSTIGE',
 ];
 
-const typeLabels: Record<string, string> = {
-  HAFTPFLICHT: 'Haftpflicht',
-  HAUSRAT: 'Hausrat',
-  RECHTSSCHUTZ: 'Rechtsschutz',
-  KFZ: 'KFZ',
-  WOHNGEBAEUDE: 'Wohngebäude',
-  UNFALL: 'Unfall',
-  LEBEN: 'Leben',
-  BERUFSUNFAEHIGKEIT: 'Berufsunfähigkeit',
-  SONSTIGE: 'Sonstige',
-};
-
 export default function NewPolicyPage(): ReactElement {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     type: 'HAFTPFLICHT',
     insurerName: '',
@@ -48,7 +38,7 @@ export default function NewPolicyPage(): ReactElement {
         body: JSON.stringify(form),
       });
       if (res.status === 401) { window.location.href = '/login'; return; }
-      if (!res.ok) throw new Error('Fehler beim Erstellen');
+      if (!res.ok) throw new Error(t('policies.createError'));
       window.location.href = '/policies';
     } catch {
       setSubmitting(false);
@@ -57,39 +47,43 @@ export default function NewPolicyPage(): ReactElement {
 
   return (
     <AppShell navSections={NAV_SECTIONS}>
-      <PageHeader title="Neue Versicherung" description="Erfassen Sie einen neuen Versicherungsvertrag" />
+      <PageHeader title={t('policies.newTitle')} description={t('policies.newDescription')} />
 
       <Card style={{ maxWidth: 640 }}>
         <form onSubmit={handleSubmit}>
-          <FormField label="Typ" required>
+          <FormField label={t('common.type')} required>
             <Select
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value })}
               required
             >
-              {POLICY_TYPES.map((t) => (<option key={t} value={t}>{typeLabels[t] ?? t}</option>))}
+              {POLICY_TYPES.map((typeValue) => (
+                <option key={typeValue} value={typeValue}>
+                  {t(`policies.types.${typeValue}`) ?? typeValue}
+                </option>
+              ))}
             </Select>
           </FormField>
 
-          <FormField label="Versicherer" required>
+          <FormField label={t('policies.insurer')} required>
             <Input
               value={form.insurerName}
               onChange={(e) => setForm({ ...form, insurerName: e.target.value })}
               required
-              placeholder="z. B. Allianz, HUK, ..."
+              placeholder={t('policies.insurerPlaceholder')}
             />
           </FormField>
 
-          <FormField label="Vertragsnummer" required>
+          <FormField label={t('policies.contractNumber')} required>
             <Input
               value={form.contractNumber}
               onChange={(e) => setForm({ ...form, contractNumber: e.target.value })}
               required
-              placeholder="Versicherungsscheinnummer"
+              placeholder={t('policies.contractNumberPlaceholder')}
             />
           </FormField>
 
-          <FormField label="Beginn" required>
+          <FormField label={t('policies.startDate')} required>
             <Input
               type="date"
               value={form.startDate}
@@ -100,7 +94,7 @@ export default function NewPolicyPage(): ReactElement {
 
           <div style={{ marginTop: 'var(--versigo-space-6)' }}>
             <Button type="submit" disabled={submitting}>
-              {submitting ? <><InlineSpinner /> Speichert...</> : 'Erstellen'}
+              {submitting ? <><InlineSpinner /> {t('policies.creating')}</> : t('policies.create')}
             </Button>
           </div>
         </form>

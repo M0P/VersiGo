@@ -1,16 +1,32 @@
 import type { ReactElement, ReactNode } from 'react';
+import { cookies } from 'next/headers';
 import '../styles/globals.css';
 import { Providers } from './providers';
+import { isSupportedLanguage, DEFAULT_LANGUAGE, type Language } from '../i18n';
 
 type RootLayoutProps = {
   children: ReactNode;
 };
 
 /**
- * Inline script that runs before first paint to restore the saved theme
- * and accent colour, preventing a flash of the default theme (FOUC).
+ * Inline script that runs before first paint to restore the saved theme,
+ * accent colour, and UI language, preventing a flash of the defaults (FOUC).
+ *
+ * Language: the `versigo:locale` cookie is only set for accounts with a
+ * persistent language preference (USER/ADMIN). Without it, English is the
+ * global default; the I18nProvider reconciles with the server response
+ * (including the READ_ONLY session-only language) after hydration.
  */
 const THEME_BOOTSTRAP_SCRIPT = `(function () {
+  try {
+    var locale = document.cookie.replace(/(?:(?:^|.*;)\\s*)versigo:locale\\s*=\\s*([^;]*).*$|.*/, '$1');
+    if (locale === 'de') {
+      document.documentElement.lang = 'de';
+    } else {
+      document.documentElement.lang = 'en';
+    }
+  } catch (e) {}
+
   try {
     var theme = localStorage.getItem('versigo:theme');
     if (theme !== 'light' && theme !== 'dark') {
@@ -38,16 +54,27 @@ const THEME_BOOTSTRAP_SCRIPT = `(function () {
   } catch (e) {}
 })();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
-}: RootLayoutProps): ReactElement {
+}: RootLayoutProps): Promise<ReactElement> {
+  // Die Sprache wird serverseitig aus dem Cookie aufgeloest (nur fuer
+  // persistente Konten gesetzt). Damit rendern Server-HTML und erste
+  // Client-Hydration in derselben Sprache – kein Hydration-Mismatch.
+  // READ_ONLY hat keinen Cookie und startet mit dem globalen Default en;
+  // die Sitzungssprache kommt nach der Hydration vom /user/language-Endpunkt.
+  const cookieStore = await cookies();
+  const cookieValue = cookieStore.get('versigo:locale')?.value;
+  const initialLanguage: Language = isSupportedLanguage(cookieValue)
+    ? cookieValue
+    : DEFAULT_LANGUAGE;
+
   return (
-    <html lang="de" suppressHydrationWarning>
+    <html lang={initialLanguage} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers initialLanguage={initialLanguage}>{children}</Providers>
       </body>
     </html>
   );

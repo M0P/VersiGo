@@ -12,7 +12,7 @@ import type { UserPreferenceResponseDto } from './dto/user-preferences.dto';
  */
 export const USER_PREFERENCES_VERSION = 1;
 
-export type UserPreferenceValueType = 'hexColour' | 'themeMode' | 'locale';
+export type UserPreferenceValueType = 'hexColour' | 'themeMode';
 
 export interface UserPreferenceDefinition {
   type: UserPreferenceValueType;
@@ -28,14 +28,9 @@ export const USER_PREFERENCE_CATALOG: Readonly<Record<string, UserPreferenceDefi
     type: 'themeMode',
     description: 'Darstellungsmodus: light, dark oder system.',
   },
-  'language': {
-    type: 'locale',
-    description: 'UI-Sprache/Locale des Nutzers.',
-  },
 } as const;
 
 const THEME_MODES = ['light', 'dark', 'system'] as const;
-const LOCALES = ['de-DE', 'en-US', 'fr-FR', 'it-IT', 'es-ES', 'pt-BR'] as const;
 
 /**
  * Manages user-scoped key-value preferences.
@@ -76,14 +71,6 @@ export class UserPreferencesService {
         if (!THEME_MODES.includes(value as (typeof THEME_MODES)[number])) {
           throw new BadRequestException(
             `Value for '${key}' must be one of: ${THEME_MODES.join(', ')}`,
-          );
-        }
-        break;
-      }
-      case 'locale': {
-        if (!LOCALES.includes(value as (typeof LOCALES)[number])) {
-          throw new BadRequestException(
-            `Value for '${key}' must be one of: ${LOCALES.join(', ')}`,
           );
         }
         break;

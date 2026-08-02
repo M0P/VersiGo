@@ -10,6 +10,7 @@ import { Loading } from '../../../components/ui/loading';
 import { Alert } from '../../../components/ui/alert';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { NAV_SECTIONS } from '../../../components/ui/nav-config';
+import { formatCurrency, formatDate, useI18n } from '../../../i18n';
 import CoverageSummarySection from './coverage-summary-section';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
@@ -48,6 +49,7 @@ type PolicyDetail = {
 export default function PolicyDetailPage(): ReactElement {
   const params = useParams();
   const policyId = params.id as string;
+  const { t, language } = useI18n();
   const [policy, setPolicy] = useState<PolicyDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -55,18 +57,18 @@ export default function PolicyDetailPage(): ReactElement {
     fetch(`${API_BASE}/households/default/policies/${policyId}`, { credentials: 'include' })
       .then((res) => {
         if (res.status === 401) { window.location.href = '/login'; return Promise.resolve(null); }
-        if (!res.ok) throw new Error('Nicht gefunden');
+        if (!res.ok) throw new Error(t('policies.notFound'));
         return res.json();
       })
       .then((data) => { if (data) setPolicy(data); })
       .catch(() => setPolicy(null))
       .finally(() => setLoading(false));
-  }, [policyId]);
+  }, [policyId, t]);
 
   if (loading) {
     return (
       <AppShell navSections={NAV_SECTIONS}>
-        <Loading label="Lade Versicherungsdetails..." />
+        <Loading label={t('policies.detailLoading')} />
       </AppShell>
     );
   }
@@ -74,8 +76,8 @@ export default function PolicyDetailPage(): ReactElement {
   if (!policy) {
     return (
       <AppShell navSections={NAV_SECTIONS}>
-        <PageHeader title="Versicherung" />
-        <Alert variant="danger">Versicherung nicht gefunden.</Alert>
+        <PageHeader title={t('policies.detailTitle')} />
+        <Alert variant="danger">{t('policies.notFoundAlert')}</Alert>
       </AppShell>
     );
   }
@@ -84,59 +86,59 @@ export default function PolicyDetailPage(): ReactElement {
     <AppShell navSections={NAV_SECTIONS}>
       <PageHeader
         title={policy.insurerName}
-        description={`${policy.type} • ${policy.status}`}
+        description={`${t(`policies.types.${policy.type}`) ?? policy.type} • ${t(`policies.statuses.${policy.status}`) ?? policy.status}`}
         actions={
           <a href="/policies">
-            <Button variant="secondary" size="sm">Zurück zur Übersicht</Button>
+            <Button variant="secondary" size="sm">{t('policies.backToOverview')}</Button>
           </a>
         }
       />
 
       <div className="split-layout">
         <Card>
-          <SectionHeader title="Stammdaten" />
+          <SectionHeader title={t('policies.masterData')} />
           <dl style={{ margin: 0 }}>
-            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Vertragsnummer</dt>
+            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('policies.contractNumber')}</dt>
             <dd style={{ margin: 0 }}>{policy.contractNumber}</dd>
 
             {policy.tariffName && (
               <>
-                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Tarif</dt>
+                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('policies.tariff')}</dt>
                 <dd style={{ margin: 0 }}>{policy.tariffName}</dd>
               </>
             )}
 
-            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Status</dt>
+            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('common.status')}</dt>
             <dd style={{ margin: 0 }}>
               <span className={`badge ${policy.status === 'ACTIVE' ? 'badge-success' : policy.status === 'CANCELLED' ? 'badge-warning' : 'badge-neutral'}`}>
-                {policy.status}
+                {t(`policies.statuses.${policy.status}`) ?? policy.status}
               </span>
             </dd>
 
-            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Beginn</dt>
-            <dd style={{ margin: 0 }}>{new Date(policy.startDate).toLocaleDateString()}</dd>
+            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('policies.startDate')}</dt>
+            <dd style={{ margin: 0 }}>{formatDate(policy.startDate, language)}</dd>
 
             {policy.endDate && (
               <>
-                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Ende</dt>
-                <dd style={{ margin: 0 }}>{new Date(policy.endDate).toLocaleDateString()}</dd>
+                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('policies.endDate')}</dt>
+                <dd style={{ margin: 0 }}>{formatDate(policy.endDate, language)}</dd>
               </>
             )}
 
             {policy.premiumAmount != null && (
               <>
-                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Prämie</dt>
-                <dd style={{ margin: 0 }}>{policy.premiumAmount} EUR</dd>
+                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('policies.premium')}</dt>
+                <dd style={{ margin: 0 }}>{formatCurrency(policy.premiumAmount, language)}</dd>
               </>
             )}
           </dl>
         </Card>
 
         <Card>
-          <SectionHeader title="Versicherte Personen" />
+          <SectionHeader title={t('policies.coveredPersons')} />
           {policy.coveredPersons.length === 0 ? (
-            <EmptyState icon="👤" title="Keine Personen">
-              <p>Keine Personen eingetragen.</p>
+            <EmptyState icon="👤" title={t('policies.noPersonsTitle')}>
+              <p>{t('policies.noPersonsBody')}</p>
             </EmptyState>
           ) : (
             <ul style={{ margin: 0, paddingLeft: 'var(--versigo-space-4)' }}>
@@ -148,10 +150,10 @@ export default function PolicyDetailPage(): ReactElement {
         </Card>
 
         <Card>
-          <SectionHeader title="Portal-Links" />
+          <SectionHeader title={t('policies.portalLinks')} />
           {policy.portalLinks.length === 0 ? (
-            <EmptyState icon="🔗" title="Keine Links">
-              <p>Keine Portal-Links vorhanden.</p>
+            <EmptyState icon="🔗" title={t('policies.noLinksTitle')}>
+              <p>{t('policies.noLinksBody')}</p>
             </EmptyState>
           ) : (
             <ul style={{ margin: 0, paddingLeft: 'var(--versigo-space-4)', listStyle: 'none' }}>
@@ -164,15 +166,15 @@ export default function PolicyDetailPage(): ReactElement {
                     {l.connector && (
                       <span className={`badge ${l.connector.available ? 'badge-success' : 'badge-neutral'}`}
                         style={{ marginLeft: 'var(--versigo-space-2)' }}
-                        title={`Plugin: ${l.connector.displayName}`}>
-                        {l.connector.experimental ? 'Experimentell' : 'Connector'}
-                        {!l.connector.available ? ' (deaktiviert)' : ''}
+                        title={`${t('policies.connector')}: ${l.connector.displayName}`}>
+                        {l.connector.experimental ? t('policies.experimental') : t('policies.connector')}
+                        {!l.connector.available ? t('policies.disabledSuffix') : ''}
                       </span>
                     )}
                     {targetUrl && (
                       <div>
                         <a href={targetUrl} target="_blank" rel="noopener noreferrer">
-                          Portal öffnen
+                          {t('policies.openPortal')}
                         </a>
                       </div>
                     )}

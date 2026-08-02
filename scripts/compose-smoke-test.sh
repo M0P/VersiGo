@@ -615,6 +615,167 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   fi
   echo "   Last-Admin: 409, Konto unveraendert vorhanden"
   echo "   PASS"
+
+  # AP-21: Sprachpraeferenz-Endpunkt /user/language (alle authentifizierten
+  # Rollen). ADMIN/UUSER persistieren in users.locale, READ_ONLY nur in der
+  # Session. Unauthentifizierter Zugriff muss 401 liefern (Schritt 8q).
+  echo "8n. Testing language preference endpoint (AP-21, ADMIN persistent)..."
+  LANG_GET_STATUS=$(curl -s -o /tmp/versigo-smoke-lang-get.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/user/language)
+  if [ "$LANG_GET_STATUS" != "200" ]; then
+    echo "FAILED: GET /user/language returned HTTP $LANG_GET_STATUS (expected 200 for ADMIN)"
+    cat /tmp/versigo-smoke-lang-get.json
+    exit 1
+  fi
+  grep -qF '"language":"en"' /tmp/versigo-smoke-lang-get.json || { echo "FAILED: language default is not en"; cat /tmp/versigo-smoke-lang-get.json; exit 1; }
+  grep -qF '"persistence":"persistent"' /tmp/versigo-smoke-lang-get.json || { echo "FAILED: ADMIN language persistence must be persistent"; cat /tmp/versigo-smoke-lang-get.json; exit 1; }
+  # PUT auf de -> persistent in users.locale gespeichert.
+  LANG_PUT_STATUS=$(curl -s -o /tmp/versigo-smoke-lang-put.json -w "%{http_code}" \
+    -X PUT http://localhost:${APP_PORT:-3001}/user/language \
+    -b /tmp/versigo-smoke-cookies-2.txt \
+    -H 'Content-Type: application/json' \
+    -d '{"language":"de"}')
+  if [ "$LANG_PUT_STATUS" != "200" ]; then
+    echo "FAILED: PUT /user/language returned HTTP $LANG_PUT_STATUS"
+    cat /tmp/versigo-smoke-lang-put.json
+    exit 1
+  fi
+  grep -qF '"language":"de"' /tmp/versigo-smoke-lang-put.json || { echo "FAILED: PUT did not return de"; cat /tmp/versigo-smoke-lang-put.json; exit 1; }
+  ADMIN_LOCALE=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+    -tAc "SELECT locale FROM users WHERE username = '${ADMIN_USERNAME}';" | tr -d '[:space:]')
+  if [ "$ADMIN_LOCALE" != "de" ]; then
+    echo "FAILED: ADMIN users.locale not persisted (got '$ADMIN_LOCALE')"
+    exit 1
+  fi
+  # Invalid language -> 400 (class-validator).
+  LANG_INVALID_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X PUT http://localhost:${APP_PORT:-3001}/user/language \
+    -b /tmp/versigo-smoke-cookies-2.txt \
+    -H 'Content-Type: application/json' \
+    -d '{"language":"xx"}')
+  if [ "$LANG_INVALID_STATUS" != "400" ]; then
+    echo "FAILED: invalid language should return 400, got $LANG_INVALID_STATUS"
+    exit 1
+  fi
+  # Zuruecksetzen auf en (Aufraeumen).
+  LANG_RESET_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X PUT http://localhost:${APP_PORT:-3001}/user/language \
+    -b /tmp/versigo-smoke-cookies-2.txt \
+    -H 'Content-Type: application/json' \
+    -d '{"language":"en"}')
+  if [ "$LANG_RESET_STATUS" != "200" ]; then
+    echo "FAILED: reset language to en failed"
+    exit 1
+  fi
+  echo "   Language: GET en (persistent), PUT de -> DB, 400 bei 'xx', Reset en"
+  echo "   PASS"
+
+  echo "8o. Testing language preference (AP-21, READ_ONLY session-only)..."
+  RO_USERNAME="smoke-readonly-$(date +%s)"
+  RO_PASSWORD="smoke-readonly-pass-2026"
+  REG_STATUS=$(curl -s -o /tmp/versigo-smoke-reg.json -w "%{http_code}" \
+    -X POST http://localhost:${APP_PORT:-3001}/auth/register \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${RO_USERNAME}\",\"displayName\":\"Smoke Readonly\",\"password\":\"${RO_PASSWORD}\"}")
+  if [ "$REG_STATUS" != "201" ]; then
+    echo "FAILED: register returned HTTP $REG_STATUS"
+    cat /tmp/versigo-smoke-reg.json
+    exit 1
+  fi
+  grep -qF '"status":"PENDING_APPROVAL"' /tmp/versigo-smoke-reg.json || { echo "FAILED: registration not PENDING_APPROVAL"; exit 1; }
+  RO_ID=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+    -tAc "SELECT id FROM users WHERE username = '${RO_USERNAME}';" | tr -d '[:space:]')
+  if [ -z "$RO_ID" ]; then
+    echo "FAILED: smoke readonly user not found in database"
+    exit 1
+  fi
+  APPROVE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:${APP_PORT:-3001}/admin/users/${RO_ID}/approve \
+    -b /tmp/versigo-smoke-cookies-2.txt)
+  if [ "$APPROVE_STATUS" != "204" ]; then
+    echo "FAILED: approve returned HTTP $APPROVE_STATUS"
+    exit 1
+  fi
+  ROLE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:${APP_PORT:-3001}/admin/users/${RO_ID}/role \
+    -b /tmp/versigo-smoke-cookies-2.txt \
+    -H 'Content-Type: application/json' \
+    -d '{"role":"READ_ONLY"}')
+  if [ "$ROLE_STATUS" != "204" ]; then
+    echo "FAILED: setRole READ_ONLY returned HTTP $ROLE_STATUS"
+    exit 1
+  fi
+  # READ_ONLY-Login und Sprache lesen/aendern (Session-Persistenz erwartet).
+  LOGIN_RO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:${APP_PORT:-3001}/auth/local/login \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${RO_USERNAME}\",\"password\":\"${RO_PASSWORD}\"}" \
+    -c /tmp/versigo-smoke-ro-cookies.txt)
+  if [ "$LOGIN_RO_STATUS" != "200" ]; then
+    echo "FAILED: READ_ONLY login returned HTTP $LOGIN_RO_STATUS"
+    exit 1
+  fi
+  RO_LANG_GET=$(curl -s -b /tmp/versigo-smoke-ro-cookies.txt \
+    http://localhost:${APP_PORT:-3001}/user/language)
+  echo "$RO_LANG_GET" | grep -qF '"language":"en"' || { echo "FAILED: READ_ONLY default language not en"; echo "$RO_LANG_GET"; exit 1; }
+  echo "$RO_LANG_GET" | grep -qF '"persistence":"session"' || { echo "FAILED: READ_ONLY persistence must be session"; echo "$RO_LANG_GET"; exit 1; }
+  RO_LANG_PUT=$(curl -s -X PUT http://localhost:${APP_PORT:-3001}/user/language \
+    -b /tmp/versigo-smoke-ro-cookies.txt \
+    -H 'Content-Type: application/json' \
+    -d '{"language":"de"}')
+  echo "$RO_LANG_PUT" | grep -qF '"language":"de"' || { echo "FAILED: READ_ONLY PUT did not return de"; echo "$RO_LANG_PUT"; exit 1; }
+  echo "$RO_LANG_PUT" | grep -qF '"persistence":"session"' || { echo "FAILED: READ_ONLY PUT persistence must be session"; echo "$RO_LANG_PUT"; exit 1; }
+  # Gleiche Sitzung: GET nach PUT muss weiterhin de liefern (Review-2, Minor #4:
+  # Sitzungs-Persistenz innerhalb der Session explizit pruefen).
+  RO_LANG_GET_AFTER_PUT=$(curl -s -b /tmp/versigo-smoke-ro-cookies.txt \
+    http://localhost:${APP_PORT:-3001}/user/language)
+  echo "$RO_LANG_GET_AFTER_PUT" | grep -qF '"language":"de"' || { echo "FAILED: same-session GET after PUT must return de"; echo "$RO_LANG_GET_AFTER_PUT"; exit 1; }
+  echo "$RO_LANG_GET_AFTER_PUT" | grep -qF '"persistence":"session"' || { echo "FAILED: same-session GET persistence must be session"; echo "$RO_LANG_GET_AFTER_PUT"; exit 1; }
+  # READ_ONLY darf KEINEN erweiterten Zugriff erhalten: Profil- und
+  # Praeferenz-Endpunkte muessen mit 403 abgelehnt werden (Review-2, Minor #4).
+  RO_PROFILE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -b /tmp/versigo-smoke-ro-cookies.txt \
+    http://localhost:${APP_PORT:-3001}/user/profile)
+  if [ "$RO_PROFILE_STATUS" != "403" ]; then
+    echo "FAILED: READ_ONLY /user/profile should return 403, got $RO_PROFILE_STATUS"
+    exit 1
+  fi
+  RO_PREFS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -b /tmp/versigo-smoke-ro-cookies.txt \
+    http://localhost:${APP_PORT:-3001}/user/preferences)
+  if [ "$RO_PREFS_STATUS" != "403" ]; then
+    echo "FAILED: READ_ONLY /user/preferences should return 403, got $RO_PREFS_STATUS"
+    exit 1
+  fi
+  RO_LOCALE_DB=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+    -tAc "SELECT locale FROM users WHERE username = '${RO_USERNAME}';" | tr -d '[:space:]')
+  if [ "$RO_LOCALE_DB" != "en" ]; then
+    echo "FAILED: READ_ONLY language must NOT be persisted (users.locale = '$RO_LOCALE_DB')"
+    exit 1
+  fi
+  # Neue Session (Logout + erneuter Login) -> Sprache wieder en.
+  curl -s -o /dev/null -X POST http://localhost:${APP_PORT:-3001}/auth/logout \
+    -b /tmp/versigo-smoke-ro-cookies.txt \
+    -c /tmp/versigo-smoke-ro-cookies.txt || true
+  LOGIN_RO2_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:${APP_PORT:-3001}/auth/local/login \
+    -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${RO_USERNAME}\",\"password\":\"${RO_PASSWORD}\"}" \
+    -c /tmp/versigo-smoke-ro-cookies.txt)
+  if [ "$LOGIN_RO2_STATUS" != "200" ]; then
+    echo "FAILED: READ_ONLY second login returned HTTP $LOGIN_RO2_STATUS"
+    exit 1
+  fi
+  RO_LANG_GET2=$(curl -s -b /tmp/versigo-smoke-ro-cookies.txt \
+    http://localhost:${APP_PORT:-3001}/user/language)
+  echo "$RO_LANG_GET2" | grep -qF '"language":"en"' || { echo "FAILED: READ_ONLY language survived logout (must be session-only)"; echo "$RO_LANG_GET2"; exit 1; }
+  # Aufraeumen: Smoke-User entfernen (FK-Kaskade entfernt credentials etc.).
+  $COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+    -c "DELETE FROM users WHERE username = '${RO_USERNAME}';" >/dev/null 2>&1 || true
+  rm -f /tmp/versigo-smoke-ro-cookies.txt /tmp/versigo-smoke-reg.json
+  echo "   READ_ONLY: Session-only verifiziert (GET nach PUT = de, users.locale blieb en), 403 auf Profil/Praeferenzen, Smoke-User entfernt"
+  echo "   PASS"
 else
   echo "5. Skipping local admin login check (LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD not configured)."
 fi
@@ -627,6 +788,17 @@ UNAUTH_PC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
   http://localhost:${APP_PORT:-3001}/portal-connectors/catalog)
 if [ "$UNAUTH_PC_STATUS" != "401" ]; then
   echo "FAILED: unauthenticated /portal-connectors/catalog should return 401, got $UNAUTH_PC_STATUS"
+  exit 1
+fi
+echo "   PASS"
+
+# AP-21: Unauthentifizierter Zugriff auf die Sprachpraeferenz muss abgelehnt
+# werden. Dieser Check ist admin-unabhaengig und laeuft daher hier.
+echo "9b. Rejecting unauthenticated language preference access..."
+UNAUTH_LANG_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+  http://localhost:${APP_PORT:-3001}/user/language)
+if [ "$UNAUTH_LANG_STATUS" != "401" ]; then
+  echo "FAILED: unauthenticated /user/language should return 401, got $UNAUTH_LANG_STATUS"
   exit 1
 fi
 echo "   PASS"

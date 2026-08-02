@@ -139,11 +139,16 @@ Dev-Modus.
 Nach der Anmeldung können Sie unter **Mein Profil** (http://localhost:3000/settings,
 `USER`/`ADMIN`):
 
-- **Profil bearbeiten**: Anzeigename und Sprache (Locale-Allowlist)
+- **Profil bearbeiten**: Anzeigename
+- **Sprache wählen (AP-21)**: Deutsch oder Englisch – Englisch ist der
+  globale Standard. `USER`/`ADMIN` wird die Sprache pro Konto gespeichert
+  (`users.locale`); `READ_ONLY` gilt sie nur für die aktuelle
+  Browser-Sitzung (Session-only, keine Speicherung).
 - **Akzentfarbe wählen**: 8 Preset-Farben oder ein eigener Hex-Farbwert
 - **Helles/dunkles Design**: Umschaltung per Klick im Topbar oder in den Einstellungen
 - Die Einstellung wird pro Benutzer serverseitig gespeichert
-- `READ_ONLY`-Konten sehen keine editierbaren Einstellungen (Server: 403)
+- `READ_ONLY`-Konten sehen außer der Sprachauswahl keine editierbaren
+  Einstellungen (Server: 403)
 
 ## Systemeinstellungen (Admin, AP-17)
 

@@ -141,3 +141,22 @@ Testdienste laufen in einer isolierten Compose-Umgebung (`docker-compose.test.ym
   nie im Klartext.
 - **Rollen:** Katalog-/Plugin-Endpunkte sind für `READ_ONLY`/`USER`/`ADMIN`
   lesbar; Portal-Link-Schreibpfade unterliegen der Household-Isolation.
+
+## Multi-Language Support (AP-21)
+
+- **Vertikales Feature-Slice** `apps/api/src/features/language/`:
+  `GET`/`PUT /user/language` für **alle** authentifizierten Rollen
+  (inkl. `READ_ONLY`; Rollen-Guard auf der niedrigsten Rolle).
+- **Sprachcodes:** `en` | `de` (verbindlich Englisch = globaler Standard).
+  Die Kataloge der Web-App liegen in `apps/web/src/i18n/locales/`
+  (`en.ts` = Quelle der Wahrheit, `de.ts` strukturgleich erzwungen).
+- **Persistenzmodell:**
+  - `USER`/`ADMIN`: `users.locale` (persistent, `persistence: "persistent"`);
+    Auflösung Konto → Browserpräferenz (Accept-Language, q-Werte) → `en`.
+  - `READ_ONLY`: ausschließlich Sitzung (`express-session`-Feld `language`,
+    `persistence: "session"`); niemals Datenbank, kein Audit/Verlauf.
+- **Web:** `I18nProvider` (Client), Cookie `versigo:locale`, `<html lang>`
+  folgt der Sprache, `t()`-Kataloge mit Fallback-Kette (Sprache → en → roher
+  Schüssel). Ein Guard (`test:i18n`) verhindert hartkodierte deutsche
+  UI-Texte; die Compose-Smoke-Tests prüfen Endpunkt, Persistenz und
+  READ_ONLY-Sitzungsisolation (Schritte 8n/8o/9b).

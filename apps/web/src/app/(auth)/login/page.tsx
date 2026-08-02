@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/button';
 import { Input, FormField } from '../../../components/ui/form-field';
 import { Alert } from '../../../components/ui/alert';
 import { InlineSpinner } from '../../../components/ui/loading';
+import { localizeAuthError, useI18n } from '../../../i18n';
 
 type AuthConfig = {
   oidcEnabled: boolean;
@@ -42,6 +43,7 @@ function safeRedirectPath(value: string | null): string {
 
 export default function LoginPage(): ReactElement {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+  const { t } = useI18n();
 
   const [config, setConfig] = useState<AuthConfig | null>(null);
   const [username, setUsername] = useState('');
@@ -93,10 +95,13 @@ export default function LoginPage(): ReactElement {
         return;
       }
 
-      const body = await res.json().catch(() => ({ message: 'Anmeldefehler' }));
-      setError({ message: body.message ?? 'Anmeldefehler', status: res.status });
+      // AP-21: Die rohe (deutsche) API-Fehlermeldung wird NICHT angezeigt;
+      // der HTTP-Status wird auf einen lokalisierten Katalog-Schluessel
+      // abgebildet (en/de).
+      await res.json().catch(() => null);
+      setError({ message: localizeAuthError(t, res.status, 'login'), status: res.status });
     } catch {
-      setError({ message: 'Verbindungsfehler zum Server', status: 0 });
+      setError({ message: t('auth.connectionError'), status: 0 });
     } finally {
       setLoading(false);
     }
@@ -106,9 +111,9 @@ export default function LoginPage(): ReactElement {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
         <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>Anmeldung</h1>
+          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>{t('auth.title')}</h1>
           <Alert variant="danger">
-            Der Anmeldedienst ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.
+            {t('auth.serviceUnavailable')}
           </Alert>
         </Card>
       </div>
@@ -119,8 +124,8 @@ export default function LoginPage(): ReactElement {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
         <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>Anmeldung</h1>
-          <p className="text-muted">Lade Anmeldeoptionen...</p>
+          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>{t('auth.title')}</h1>
+          <p className="text-muted">{t('auth.loadingOptions')}</p>
           <div style={{ marginTop: 'var(--versigo-space-4)' }}>
             <InlineSpinner />
           </div>
@@ -135,9 +140,9 @@ export default function LoginPage(): ReactElement {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
         <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>Anmeldung</h1>
+          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>{t('auth.title')}</h1>
           <Alert variant="warning">
-            Es ist keine Anmeldeart konfiguriert. Bitte wenden Sie sich an Ihre Administration.
+            {t('auth.noAuthConfigured')}
           </Alert>
         </Card>
       </div>
@@ -151,11 +156,11 @@ export default function LoginPage(): ReactElement {
           <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
             <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
           </h1>
-          <p className="text-muted">Versicherungsverwaltung</p>
+          <p className="text-muted">{t('auth.tagline')}</p>
         </div>
 
         {error && (
-          <Alert variant="danger" title="Anmeldefehler">
+          <Alert variant="danger" title={t('auth.loginErrorTitle')}>
             {error.message}
           </Alert>
         )}
@@ -163,7 +168,7 @@ export default function LoginPage(): ReactElement {
         {config.localEnabled && (
           <form onSubmit={handleLocalLogin} noValidate>
             <fieldset disabled={loading} style={{ border: 'none', padding: 0, margin: 0 }}>
-              <FormField label="Benutzername" required>
+              <FormField label={t('auth.username')} required>
                 <Input
                   id="login-username"
                   type="text"
@@ -171,11 +176,11 @@ export default function LoginPage(): ReactElement {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
-                  placeholder="Ihr Benutzername"
+                  placeholder={t('auth.usernamePlaceholder')}
                 />
               </FormField>
 
-              <FormField label="Passwort" required>
+              <FormField label={t('auth.password')} required>
                 <Input
                   id="login-password"
                   type="password"
@@ -183,12 +188,12 @@ export default function LoginPage(): ReactElement {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  placeholder="Ihr Passwort"
+                  placeholder={t('auth.passwordPlaceholder')}
                 />
               </FormField>
 
               <Button type="submit" disabled={loading || !username || !password} style={{ width: '100%' }}>
-                {loading ? <><InlineSpinner /> Anmelden...</> : 'Anmelden'}
+                {loading ? <><InlineSpinner /> {t('auth.loggingIn')}</> : t('auth.login')}
               </Button>
             </fieldset>
           </form>
@@ -196,24 +201,24 @@ export default function LoginPage(): ReactElement {
 
         {config.localEnabled && config.registrationEnabled && (
           <p className="text-sm text-muted" style={{ textAlign: 'center', marginTop: 'var(--versigo-space-4)' }}>
-            Noch kein Konto?{' '}
+            {t('auth.noAccount')}{' '}
             <a href="/register" style={{ color: 'var(--versigo-accent)' }}>
-              Registrieren
+              {t('auth.register')}
             </a>
           </p>
         )}
 
         {config.localEnabled && config.oidcEnabled && (
-          <hr role="separator" aria-label="oder" style={{ margin: 'var(--versigo-space-6) 0' }} />
+          <hr role="separator" aria-label={t('auth.or')} style={{ margin: 'var(--versigo-space-6) 0' }} />
         )}
 
         {config.oidcEnabled && (
           <div style={{ textAlign: 'center' }}>
             <p className="text-sm text-muted" style={{ marginBottom: 'var(--versigo-space-3)' }}>
-              Alternativ mit Ihrem Identity-Provider anmelden:
+              {t('auth.alternativeOidc')}
             </p>
             <a href={`${apiBaseUrl}/auth/login`}>
-              <Button variant="outline" style={{ width: '100%' }}>Mit OIDC anmelden</Button>
+              <Button variant="outline" style={{ width: '100%' }}>{t('auth.oidcSignIn')}</Button>
             </a>
           </div>
         )}

@@ -14,6 +14,7 @@ import { CostTrackingModule } from './features/cost-tracking/cost-tracking.modul
 import { DocumentsModule } from './features/documents/documents.module';
 import { FamilySharingModule } from './features/family-sharing/family-sharing.module';
 import { IdentityModule } from './features/identity/identity.module';
+import { LanguageModule } from './features/language/language.module';
 import { MonitoringModule } from './features/monitoring/monitoring.module';
 import { NotificationsModule } from './features/notifications/notifications.module';
 import { PaperlessNgxModule } from './features/paperless-ngx/paperless-ngx.module';
@@ -51,6 +52,7 @@ import { UserPreferencesModule } from './features/user-preferences/user-preferen
     UserPreferencesModule,
     SystemConfigModule,
     ProfileModule,
+    LanguageModule,
   ],
 })
 export class AppModule {}

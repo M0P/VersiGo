@@ -9,7 +9,7 @@ const MOCK_USER = {
   id: 'user-1',
   username: 'alice',
   displayName: 'Alice',
-  locale: 'de-DE',
+  locale: 'en',
   role: GlobalRole.USER,
   status: 'ACTIVE',
   createdAt: new Date('2026-01-01'),
@@ -45,7 +45,7 @@ describe('ProfileService', () => {
 
       expect(profile.id).toBe('user-1');
       expect(profile.displayName).toBe('Alice');
-      expect(profile.locale).toBe('de-DE');
+      expect(profile.locale).toBe('en');
       expect(profile.role).toBe(GlobalRole.USER);
     });
 
@@ -83,11 +83,11 @@ describe('ProfileService', () => {
     it('aendert locale zusammen mit displayName', async () => {
       const { db, service } = createService();
 
-      await service.updateProfile('user-1', { displayName: 'Alice', locale: 'en-US' });
+      await service.updateProfile('user-1', { displayName: 'Alice', locale: 'de' });
 
       expect(db.user.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { displayName: 'Alice', locale: 'en-US' },
+          data: { displayName: 'Alice', locale: 'de' },
         }),
       );
     });

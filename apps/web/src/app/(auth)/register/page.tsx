@@ -7,6 +7,7 @@ import { Button } from '../../../components/ui/button';
 import { Input, FormField } from '../../../components/ui/form-field';
 import { Alert } from '../../../components/ui/alert';
 import { InlineSpinner } from '../../../components/ui/loading';
+import { localizeAuthError, useI18n } from '../../../i18n';
 
 /**
  * AP-16: Lokale Registrierung. Legt ein Konto mit Status PENDING_APPROVAL an;
@@ -15,6 +16,7 @@ import { InlineSpinner } from '../../../components/ui/loading';
  */
 export default function RegisterPage(): ReactElement {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+  const { t } = useI18n();
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -41,10 +43,13 @@ export default function RegisterPage(): ReactElement {
         return;
       }
 
-      const body = await res.json().catch(() => ({ message: 'Registrierung fehlgeschlagen' }));
-      setError(body.message ?? 'Registrierung fehlgeschlagen');
+      // AP-21: Die rohe (deutsche) API-Fehlermeldung wird NICHT angezeigt;
+      // der HTTP-Status wird auf einen lokalisierten Katalog-Schluessel
+      // abgebildet (en/de).
+      await res.json().catch(() => null);
+      setError(localizeAuthError(t, res.status, 'register'));
     } catch {
-      setError('Verbindungsfehler zum Server');
+      setError(t('auth.connectionError'));
     } finally {
       setLoading(false);
     }
@@ -58,16 +63,14 @@ export default function RegisterPage(): ReactElement {
             <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
               <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
             </h1>
-            <p className="text-muted">Registrierung</p>
+            <p className="text-muted">{t('auth.registerTagline')}</p>
           </div>
-          <Alert variant="success" title="Registrierung eingegangen">
-            Ihr Konto wurde angelegt und wartet auf die Freischaltung durch
-            einen Administrator. Sobald Ihr Konto freigeschaltet ist, können
-            Sie sich anmelden.
+          <Alert variant="success" title={t('auth.registerSuccessTitle')}>
+            {t('auth.registerSuccessBody')}
           </Alert>
           <p style={{ textAlign: 'center', marginTop: 'var(--versigo-space-4)' }}>
             <a href="/login" style={{ color: 'var(--versigo-accent)' }}>
-              Zurück zur Anmeldung
+              {t('auth.backToLogin')}
             </a>
           </p>
         </Card>
@@ -82,11 +85,11 @@ export default function RegisterPage(): ReactElement {
           <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
             <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
           </h1>
-          <p className="text-muted">Neues Konto erstellen</p>
+          <p className="text-muted">{t('auth.registerTagline')}</p>
         </div>
 
         {error && (
-          <Alert variant="danger" title="Registrierung fehlgeschlagen">
+          <Alert variant="danger" title={t('auth.registrationFailedTitle')}>
             {error}
           </Alert>
         )}
@@ -94,9 +97,9 @@ export default function RegisterPage(): ReactElement {
         <form onSubmit={handleRegister} noValidate>
           <fieldset disabled={loading} style={{ border: 'none', padding: 0, margin: 0 }}>
             <FormField
-              label="Benutzername"
+              label={t('auth.username')}
               required
-              hint="3-32 Zeichen: Kleinbuchstaben, Ziffern sowie . _ - (Start mit Buchstabe oder Ziffer)"
+              hint={t('auth.usernameHint')}
             >
               <Input
                 id="register-username"
@@ -105,11 +108,11 @@ export default function RegisterPage(): ReactElement {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                placeholder="z. B. maxi"
+                placeholder={t('auth.usernamePlaceholderRegister')}
               />
             </FormField>
 
-            <FormField label="Anzeigename" required hint="So erscheint Ihr Name in der Anwendung">
+            <FormField label={t('auth.displayName')} required hint={t('auth.displayNameHint')}>
               <Input
                 id="register-displayname"
                 type="text"
@@ -118,11 +121,11 @@ export default function RegisterPage(): ReactElement {
                 onChange={(e) => setDisplayName(e.target.value)}
                 required
                 maxLength={80}
-                placeholder="z. B. Maxi Muster"
+                placeholder={t('auth.displayNamePlaceholder')}
               />
             </FormField>
 
-            <FormField label="Passwort" required hint="Mindestens 12 Zeichen">
+            <FormField label={t('auth.password')} required hint={t('auth.passwordHint')}>
               <Input
                 id="register-password"
                 type="password"
@@ -131,7 +134,7 @@ export default function RegisterPage(): ReactElement {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={12}
-                placeholder="Ihr Passwort"
+                placeholder={t('auth.passwordPlaceholder')}
               />
             </FormField>
 
@@ -140,15 +143,15 @@ export default function RegisterPage(): ReactElement {
               disabled={loading || !username || !displayName || !password}
               style={{ width: '100%' }}
             >
-              {loading ? <><InlineSpinner /> Registrieren...</> : 'Konto erstellen'}
+              {loading ? <><InlineSpinner /> {t('auth.registering')}</> : t('auth.createAccount')}
             </Button>
           </fieldset>
         </form>
 
         <p className="text-sm text-muted" style={{ textAlign: 'center', marginTop: 'var(--versigo-space-4)' }}>
-          Bereits freigeschaltet?{' '}
+          {t('auth.alreadyActivated')}{' '}
           <a href="/login" style={{ color: 'var(--versigo-accent)' }}>
-            Anmelden
+            {t('auth.login')}
           </a>
         </p>
       </Card>

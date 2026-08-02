@@ -56,6 +56,8 @@ services:
         pnpm run typecheck 2>&1 &&
         echo 'Running tests...' &&
         pnpm run test 2>&1 &&
+        echo 'Running i18n guard (hardcoded German UI texts)...' &&
+        pnpm --filter @versigo/web run test:i18n 2>&1 &&
         echo 'All checks passed!'
       "
     networks:

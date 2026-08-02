@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from '../../contexts/theme-context';
 import { useCurrentUser, type CurrentUser } from '../../hooks/use-current-user';
+import { useI18n } from '../../i18n';
 import { Icon } from './icons';
 import type { NavSection } from './nav-config';
 
@@ -32,6 +33,7 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const { toggleTheme, theme } = useTheme();
+  const { t } = useI18n();
   const hasExternalUser = userProp !== undefined;
   // Kein zweiter /auth/me-Request, wenn der Aufrufer den User bereits kennt.
   const { user: hookUser } = useCurrentUser({ enabled: !hasExternalUser });
@@ -84,7 +86,7 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
         <button
           className="nav-toggle"
           onClick={() => setSidebarOpen((prev) => !prev)}
-          aria-label={sidebarOpen ? 'Navigation schliessen' : 'Navigation öffnen'}
+          aria-label={sidebarOpen ? t('nav.closeNavigation') : t('nav.openNavigation')}
           aria-expanded={sidebarOpen}
         >
           <svg
@@ -112,7 +114,7 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
           <button
             className="btn btn-ghost btn-sm"
             onClick={toggleTheme}
-            aria-label={`Wechsel zu ${theme === 'light' ? 'dunklem' : 'hellem'} Modus`}
+            aria-label={t(theme === 'light' ? 'nav.themeToggleDark' : 'nav.themeToggleLight')}
           >
             <svg
               width="18"
@@ -144,7 +146,7 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
 
         {visibleSections.map((section) => (
           <div key={section.label}>
-            <div className="nav-section-label">{section.label}</div>
+            <div className="nav-section-label">{t(section.label)}</div>
             {section.items.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
               return (
@@ -158,7 +160,7 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
                   <span className="nav-item-icon">
                     <Icon name={item.icon} size={18} />
                   </span>
-                  {item.label}
+                  {t(item.label)}
                 </Link>
               );
             })}

@@ -122,20 +122,20 @@ describe('UserPreferencesService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should accept theme and language catalog keys with valid values', async () => {
+    it('should accept the theme catalog key with a valid value', async () => {
       const theme = await service.setPreference('user-1', 'theme', 'dark');
       expect(theme.value).toBe('dark');
-
-      const language = await service.setPreference('user-1', 'language', 'de-DE');
-      expect(language.value).toBe('de-DE');
     });
 
-    it('should reject invalid theme and language values', async () => {
+    it('should reject the removed language key (AP-21: eigene Sprach-API)', async () => {
+      await expect(
+        service.setPreference('user-1', 'language', 'en'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject invalid theme values', async () => {
       await expect(
         service.setPreference('user-1', 'theme', 'blue'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.setPreference('user-1', 'language', 'xx-XX'),
       ).rejects.toThrow(BadRequestException);
     });
   });

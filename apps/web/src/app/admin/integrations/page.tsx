@@ -9,6 +9,7 @@ import { Input, Select } from '../../../components/ui/form-field';
 import { Alert } from '../../../components/ui/alert';
 import { InlineSpinner } from '../../../components/ui/loading';
 import { NAV_SECTIONS } from '../../../components/ui/nav-config';
+import { useI18n } from '../../../i18n';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -19,6 +20,7 @@ type ConnectivityResult = {
 };
 
 export default function AdminIntegrationsPage(): ReactElement {
+  const { t } = useI18n();
   const [integrationKey, setIntegrationKey] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [apiToken, setApiToken] = useState('');
@@ -46,13 +48,13 @@ export default function AdminIntegrationsPage(): ReactElement {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.message ?? 'Fehler beim Test');
+        throw new Error(data.message ?? t('admin.integrations.testError'));
       }
 
       const data: ConnectivityResult = await res.json();
       setResult(data);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Unbekannter Fehler';
+      const message = e instanceof Error ? e.message : t('common.unknownError');
       setError(message);
     } finally {
       setTesting(false);
@@ -61,32 +63,32 @@ export default function AdminIntegrationsPage(): ReactElement {
 
   return (
     <AppShell navSections={NAV_SECTIONS}>
-      <PageHeader title="Integrationen" description="Connectivity-Tests für externe Dienste" />
+      <PageHeader title={t('admin.integrations.title')} description={t('admin.integrations.description')} />
 
-      {error && <Alert variant="danger">Fehler: {error}</Alert>}
+      {error && <Alert variant="danger">{t('common.error')}: {error}</Alert>}
 
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
-        <SectionHeader title="Connectivity-Test" />
+        <SectionHeader title={t('admin.integrations.connectivityTest')} />
         <form onSubmit={handleTest} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--versigo-space-3)', maxWidth: 480 }}>
           <div className="form-group">
-            <label className="form-label">Integrations-Key</label>
+            <label className="form-label">{t('admin.integrations.key')}</label>
             <Select
               value={integrationKey}
               onChange={(e) => setIntegrationKey(e.target.value)}
               required
             >
-              <option value="">Bitte wählen...</option>
-              <option value="database">Datenbank</option>
+              <option value="">{t('admin.integrations.choose')}</option>
+              <option value="database">{t('admin.integrations.database')}</option>
               <option value="redis">Redis</option>
-              <option value="oidc">OIDC-Provider</option>
-              <option value="paperless">Paperless-ngx</option>
-              <option value="ai">AI-Provider</option>
-              <option value="storage">S3/Speicher</option>
-              <option value="custom">Benutzerdefiniert</option>
+              <option value="oidc">{t('admin.integrations.oidc')}</option>
+              <option value="paperless">{t('admin.integrations.paperless')}</option>
+              <option value="ai">{t('admin.integrations.ai')}</option>
+              <option value="storage">{t('admin.integrations.storage')}</option>
+              <option value="custom">{t('admin.integrations.custom')}</option>
             </Select>
           </div>
           <div className="form-group">
-            <label className="form-label">Endpoint (optional)</label>
+            <label className="form-label">{t('admin.integrations.endpoint')}</label>
             <Input
               type="url"
               value={endpoint}
@@ -95,36 +97,34 @@ export default function AdminIntegrationsPage(): ReactElement {
             />
           </div>
           <div className="form-group">
-            <label className="form-label">API-Token (optional)</label>
+            <label className="form-label">{t('admin.integrations.apiToken')}</label>
             <Input
               type="password"
               value={apiToken}
               onChange={(e) => setApiToken(e.target.value)}
-              placeholder="Nur für Authentifizierung"
+              placeholder={t('admin.integrations.authOnly')}
             />
           </div>
           <Button type="submit" disabled={testing}>
-            {testing ? <><InlineSpinner /> Teste...</> : 'Test starten'}
+            {testing ? <><InlineSpinner /> {t('admin.integrations.testing')}</> : t('admin.integrations.startTest')}
           </Button>
         </form>
         <p className="form-hint">
-          Aus SSRF-Schutz sind nur oeffentliche http(s)-Endpunkte testbar;
-          lokale Dienste (z. B. Ollama unter localhost) pruefen Sie bitte
-          direkt auf dem Host.
+          {t('admin.integrations.testHint')}
         </p>
       </Card>
 
       {result && (
         <Card>
-          <SectionHeader title="Testergebnis" />
+          <SectionHeader title={t('admin.integrations.resultTitle')} />
           <p>
-            Status:{' '}
+            {t('admin.integrations.status')}{' '}
             <strong style={{ color: result.success ? 'var(--versigo-success)' : 'var(--versigo-danger)' }}>
-              {result.success ? 'Erfolgreich' : 'Fehlgeschlagen'}
+              {result.success ? t('admin.integrations.successful') : t('admin.integrations.failed')}
             </strong>
           </p>
-          <p>Meldung: {result.message}</p>
-          <p className="text-xs text-muted">Zeitstempel: {result.timestamp}</p>
+          <p>{t('admin.integrations.message')} {result.message}</p>
+          <p className="text-xs text-muted">{t('admin.integrations.timestamp')} {result.timestamp}</p>
         </Card>
       )}
     </AppShell>

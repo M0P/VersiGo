@@ -3,6 +3,10 @@ import type { IconName } from './icons';
 /**
  * Shared navigation configuration for the app shell.
  * Each section groups related routes.
+ *
+ * `label` enthaelt seit AP-21 i18n-Schluessel (nav.*); die Uebersetzung
+ * erfolgt in der AppShell (useI18n). So bleibt die Konfiguration eine
+ * reine, testbare Datenstruktur.
  */
 export type NavItem = {
   href: string;
@@ -17,21 +21,21 @@ export type NavSection = {
 
 export const NAV_SECTIONS: NavSection[] = [
   {
-    label: 'Hauptseiten',
+    label: 'nav.main',
     items: [
-      { href: '/', label: 'Dashboard', icon: 'home' },
-      { href: '/policies', label: 'Versicherungen', icon: 'policies' },
-      { href: '/household/costs', label: 'Kosten', icon: 'costs' },
+      { href: '/', label: 'nav.dashboard', icon: 'home' },
+      { href: '/policies', label: 'nav.policies', icon: 'policies' },
+      { href: '/household/costs', label: 'nav.costs', icon: 'costs' },
     ],
   },
   {
-    label: 'Verwaltung',
+    label: 'nav.administration',
     items: [
       // AP-17: /settings ist die persoenliche Profilseite ("Mein Profil").
       // Die zentralen Systemeinstellungen liegen unter /admin/settings
       // und sind (serverseitig durchgesetzt) nur fuer ADMIN sichtbar.
-      { href: '/settings', label: 'Mein Profil', icon: 'settings' },
-      { href: '/admin', label: 'Admin', icon: 'admin' },
+      { href: '/settings', label: 'nav.myProfile', icon: 'settings' },
+      { href: '/admin', label: 'nav.admin', icon: 'admin' },
     ],
   },
 ];
