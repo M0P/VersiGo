@@ -9,13 +9,13 @@ import {
   DatabaseService,
   SettingsResolverService,
   type SettingResolution,
-} from '@insura/foundation';
+} from '@versigo/foundation';
 import {
   getSettingDefinition,
   getUiConfigurableKeys,
   validateSettingValue,
-} from '@insura/foundation';
-import type { SettingDefinition } from '@insura/foundation';
+} from '@versigo/foundation';
+import type { SettingDefinition } from '@versigo/foundation';
 import { SettingsStoreService } from '../admin-settings/settings-store.service';
 import type { AuthenticatedUser } from '../identity/auth.service';
 import {

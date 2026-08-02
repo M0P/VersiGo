@@ -22,8 +22,8 @@
 ### Verification
 
 **1. Round 5 Minor fix (mobile `.table td` duplicate `border-bottom`) — VERIFIED CORRECT:**
-- `apps/web/src/styles/globals.css:1140-1146` — the `.table td` rule inside `@media (max-width: 639px)` now contains exactly **one** `border-bottom` declaration (line 1145: `border-bottom: var(--insura-border-width) solid var(--insura-border);`).
-- The dead `border-bottom: none;` line is gone; no other declarations in the rule were disturbed (`display: flex`, `justify-content: space-between`, `align-items: center`, `padding: var(--insura-space-2) 0` all intact).
+- `apps/web/src/styles/globals.css:1140-1146` — the `.table td` rule inside `@media (max-width: 639px)` now contains exactly **one** `border-bottom` declaration (line 1145: `border-bottom: var(--versigo-border-width) solid var(--versigo-border);`).
+- The dead `border-bottom: none;` line is gone; no other declarations in the rule were disturbed (`display: flex`, `justify-content: space-between`, `align-items: center`, `padding: var(--versigo-space-2) 0` all intact).
 - The rule set is otherwise intact: `.table thead` (1127), `.table tr` (1131), `.table td:last-child { border-bottom: none }` (1148-1150, intentional reset for the last row), and `.table td::before` (1152) all present and unchanged. Total `border-bottom` occurrences in the file are consistent (lines 436, 463, 698, 704, 710, 903, 1145, 1149 — each in its correct rule).
 
 **2. Round 4 Medium fix (missing `data-label`) — still VERIFIED:**

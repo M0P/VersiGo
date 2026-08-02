@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LoginRateLimiterService } from '../login-rate-limiter.service';
-import { AppConfigService } from '@insura/foundation';
+import { AppConfigService } from '@versigo/foundation';
 import type Redis from 'ioredis';
 
 // Mock Redis

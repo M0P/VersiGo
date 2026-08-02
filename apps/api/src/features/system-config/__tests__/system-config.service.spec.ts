@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { getSettingDefinition } from '@insura/foundation';
+import { getSettingDefinition } from '@versigo/foundation';
 import { SystemConfigService } from '../system-config.service';
 
 // SSRF-Guard wird im Service-Spec gemockt (eigene Guard-Spec testet die

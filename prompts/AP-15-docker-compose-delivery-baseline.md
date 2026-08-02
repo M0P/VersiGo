@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make Insura runnable reliably from a fresh clone with Docker Compose, and establish a maintainable deployment baseline that remains valid after every future feature.
+Make VersiGo runnable reliably from a fresh clone with Docker Compose, and establish a maintainable deployment baseline that remains valid after every future feature.
 
 This feature is a complete vertical slice for local/self-hosted deployment: container images, runtime configuration, database migration, service readiness, health checks, persistent storage, documentation, and automated verification.
 
@@ -12,7 +12,7 @@ The required user-facing outcome is:
 docker compose up --build
 ```
 
-starts a usable Insura stack with the web application, API, worker, database, Redis, and all required dependencies functioning together.
+starts a usable VersiGo stack with the web application, API, worker, database, Redis, and all required dependencies functioning together.
 
 ## Read first
 

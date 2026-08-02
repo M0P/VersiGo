@@ -3,7 +3,7 @@
 ## Design System (AP-13)
 
 ### Architecture
-The Insura design system is built on **CSS custom properties** and **@layer cascade** with five explicit layers:
+The VersiGo design system is built on **CSS custom properties** and **@layer cascade** with five explicit layers:
 1. `design-tokens` – base shared tokens (colours, typography, spacing, etc.)
 2. `theme` – light/dark overrides via `[data-theme]` attribute
 3. `base` – element resets and typography
@@ -23,34 +23,34 @@ All components must consume token variables rather than hard-coded values.
 #### Colour
 | Token | Purpose |
 |-------|---------|
-| `--insura-accent` | Primary action colour (HSL, user-customisable) |
-| `--insura-accent-light` | Tinted accent for hover backgrounds |
-| `--insura-accent-dark` | Shaded accent for hover states |
-| `--insura-accent-soft` | Subtle accent background |
-| `--insura-accent-text` | Text on accent backgrounds |
-| `--insura-bg` | Page background |
-| `--insura-bg-elevated` | Elevated surface background |
-| `--insura-surface` | Card/surface background |
-| `--insura-surface-hover` | Surface hover state |
-| `--insura-border` | Default border colour |
-| `--insura-border-strong` | Strong border colour |
-| `--insura-text-primary` | Primary text |
-| `--insura-text-secondary` | Secondary text |
-| `--insura-text-muted` | Muted/hint text |
-| `--insura-success` / `--insura-warning` / `--insura-danger` / `--insura-info` | Semantic colours |
-| `--insura-*-soft` | Semantic background tints |
+| `--versigo-accent` | Primary action colour (HSL, user-customisable) |
+| `--versigo-accent-light` | Tinted accent for hover backgrounds |
+| `--versigo-accent-dark` | Shaded accent for hover states |
+| `--versigo-accent-soft` | Subtle accent background |
+| `--versigo-accent-text` | Text on accent backgrounds |
+| `--versigo-bg` | Page background |
+| `--versigo-bg-elevated` | Elevated surface background |
+| `--versigo-surface` | Card/surface background |
+| `--versigo-surface-hover` | Surface hover state |
+| `--versigo-border` | Default border colour |
+| `--versigo-border-strong` | Strong border colour |
+| `--versigo-text-primary` | Primary text |
+| `--versigo-text-secondary` | Secondary text |
+| `--versigo-text-muted` | Muted/hint text |
+| `--versigo-success` / `--versigo-warning` / `--versigo-danger` / `--versigo-info` | Semantic colours |
+| `--versigo-*-soft` | Semantic background tints |
 
 #### Typography
 | Token | Value |
 |-------|-------|
-| `--insura-font-family` | `system-ui, -apple-system, ...` |
-| `--insura-font-mono` | Monospace stack |
-| `--insura-font-size-base` | `1rem` (16px) |
+| `--versigo-font-family` | `system-ui, -apple-system, ...` |
+| `--versigo-font-mono` | Monospace stack |
+| `--versigo-font-size-base` | `1rem` (16px) |
 | Scale | `xs` (0.75rem) to `4xl` (2.25rem) |
 | Weights | `normal` (400), `medium` (500), `semibold` (600), `bold` (700) |
 
 #### Spacing
-A 4-step scale: `--insura-space-1` (4px) to `--insura-space-16` (64px).
+A 4-step scale: `--versigo-space-1` (4px) to `--versigo-space-16` (64px).
 
 #### Breakpoints
 | Name | Min-width | Target |
@@ -89,7 +89,7 @@ All UI primitives live in `apps/web/src/components/ui/` and use the CSS classes 
 - Users can select one of 8 preset accent colours or enter a custom hex value.
 - The colour is stored as a user-preference (`UserPreference` model, key `ui:accentColour`).
 - The API validates hex values before persisting.
-- The frontend applies the accent via CSS custom properties (`--insura-accent-h`, `--insura-accent-s`).
+- The frontend applies the accent via CSS custom properties (`--versigo-accent-h`, `--versigo-accent-s`).
 - Dark/light mode detects `prefers-color-scheme` automatically; a toggle is available in the top bar and settings page.
 - Colour preference is per-user and never shared between users/households.
 - A flash of the wrong theme is avoided by using `suppressHydrationWarning` and applying theme attributes in a client-side effect.

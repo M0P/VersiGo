@@ -8,7 +8,7 @@ import {
   QueueFoundationModule,
   SettingsFoundationModule,
   WorkerHealthFoundationModule,
-} from '@insura/foundation';
+} from '@versigo/foundation';
 import { AiExtractionProcessor } from './ai-extraction.processor';
 
 /**

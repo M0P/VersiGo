@@ -69,8 +69,8 @@ nicht vollläuft und das nächste Paket sauber startet:
   erzeugten Container löschen — niemals vorbestehende Container wie
   `tk-epa-ubuntu` oder `libation-env` anfassen.
 - **Build-/Test-Images** der Session löschen, nachdem der finale
-  Verifikationslauf abgeschlossen ist (`podman rmi localhost/insura:latest
-  localhost/insura-test:latest`), dazu alle verwaisten Images
+  Verifikationslauf abgeschlossen ist (`podman rmi localhost/versigo:latest
+  localhost/versigo-test:latest`), dazu alle verwaisten Images
   (`podman image prune -f`).
 - **Scratch-Volumes** entfernen (`podman volume ls` + `podman volume rm` für
   selbst erzeugte Volumes) sowie Compose-Reste (`docker compose down -v`).

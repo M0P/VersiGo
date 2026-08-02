@@ -42,17 +42,17 @@ load_env_defaults() {
     done < "${src}"
   fi
 
-  POSTGRES_DB="${POSTGRES_DB:-insura}"
-  POSTGRES_USER="${POSTGRES_USER:-insura}"
+  POSTGRES_DB="${POSTGRES_DB:-versigo}"
+  POSTGRES_USER="${POSTGRES_USER:-versigo}"
   POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-change-me}"
   PGPORT="${PGPORT:-5432}"
   REDIS_PORT="${REDIS_PORT:-6379}"
 }
 
 resolve_paths() {
-  local default_pgdata="${HOME}/.local/share/insura/postgres"
-  local default_state="${HOME}/.local/state/insura"
-  local default_runtime="${XDG_RUNTIME_DIR:-${HOME}/.cache}/insura"
+  local default_pgdata="${HOME}/.local/share/versigo/postgres"
+  local default_state="${HOME}/.local/state/versigo"
+  local default_runtime="${XDG_RUNTIME_DIR:-${HOME}/.cache}/versigo"
 
   if [[ -n "${PGDATA:-}" ]]; then
     PGDATA="${PGDATA}"
@@ -62,14 +62,14 @@ resolve_paths() {
     PGDATA="${default_pgdata}"
   fi
 
-  INSURA_STATE_DIR="${INSURA_STATE_DIR:-${default_state}}"
-  INSURA_RUNTIME_DIR="${INSURA_RUNTIME_DIR:-${default_runtime}}"
-  PGSOCK_DIR="${PGSOCK_DIR:-${INSURA_RUNTIME_DIR}/postgres}"
-  PGLOG="${PGLOG:-${INSURA_STATE_DIR}/postgres.log}"
-  REDIS_LOG="${REDIS_LOG:-${INSURA_STATE_DIR}/redis.log}"
-  REDIS_PIDFILE="${REDIS_PIDFILE:-${INSURA_RUNTIME_DIR}/redis.pid}"
+  VERSIGO_STATE_DIR="${VERSIGO_STATE_DIR:-${default_state}}"
+  VERSIGO_RUNTIME_DIR="${VERSIGO_RUNTIME_DIR:-${default_runtime}}"
+  PGSOCK_DIR="${PGSOCK_DIR:-${VERSIGO_RUNTIME_DIR}/postgres}"
+  PGLOG="${PGLOG:-${VERSIGO_STATE_DIR}/postgres.log}"
+  REDIS_LOG="${REDIS_LOG:-${VERSIGO_STATE_DIR}/redis.log}"
+  REDIS_PIDFILE="${REDIS_PIDFILE:-${VERSIGO_RUNTIME_DIR}/redis.pid}"
 
-  mkdir -p "${PGDATA}" "${INSURA_STATE_DIR}" "${INSURA_RUNTIME_DIR}" "${PGSOCK_DIR}"
+  mkdir -p "${PGDATA}" "${VERSIGO_STATE_DIR}" "${VERSIGO_RUNTIME_DIR}" "${PGSOCK_DIR}"
   chmod 700 "${PGDATA}" "${PGSOCK_DIR}" || true
 }
 
@@ -242,13 +242,13 @@ start_redis() {
     return 0
   fi
 
-  mkdir -p "${INSURA_STATE_DIR}" "${INSURA_RUNTIME_DIR}"
+  mkdir -p "${VERSIGO_STATE_DIR}" "${VERSIGO_RUNTIME_DIR}"
 
   "${REDIS_SERVER_BIN}" \
     --daemonize yes \
     --bind 127.0.0.1 \
     --port "${REDIS_PORT}" \
-    --dir "${INSURA_STATE_DIR}" \
+    --dir "${VERSIGO_STATE_DIR}" \
     --pidfile "${REDIS_PIDFILE}" \
     --logfile "${REDIS_LOG}" >/dev/null 2>&1 || {
       log "Redis/Valkey konnte nicht gestartet werden. Letzte Log-Zeilen:"

@@ -16,7 +16,7 @@ function createMockEncryption(decryptImpl?: (cipher: string) => Promise<string>)
 }
 
 const envWithAiEnabled = {
-  DATABASE_URL: 'postgresql://u:p@localhost:5432/insura',
+  DATABASE_URL: 'postgresql://u:p@localhost:5432/versigo',
   REDIS_URL: 'redis://localhost:6379',
   SETTINGS_ENCRYPTION_KEY: 'a'.repeat(64),
   AI_ENABLED: 'true',

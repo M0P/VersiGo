@@ -30,11 +30,11 @@ export default function PendingPage(): ReactElement {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
       <Card style={{ maxWidth: 420, width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--insura-space-6)' }}>
-          <h1 style={{ marginBottom: 'var(--insura-space-1)' }}>
-            <span style={{ color: 'var(--insura-accent)' }}>In</span>sura
+        <div style={{ textAlign: 'center', marginBottom: 'var(--versigo-space-6)' }}>
+          <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
+            <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
           </h1>
           <p className="text-muted">Konto noch nicht freigeschaltet</p>
         </div>
@@ -45,7 +45,7 @@ export default function PendingPage(): ReactElement {
           &bdquo;aktiv&ldquo; hat. Bitte versuchen Sie es spaeter erneut.
         </Alert>
 
-        <div style={{ display: 'flex', gap: 'var(--insura-space-3)', marginTop: 'var(--insura-space-6)' }}>
+        <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', marginTop: 'var(--versigo-space-6)' }}>
           <a href="/login" style={{ flex: 1, textDecoration: 'none' }}>
             <Button variant="outline" style={{ width: '100%' }}>Zur Anmeldung</Button>
           </a>

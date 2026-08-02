@@ -13,9 +13,9 @@ import {
 import type { Request, Response } from 'express';
 import { CurrentUser } from './current-user.decorator';
 import { AuthenticatedUser, AuthService } from './auth.service';
-import { Public } from '@insura/foundation';
+import { Public } from '@versigo/foundation';
 import { OidcStrategy } from './oidc.strategy';
-import { CapabilityFlagsService } from '@insura/foundation';
+import { CapabilityFlagsService } from '@versigo/foundation';
 import { LoginRateLimiterService } from './login-rate-limiter.service';
 import { LocalLoginDto, RegisterLocalAccountDto } from './auth.dto';
 
@@ -234,7 +234,7 @@ export class AuthController {
   @Post('logout')
   logout(@Req() req: SessionRequest, @Res() res: Response): void {
     req.session.destroy(() => {
-      res.clearCookie('insura.sid');
+      res.clearCookie('versigo.sid');
       res.status(204).send();
     });
   }

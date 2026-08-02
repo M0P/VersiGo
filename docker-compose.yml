@@ -1,3 +1,6 @@
+# VersiGo – production/development stack
+name: versigo
+
 services:
   # ============================================================
   # Database
@@ -12,7 +15,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
-      - insura-internal
+      - versigo-internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -30,7 +33,7 @@ services:
     volumes:
       - redis-data:/data
     networks:
-      - insura-internal
+      - versigo-internal
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -45,7 +48,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: insura:latest
+    image: versigo:latest
     entrypoint: []
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL muss gesetzt sein}
@@ -61,7 +64,7 @@ services:
       db:
         condition: service_healthy
     networks:
-      - insura-internal
+      - versigo-internal
 
   # ============================================================
   # API (NestJS Backend)
@@ -70,7 +73,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: insura:latest
+    image: versigo:latest
     restart: unless-stopped
     environment:
       APP_PORT: "3001"
@@ -111,7 +114,7 @@ services:
     volumes:
       - uploads-data:/data/uploads
     networks:
-      - insura-internal
+      - versigo-internal
     depends_on:
       db:
         condition: service_healthy
@@ -131,7 +134,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: insura:latest
+    image: versigo:latest
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-production}
@@ -158,7 +161,7 @@ services:
     volumes:
       - uploads-data:/data/uploads
     networks:
-      - insura-internal
+      - versigo-internal
     depends_on:
       db:
         condition: service_healthy
@@ -182,12 +185,12 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
-    image: insura:latest
+    image: versigo:latest
     restart: unless-stopped
     # Next.js wird direkt per Node gestartet. Ein pnpm-Aufruf wuerde bei
     # jedem Containerstart `verify-deps-before-run` ausloesen; pnpm haelt
     # den Zustand von node_modules fuer inkonsistent (die manuell im
-    # Runner-Image angelegten @insura/*-Symlinks) und will neu installieren
+    # Runner-Image angelegten @versigo/*-Symlinks) und will neu installieren
     # -> Abbruch ohne TTY (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY).
     # pnpm ist zur Laufzeit nicht noetig, nur zum Build.
     entrypoint: ["node", "/app/node_modules/.pnpm/node_modules/next/dist/bin/next", "start", "-p", "3000"]
@@ -198,7 +201,7 @@ services:
     ports:
       - "${WEB_PORT:-3000}:3000"
     networks:
-      - insura-internal
+      - versigo-internal
     depends_on:
       api:
         condition: service_healthy
@@ -223,7 +226,7 @@ services:
     volumes:
       - minio-data:/data
     networks:
-      - insura-internal
+      - versigo-internal
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 15s
@@ -232,7 +235,7 @@ services:
       start_period: 30s
 
 networks:
-  insura-internal:
+  versigo-internal:
     driver: bridge
 
 volumes:

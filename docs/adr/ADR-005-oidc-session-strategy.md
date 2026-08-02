@@ -4,7 +4,7 @@
 Angenommen (AP-02-identity-access)
 
 ## Kontext
-Insura benoetigt OIDC-Login, Mandantentrennung auf Household-Ebene und
+VersiGo benoetigt OIDC-Login, Mandantentrennung auf Household-Ebene und
 Rollen-Durchsetzung (OWNER/ADMIN/MEMBER/VIEWER) gemaess
 `docs/07-security-privacy.md` und dem bestehenden Prisma-Schema.
 

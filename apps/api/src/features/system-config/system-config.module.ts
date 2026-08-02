@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { SettingsFoundationModule } from '@insura/foundation';
+import { SettingsFoundationModule } from '@versigo/foundation';
 import { AdminSettingsModule } from '../admin-settings/admin-settings.module';
 import { SystemConfigController } from './system-config.controller';
 import { SystemConfigService } from './system-config.service';

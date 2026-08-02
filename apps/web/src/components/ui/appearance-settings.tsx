@@ -75,7 +75,7 @@ export function AppearanceSettings(): ReactElement {
 
       <div className="form-group">
         <label className="form-label">Akzentfarbe</label>
-        <div style={{ display: 'flex', gap: 'var(--insura-space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
           {ACCENT_PRESETS.map((preset) => (
             <button
               key={preset.name}
@@ -95,7 +95,7 @@ export function AppearanceSettings(): ReactElement {
         <label className="form-label" htmlFor="custom-colour">
           Eigene Farbe (Hex)
         </label>
-        <div style={{ display: 'flex', gap: 'var(--insura-space-2)', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', alignItems: 'center' }}>
           <Input
             id="custom-colour"
             type="text"

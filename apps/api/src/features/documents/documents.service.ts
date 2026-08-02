@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { DatabaseService, AppConfigService } from '@insura/foundation';
+import { DatabaseService, AppConfigService } from '@versigo/foundation';
 import type { Prisma } from '@prisma/client';
 import * as fs from 'fs/promises';
 import * as path from 'path';

@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import * as session from 'express-session';
 import * as cookieParser from 'cookie-parser';
-import { AppConfigService, preloadRestartSettingsIntoEnv } from '@insura/foundation';
+import { AppConfigService, preloadRestartSettingsIntoEnv } from '@versigo/foundation';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
@@ -43,7 +43,7 @@ async function bootstrap(): Promise<void> {
   app.use(cookieParser());
   app.use(
     session({
-      name: 'insura.sid',
+      name: 'versigo.sid',
       secret: config.get('SESSION_SECRET'),
       resave: false,
       saveUninitialized: false,

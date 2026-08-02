@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
-import { AppConfigService } from '@insura/foundation';
+import { AppConfigService } from '@versigo/foundation';
 
 /**
  * Redis-based rate limiter for authentication endpoints (login, register).

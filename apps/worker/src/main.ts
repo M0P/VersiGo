@@ -5,7 +5,7 @@ import {
   preloadRestartSettingsIntoEnv,
   WorkerHeartbeatService,
   WorkerLivenessService,
-} from '@insura/foundation';
+} from '@versigo/foundation';
 import { WorkerModule } from './worker.module';
 
 /**

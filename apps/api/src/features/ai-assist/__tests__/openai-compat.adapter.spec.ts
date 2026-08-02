@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpService } from '@nestjs/axios';
-import type { SettingsResolverService } from '@insura/foundation';
+import type { SettingsResolverService } from '@versigo/foundation';
 import { OpenAiCompatAdapter } from '../openai-compat.adapter';
 import { of } from 'rxjs';
 

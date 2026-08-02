@@ -116,7 +116,7 @@ describe('OidcStrategy', () => {
           case 'OIDC_CALLBACK_URL':
             return 'https://app.example.com/auth/callback';
           case 'OIDC_CLIENT_ID':
-            return 'insura';
+            return 'versigo';
           case 'OIDC_CLIENT_SECRET':
             return 'secret';
           default:
@@ -129,7 +129,7 @@ describe('OidcStrategy', () => {
 
       expect(mockedDiscovery).toHaveBeenCalledWith(
         new URL('https://idp.example.com'),
-        'insura',
+        'versigo',
         expect.objectContaining({
           redirect_uris: ['https://app.example.com/auth/callback'],
           client_secret: 'secret',
@@ -148,7 +148,7 @@ describe('OidcStrategy', () => {
           case 'OIDC_CALLBACK_URL':
             return 'https://app.example.com/auth/callback';
           case 'OIDC_CLIENT_ID':
-            return 'insura';
+            return 'versigo';
           default:
             return undefined;
         }

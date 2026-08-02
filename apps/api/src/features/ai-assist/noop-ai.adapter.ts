@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@insura/foundation';
+import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/foundation';
 
 /**
  * NoOp-Implementierung des AI-Adapters.

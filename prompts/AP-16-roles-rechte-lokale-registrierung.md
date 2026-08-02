@@ -59,7 +59,7 @@ Die Durchsetzung erfolgt serverseitig in Guards/Policies und Datenabfragen; das 
 - Liefere Prisma-Migrationen mit einer nachvollziehbaren Up-/Datenmigrationsstrategie, einer sicheren Zuordnung alter Rollen und Tests gegen bestehende Daten.
 - Ergänze Unit-, API-/Integrations-, UI- und Regressionstests für jede Rolle, jede verbotene Aktion, Household-Isolation, explizite Freigaben, Pending-Accounts, Admin-Freischaltung, letzte-Admin-Schutz, Login, Rate Limits und Audit-Redaction.
 - Führe den vollständigen, kanonischen Docker-Compose-Testvertrag aus. Node, pnpm, Prisma, Datenbank, Redis, Build und Tests dürfen in der verbindlichen Prüfung nicht vom Host abhängen.
-- Starte und smoke-teste den Laufzeitstack aus sauberem Insura-spezifischem Compose-Zustand. `docker compose up --build` bleibt funktionsfähig.
+- Starte und smoke-teste den Laufzeitstack aus sauberem VersiGo-spezifischem Compose-Zustand. `docker compose up --build` bleibt funktionsfähig.
 
 ## Dokumentation und Review
 

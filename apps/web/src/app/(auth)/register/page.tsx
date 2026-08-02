@@ -52,11 +52,11 @@ export default function RegisterPage(): ReactElement {
 
   if (submitted) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
         <Card style={{ maxWidth: 420, width: '100%' }}>
-          <div style={{ textAlign: 'center', marginBottom: 'var(--insura-space-6)' }}>
-            <h1 style={{ marginBottom: 'var(--insura-space-1)' }}>
-              <span style={{ color: 'var(--insura-accent)' }}>In</span>sura
+          <div style={{ textAlign: 'center', marginBottom: 'var(--versigo-space-6)' }}>
+            <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
+              <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
             </h1>
             <p className="text-muted">Registrierung</p>
           </div>
@@ -65,8 +65,8 @@ export default function RegisterPage(): ReactElement {
             einen Administrator. Sobald Ihr Konto freigeschaltet ist, können
             Sie sich anmelden.
           </Alert>
-          <p style={{ textAlign: 'center', marginTop: 'var(--insura-space-4)' }}>
-            <a href="/login" style={{ color: 'var(--insura-accent)' }}>
+          <p style={{ textAlign: 'center', marginTop: 'var(--versigo-space-4)' }}>
+            <a href="/login" style={{ color: 'var(--versigo-accent)' }}>
               Zurück zur Anmeldung
             </a>
           </p>
@@ -76,11 +76,11 @@ export default function RegisterPage(): ReactElement {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
       <Card style={{ maxWidth: 420, width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--insura-space-6)' }}>
-          <h1 style={{ marginBottom: 'var(--insura-space-1)' }}>
-            <span style={{ color: 'var(--insura-accent)' }}>In</span>sura
+        <div style={{ textAlign: 'center', marginBottom: 'var(--versigo-space-6)' }}>
+          <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
+            <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
           </h1>
           <p className="text-muted">Neues Konto erstellen</p>
         </div>
@@ -145,9 +145,9 @@ export default function RegisterPage(): ReactElement {
           </fieldset>
         </form>
 
-        <p className="text-sm text-muted" style={{ textAlign: 'center', marginTop: 'var(--insura-space-4)' }}>
+        <p className="text-sm text-muted" style={{ textAlign: 'center', marginTop: 'var(--versigo-space-4)' }}>
           Bereits freigeschaltet?{' '}
-          <a href="/login" style={{ color: 'var(--insura-accent)' }}>
+          <a href="/login" style={{ color: 'var(--versigo-accent)' }}>
             Anmelden
           </a>
         </p>

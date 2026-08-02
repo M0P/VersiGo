@@ -43,7 +43,7 @@ AP-14 führt eine lokale Benutzername/Passwort-Authentifizierung als Alternative
 
 ### 3. Multi-Provider Session-Modell
 
-**Entscheidung:** Beide Authentifizierungsmethoden nutzen dasselbe Session-Modell (express-session, `insura.sid`-Cookie).
+**Entscheidung:** Beide Authentifizierungsmethoden nutzen dasselbe Session-Modell (express-session, `versigo.sid`-Cookie).
 
 **Begründung:**
 - Nach erfolgreichem Login wird in beiden Fällen `req.session.userId = user.id` gesetzt

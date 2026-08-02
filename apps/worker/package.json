@@ -1,5 +1,5 @@
 {
-  "name": "@insura/worker",
+  "name": "@versigo/worker",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@insura/foundation": "workspace:*",
+    "@versigo/foundation": "workspace:*",
     "@nestjs/bullmq": "^11.0.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",

@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
+import { DatabaseService } from '@versigo/foundation';
 
 /**
  * Verwaltet Feature-Flags auf globaler und Household-Ebene.

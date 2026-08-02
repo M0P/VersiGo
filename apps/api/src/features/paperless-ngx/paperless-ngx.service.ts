@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { SettingsResolverService } from '@insura/foundation';
+import { SettingsResolverService } from '@versigo/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import type {

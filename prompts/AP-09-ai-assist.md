@@ -6,7 +6,7 @@ Optionale AI-Provider-Adapter, asynchrone Vertragsdatenextraktion und Job-Monito
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-09 im Projekt Insura.
+Du implementierst AP-09 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

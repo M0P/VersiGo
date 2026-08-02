@@ -9,7 +9,7 @@ import { NAV_SECTIONS } from '../components/ui/nav-config';
 export default function Page(): ReactElement {
   return (
     <AppShell navSections={NAV_SECTIONS}>
-      <PageHeader title="Dashboard" description="Willkommen bei Insura – Ihrer Versicherungsverwaltung" />
+      <PageHeader title="Dashboard" description="Willkommen bei VersiGo – Ihrer Versicherungsverwaltung" />
       <div className="split-layout">
         <Card>
           <h3>Versicherungen</h3>

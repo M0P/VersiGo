@@ -15,7 +15,7 @@ import { getRestartRequiredKeys } from '../settings-catalog';
 
 function baseEnv(): Record<string, string | undefined> {
   return {
-    DATABASE_URL: 'postgresql://user:pass@localhost:5432/insura',
+    DATABASE_URL: 'postgresql://user:pass@localhost:5432/versigo',
     SETTINGS_ENCRYPTION_KEY: 'a'.repeat(64),
     // Vom AppConfigService (Validation) zwingend gefordert.
     REDIS_URL: 'redis://localhost:6379',

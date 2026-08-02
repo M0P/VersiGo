@@ -159,7 +159,7 @@ export default function AdminUsersPage(): ReactElement {
       {error && <Alert variant="danger">Fehler: {error}</Alert>}
 
       <Card>
-        <div style={{ display: 'flex', gap: 'var(--insura-space-3)', alignItems: 'end', marginBottom: 'var(--insura-space-4)' }}>
+        <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', alignItems: 'end', marginBottom: 'var(--versigo-space-4)' }}>
           <div className="form-group">
             <label className="form-label">Status-Filter</label>
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as UserStatus | '')}>
@@ -169,7 +169,7 @@ export default function AdminUsersPage(): ReactElement {
               <option value="DISABLED">Gesperrt</option>
             </Select>
           </div>
-          <div className="text-sm text-muted" style={{ marginBottom: 'var(--insura-space-2)' }}>
+          <div className="text-sm text-muted" style={{ marginBottom: 'var(--versigo-space-2)' }}>
             {total} Benutzer
           </div>
         </div>
@@ -206,7 +206,7 @@ export default function AdminUsersPage(): ReactElement {
                       </td>
                       <td data-label="Anzeigename">{u.displayName}</td>
                       <td data-label="Rolle">
-                        <div style={{ display: 'flex', gap: 'var(--insura-space-2)', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', alignItems: 'center' }}>
                           <Select
                             aria-label={`Rolle fuer ${u.username}`}
                             value={roleDraft}

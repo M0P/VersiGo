@@ -6,7 +6,7 @@ Familienfreigaben für Verträge und Dokumente.
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-06 im Projekt Insura.
+Du implementierst AP-06 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

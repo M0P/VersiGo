@@ -91,7 +91,7 @@ export default function PolicyListPage(): ReactElement {
               {p.premiumAmount != null && (
                 <p className="text-sm">Prämie: {p.premiumAmount.toFixed(2)} EUR</p>
               )}
-              <div style={{ marginTop: 'var(--insura-space-3)' }}>
+              <div style={{ marginTop: 'var(--versigo-space-3)' }}>
                 <a href={`/policies/${p.id}`}>
                   <Button variant="secondary" size="sm">Details</Button>
                 </a>

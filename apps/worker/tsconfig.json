@@ -16,7 +16,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@insura/foundation": ["../../packages/foundation/src/index.ts"]
+      "@versigo/foundation": ["../../packages/foundation/src/index.ts"]
     }
   }
 }

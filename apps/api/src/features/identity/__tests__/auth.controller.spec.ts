@@ -171,7 +171,7 @@ describe('AuthController', () => {
     controller.logout(req as never, res as never);
 
     expect(destroy).toHaveBeenCalled();
-    expect(res.clearCookie).toHaveBeenCalledWith('insura.sid');
+    expect(res.clearCookie).toHaveBeenCalledWith('versigo.sid');
     expect(res.status).toHaveBeenCalledWith(204);
   });
 

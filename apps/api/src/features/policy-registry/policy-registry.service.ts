@@ -6,7 +6,7 @@ import {
   BadRequestException,
   Inject,
 } from '@nestjs/common';
-import { DatabaseService, ENCRYPTION_PORT, EncryptionPort } from '@insura/foundation';
+import { DatabaseService, ENCRYPTION_PORT, EncryptionPort } from '@versigo/foundation';
 import { GlobalRole, Prisma } from '@prisma/client';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { PortalConnectorService } from '../portal-connectors/portal-connector.service';

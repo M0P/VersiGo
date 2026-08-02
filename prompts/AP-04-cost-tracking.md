@@ -6,7 +6,7 @@ Kostenhistorie, Jahresvergleich, Aggregationen und Dashboard-Auswertungen.
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-04 im Projekt Insura.
+Du implementierst AP-04 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

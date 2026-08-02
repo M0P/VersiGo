@@ -21,7 +21,7 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/foundation/package.json packages/foundation/package.json
 
-RUN --mount=type=cache,id=insura-pnpm-store,target=/pnpm/store \
+RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --frozen-lockfile
 
@@ -45,7 +45,7 @@ COPY packages ./packages
 COPY prisma ./prisma
 COPY eslint.config.mjs ./eslint.config.mjs
 
-RUN --mount=type=cache,id=insura-pnpm-store,target=/pnpm/store \
+RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm exec prisma generate && \
     pnpm run build
@@ -89,11 +89,11 @@ COPY --from=build /app/packages ./packages
 
 ENV CI=true
 
-RUN mkdir -p /app/node_modules/@insura && \
-    ln -sfn /app/packages/foundation /app/node_modules/@insura/foundation && \
-    ln -sfn /app/apps/api /app/node_modules/@insura/api && \
-    ln -sfn /app/apps/worker /app/node_modules/@insura/worker && \
-    ln -sfn /app/apps/web /app/node_modules/@insura/web && \
+RUN mkdir -p /app/node_modules/@versigo && \
+    ln -sfn /app/packages/foundation /app/node_modules/@versigo/foundation && \
+    ln -sfn /app/apps/api /app/node_modules/@versigo/api && \
+    ln -sfn /app/apps/worker /app/node_modules/@versigo/worker && \
+    ln -sfn /app/apps/web /app/node_modules/@versigo/web && \
     node /app/node_modules/prisma/build/index.js generate --schema=/app/prisma/schema.prisma
 
 COPY docker/start.sh ./start.sh

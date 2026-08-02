@@ -1,6 +1,6 @@
 import { Global, Module, OnModuleInit, Logger } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { CapabilityFlagsService } from '@insura/foundation';
+import { CapabilityFlagsService } from '@versigo/foundation';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { OidcStrategy } from './oidc.strategy';

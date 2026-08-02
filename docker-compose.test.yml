@@ -2,20 +2,22 @@
 # Runs all quality checks inside isolated containers.
 # Usage: docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test
 
+name: versigo
+
 services:
   # Reuse the production images for dependencies
   test-db:
     image: docker.io/postgres:16.4-alpine
     environment:
-      POSTGRES_DB: insura_test
-      POSTGRES_USER: insura
-      POSTGRES_PASSWORD: insura_test
+      POSTGRES_DB: versigo_test
+      POSTGRES_USER: versigo
+      POSTGRES_PASSWORD: versigo_test
     volumes:
       - test-postgres-data:/var/lib/postgresql/data
     networks:
-      - test-insura-internal
+      - test-versigo-internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U insura -d insura_test"]
+      test: ["CMD-SHELL", "pg_isready -U versigo -d versigo_test"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -24,7 +26,7 @@ services:
     image: docker.io/redis:7.4-alpine
     command: ["redis-server", "--appendonly", "no"]
     networks:
-      - test-insura-internal
+      - test-versigo-internal
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -37,9 +39,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: build
-    image: insura-test:latest
+    image: versigo-test:latest
     environment:
-      DATABASE_URL: postgresql://insura:insura_test@test-db:5432/insura_test
+      DATABASE_URL: postgresql://versigo:versigo_test@test-db:5432/versigo_test
       REDIS_URL: redis://test-redis:6379
       NODE_ENV: test
       CI: "true"
@@ -57,7 +59,7 @@ services:
         echo 'All checks passed!'
       "
     networks:
-      - test-insura-internal
+      - test-versigo-internal
     depends_on:
       test-db:
         condition: service_healthy
@@ -65,7 +67,7 @@ services:
         condition: service_healthy
 
 networks:
-  test-insura-internal:
+  test-versigo-internal:
     driver: bridge
 
 volumes:

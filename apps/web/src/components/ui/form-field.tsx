@@ -53,7 +53,7 @@ export function FormField({ label, error, hint, required, children }: FormFieldP
     <div className="form-group">
       <label className="form-label" htmlFor={fieldId}>
         {label}
-        {required && <span aria-hidden="true" style={{ color: 'var(--insura-danger)', marginLeft: 2 }}>*</span>}
+        {required && <span aria-hidden="true" style={{ color: 'var(--versigo-danger)', marginLeft: 2 }}>*</span>}
       </label>
       {enhancedChild}
       {hint && !error && (

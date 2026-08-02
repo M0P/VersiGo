@@ -120,9 +120,9 @@ export default function AdminFeatureFlagsPage(): ReactElement {
 
       {error && <Alert variant="danger">Fehler: {error}</Alert>}
 
-      <Card style={{ marginBottom: 'var(--insura-space-6)' }}>
+      <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <SectionHeader title="Neues Feature-Flag" />
-        <form onSubmit={handleCreate} style={{ display: 'flex', gap: 'var(--insura-space-3)', alignItems: 'end', flexWrap: 'wrap' }}>
+        <form onSubmit={handleCreate} style={{ display: 'flex', gap: 'var(--versigo-space-3)', alignItems: 'end', flexWrap: 'wrap' }}>
           <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
             <label className="form-label">Key</label>
             <Input

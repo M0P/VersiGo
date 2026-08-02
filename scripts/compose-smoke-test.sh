@@ -55,7 +55,7 @@ cleanup() {
   fi
   # Temp worker-log capture (also on failure paths; default path is a no-op
   # when the variable was never assigned).
-  rm -f "${WORKER_LOG:-/tmp/insura-worker-smoke.log}" 2>/dev/null || true
+  rm -f "${WORKER_LOG:-/tmp/versigo-worker-smoke.log}" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -72,7 +72,7 @@ if [ "$BUILD" = true ]; then
 fi
 
 # Start stack (excluding optional storage)
-echo "Starting Insura stack..."
+echo "Starting VersiGo stack..."
 $COMPOSE up -d db redis
 
 # Load only the keys the smoke test needs from .env. Sourcing the whole
@@ -116,7 +116,7 @@ echo "Waiting for database..."
 # of relying on a single pg_isready call.
 DB_READY=false
 for i in $(seq 1 40); do
-  if $COMPOSE exec -T db pg_isready -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" -t 5 >/dev/null 2>&1; then
+  if $COMPOSE exec -T db pg_isready -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" -t 5 >/dev/null 2>&1; then
     DB_READY=true
     break
   fi
@@ -261,20 +261,20 @@ if [ "$ADMIN_PASSWORD" = "CHANGE_ME_FOR_LOCAL_DEVELOPMENT" ]; then
 fi
 if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   echo "5. Testing local admin login (${ADMIN_USERNAME})..."
-  LOGIN_STATUS=$(curl -s -o /tmp/insura-login-response.json -w "%{http_code}" \
+  LOGIN_STATUS=$(curl -s -o /tmp/versigo-login-response.json -w "%{http_code}" \
     -X POST http://localhost:${APP_PORT:-3001}/auth/local/login \
     -H 'Content-Type: application/json' \
     -d "{\"username\":\"${ADMIN_USERNAME}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
-    -c /tmp/insura-smoke-cookies.txt)
+    -c /tmp/versigo-smoke-cookies.txt)
   if [ "$LOGIN_STATUS" != "200" ]; then
     echo "FAILED: local login returned HTTP $LOGIN_STATUS"
-    cat /tmp/insura-login-response.json
+    cat /tmp/versigo-login-response.json
     $COMPOSE logs api
     exit 1
   fi
   echo "   Login: HTTP $LOGIN_STATUS"
-  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/insura-login-response.json || { echo "FAILED: login response username mismatch"; exit 1; }
-  grep -qF '"role":"ADMIN"' /tmp/insura-login-response.json || { echo "FAILED: login response role is not ADMIN"; exit 1; }
+  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/versigo-login-response.json || { echo "FAILED: login response username mismatch"; exit 1; }
+  grep -qF '"role":"ADMIN"' /tmp/versigo-login-response.json || { echo "FAILED: login response role is not ADMIN"; exit 1; }
   echo "   PASS"
 
   echo "6. Rejecting wrong password..."
@@ -289,7 +289,7 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   echo "   PASS"
 
   echo "7. Checking exactly one admin user in database..."
-  ADMIN_COUNT=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" \
+  ADMIN_COUNT=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
     -tAc "SELECT count(*) FROM users WHERE username = '${ADMIN_USERNAME}' AND role = 'ADMIN' AND status = 'ACTIVE';" | tr -d '[:space:]')
   if [ "$ADMIN_COUNT" != "1" ]; then
     echo "FAILED: expected exactly 1 active admin user, found $ADMIN_COUNT"
@@ -301,7 +301,7 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   # Stored password must be a bcrypt hash (never plaintext). The
   # credential lookup goes through users.username (AP-16: credentials
   # carries no identifier anymore; users.username is the source of truth).
-  ADMIN_HASH=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" \
+  ADMIN_HASH=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
     -tAc "SELECT c.\"passwordHash\" FROM credentials c JOIN users u ON u.id = c.\"userId\" WHERE u.username = '${ADMIN_USERNAME}';" | tr -d '[:space:]')
   case "$ADMIN_HASH" in
     \$2[aby]\$*) : ;;
@@ -335,7 +335,7 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
     $COMPOSE logs api
     exit 1
   fi
-  ADMIN_COUNT_AFTER=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" \
+  ADMIN_COUNT_AFTER=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
     -tAc "SELECT count(*) FROM users WHERE username = '${ADMIN_USERNAME}' AND role = 'ADMIN';" | tr -d '[:space:]')
   if [ "$ADMIN_COUNT_AFTER" != "1" ]; then
     echo "FAILED: admin count changed after restart (expected 1, found $ADMIN_COUNT_AFTER)"
@@ -352,26 +352,26 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
     -X POST http://localhost:${APP_PORT:-3001}/auth/local/login \
     -H 'Content-Type: application/json' \
     -d "{\"username\":\"${ADMIN_USERNAME}\",\"password\":\"${ADMIN_PASSWORD}\"}" \
-    -c /tmp/insura-smoke-cookies-2.txt)
+    -c /tmp/versigo-smoke-cookies-2.txt)
   if [ "$LOGIN2_STATUS" != "200" ]; then
     echo "FAILED: fresh admin login returned HTTP $LOGIN2_STATUS"
     exit 1
   fi
-  SYSCONFIG_STATUS=$(curl -s -o /tmp/insura-smoke-sysconfig.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  SYSCONFIG_STATUS=$(curl -s -o /tmp/versigo-smoke-sysconfig.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/admin/system-config)
   if [ "$SYSCONFIG_STATUS" != "200" ]; then
     echo "FAILED: /admin/system-config returned HTTP $SYSCONFIG_STATUS (expected 200 for ADMIN)"
     exit 1
   fi
-  grep -qF '"key":"AI_ENABLED"' /tmp/insura-smoke-sysconfig.json || { echo "FAILED: system-config response missing AI_ENABLED"; exit 1; }
-  grep -qF '"source"' /tmp/insura-smoke-sysconfig.json || { echo "FAILED: system-config response missing source metadata"; exit 1; }
+  grep -qF '"key":"AI_ENABLED"' /tmp/versigo-smoke-sysconfig.json || { echo "FAILED: system-config response missing AI_ENABLED"; exit 1; }
+  grep -qF '"source"' /tmp/versigo-smoke-sysconfig.json || { echo "FAILED: system-config response missing source metadata"; exit 1; }
   # Secrets duerfen niemals im Klartext in der Antwort auftauchen.
-  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/insura-smoke-sysconfig.json; then
+  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/versigo-smoke-sysconfig.json; then
     echo "FAILED: secret AI_OPENAI_COMPAT_API_KEY leaked in system-config response"
     exit 1
   fi
-  if [ -n "${PAPERLESS_API_TOKEN:-}" ] && grep -qF "$PAPERLESS_API_TOKEN" /tmp/insura-smoke-sysconfig.json; then
+  if [ -n "${PAPERLESS_API_TOKEN:-}" ] && grep -qF "$PAPERLESS_API_TOKEN" /tmp/versigo-smoke-sysconfig.json; then
     echo "FAILED: secret PAPERLESS_API_TOKEN leaked in system-config response"
     exit 1
   fi
@@ -388,39 +388,39 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   echo "   PASS"
 
   echo "8d. Testing system-config update + reset (AI_ENABLED)..."
-  PUT_STATUS=$(curl -s -o /tmp/insura-smoke-sysconfig-put.json -w "%{http_code}" \
+  PUT_STATUS=$(curl -s -o /tmp/versigo-smoke-sysconfig-put.json -w "%{http_code}" \
     -X PUT http://localhost:${APP_PORT:-3001}/admin/system-config/AI_ENABLED \
-    -b /tmp/insura-smoke-cookies-2.txt \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     -H 'Content-Type: application/json' \
     -d '{"value":"true"}')
   if [ "$PUT_STATUS" != "200" ]; then
     echo "FAILED: PUT /admin/system-config/AI_ENABLED returned HTTP $PUT_STATUS"
-    cat /tmp/insura-smoke-sysconfig-put.json
+    cat /tmp/versigo-smoke-sysconfig-put.json
     exit 1
   fi
-  grep -qF '"source":"UI"' /tmp/insura-smoke-sysconfig-put.json || { echo "FAILED: UI-Wert nicht aktiv (source != UI)"; exit 1; }
-  grep -qF '"effectiveValue":true' /tmp/insura-smoke-sysconfig-put.json || { echo "FAILED: effektiver Wert nicht true"; exit 1; }
-  DELETE_STATUS=$(curl -s -o /tmp/insura-smoke-sysconfig-del.json -w "%{http_code}" \
+  grep -qF '"source":"UI"' /tmp/versigo-smoke-sysconfig-put.json || { echo "FAILED: UI-Wert nicht aktiv (source != UI)"; exit 1; }
+  grep -qF '"effectiveValue":true' /tmp/versigo-smoke-sysconfig-put.json || { echo "FAILED: effektiver Wert nicht true"; exit 1; }
+  DELETE_STATUS=$(curl -s -o /tmp/versigo-smoke-sysconfig-del.json -w "%{http_code}" \
     -X DELETE http://localhost:${APP_PORT:-3001}/admin/system-config/AI_ENABLED \
-    -b /tmp/insura-smoke-cookies-2.txt)
+    -b /tmp/versigo-smoke-cookies-2.txt)
   if [ "$DELETE_STATUS" != "200" ]; then
     echo "FAILED: DELETE /admin/system-config/AI_ENABLED returned HTTP $DELETE_STATUS"
     exit 1
   fi
-  grep -qF '"uiValuePresent":false' /tmp/insura-smoke-sysconfig-del.json || { echo "FAILED: Reset hat den UI-Wert nicht entfernt"; exit 1; }
+  grep -qF '"uiValuePresent":false' /tmp/versigo-smoke-sysconfig-del.json || { echo "FAILED: Reset hat den UI-Wert nicht entfernt"; exit 1; }
   echo "   Update (UI-Quelle) + Reset (Fallback) erfolgreich"
   echo "   PASS"
 
   echo "8e. Testing profile endpoint (ADMIN)..."
-  PROFILE_STATUS=$(curl -s -o /tmp/insura-smoke-profile.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  PROFILE_STATUS=$(curl -s -o /tmp/versigo-smoke-profile.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/user/profile)
   if [ "$PROFILE_STATUS" != "200" ]; then
     echo "FAILED: /user/profile returned HTTP $PROFILE_STATUS (expected 200 for ADMIN)"
     exit 1
   fi
-  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/insura-smoke-profile.json || { echo "FAILED: Profilantwort ohne erwarteten Benutzernamen"; exit 1; }
-  grep -qF '"role":"ADMIN"' /tmp/insura-smoke-profile.json || { echo "FAILED: Profilantwort ohne ADMIN-Rolle"; exit 1; }
+  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/versigo-smoke-profile.json || { echo "FAILED: Profilantwort ohne erwarteten Benutzernamen"; exit 1; }
+  grep -qF '"role":"ADMIN"' /tmp/versigo-smoke-profile.json || { echo "FAILED: Profilantwort ohne ADMIN-Rolle"; exit 1; }
   echo "   Profil: HTTP 200, korrekter Benutzername/Rolle"
   echo "   PASS"
 
@@ -430,46 +430,46 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   # im ADMIN-Block; die admin-unabhaengige 401-Pruefung laeuft als Schritt 9
   # ausserhalb dieses Blocks.
   echo "8f. Testing portal-connectors endpoints (AP-18)..."
-  CATALOG_STATUS=$(curl -s -o /tmp/insura-smoke-catalog.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  CATALOG_STATUS=$(curl -s -o /tmp/versigo-smoke-catalog.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/portal-connectors/catalog)
   if [ "$CATALOG_STATUS" != "200" ]; then
     echo "FAILED: /portal-connectors/catalog returned HTTP $CATALOG_STATUS (expected 200)"
     exit 1
   fi
-  grep -qF '"providerKey":"huk-coburg"' /tmp/insura-smoke-catalog.json || { echo "FAILED: Katalog ohne erwarteten Anbieter huk-coburg"; exit 1; }
-  ENTRY_STATUS=$(curl -s -o /tmp/insura-smoke-catalog-entry.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  grep -qF '"providerKey":"huk-coburg"' /tmp/versigo-smoke-catalog.json || { echo "FAILED: Katalog ohne erwarteten Anbieter huk-coburg"; exit 1; }
+  ENTRY_STATUS=$(curl -s -o /tmp/versigo-smoke-catalog-entry.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/portal-connectors/catalog/huk-coburg)
   if [ "$ENTRY_STATUS" != "200" ]; then
     echo "FAILED: /portal-connectors/catalog/huk-coburg returned HTTP $ENTRY_STATUS (expected 200)"
     exit 1
   fi
-  grep -qF '"displayName":"HUK-COBURG"' /tmp/insura-smoke-catalog-entry.json || { echo "FAILED: Katalog-Eintrag ohne displayName"; exit 1; }
+  grep -qF '"displayName":"HUK-COBURG"' /tmp/versigo-smoke-catalog-entry.json || { echo "FAILED: Katalog-Eintrag ohne displayName"; exit 1; }
   MISSING_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/portal-connectors/catalog/gibt-es-nicht)
   if [ "$MISSING_STATUS" != "404" ]; then
     echo "FAILED: unbekannter Katalog-Eintrag sollte 404 liefern, got $MISSING_STATUS"
     exit 1
   fi
-  PLUGINS_STATUS=$(curl -s -o /tmp/insura-smoke-plugins.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  PLUGINS_STATUS=$(curl -s -o /tmp/versigo-smoke-plugins.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/portal-connectors/plugins)
   if [ "$PLUGINS_STATUS" != "200" ]; then
     echo "FAILED: /portal-connectors/plugins returned HTTP $PLUGINS_STATUS (expected 200)"
     exit 1
   fi
-  grep -qF '"key":"mailbox-sync-browser-automation"' /tmp/insura-smoke-plugins.json || { echo "FAILED: Plugin-Liste ohne experimentelles Plugin"; exit 1; }
-  grep -qF '"available":false' /tmp/insura-smoke-plugins.json || { echo "FAILED: experimentelles Plugin muss available:false melden"; exit 1; }
-  HEALTH_STATUS=$(curl -s -o /tmp/insura-smoke-plugin-health.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  grep -qF '"key":"mailbox-sync-browser-automation"' /tmp/versigo-smoke-plugins.json || { echo "FAILED: Plugin-Liste ohne experimentelles Plugin"; exit 1; }
+  grep -qF '"available":false' /tmp/versigo-smoke-plugins.json || { echo "FAILED: experimentelles Plugin muss available:false melden"; exit 1; }
+  HEALTH_STATUS=$(curl -s -o /tmp/versigo-smoke-plugin-health.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/portal-connectors/plugins/mailbox-sync-browser-automation/health)
   if [ "$HEALTH_STATUS" != "200" ]; then
     echo "FAILED: Plugin-Health sollte auch bei deaktiviertem Plugin 200 liefern, got $HEALTH_STATUS"
     exit 1
   fi
-  grep -qF '"available":false' /tmp/insura-smoke-plugin-health.json || { echo "FAILED: Plugin-Health muss available:false melden"; exit 1; }
+  grep -qF '"available":false' /tmp/versigo-smoke-plugin-health.json || { echo "FAILED: Plugin-Health muss available:false melden"; exit 1; }
   echo "   Katalog, Katalog-Eintrag, 404, Plugins, Plugin-Health: OK (degradiert, nie 500)"
   echo "   PASS"
 
@@ -514,17 +514,17 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
 
   # AP-19: Admin-Audit-API (nur ADMIN).
   echo "8i. Testing admin audit events API..."
-  AUDIT_STATUS=$(curl -s -o /tmp/insura-smoke-audit.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  AUDIT_STATUS=$(curl -s -o /tmp/versigo-smoke-audit.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/admin/audit/events)
   if [ "$AUDIT_STATUS" != "200" ]; then
     echo "FAILED: /admin/audit/events returned HTTP $AUDIT_STATUS (expected 200 for ADMIN)"
     exit 1
   fi
-  grep -qF '"events"' /tmp/insura-smoke-audit.json || { echo "FAILED: audit list response missing events array"; exit 1; }
-  grep -qF '"total"' /tmp/insura-smoke-audit.json || { echo "FAILED: audit list response missing total"; exit 1; }
+  grep -qF '"events"' /tmp/versigo-smoke-audit.json || { echo "FAILED: audit list response missing events array"; exit 1; }
+  grep -qF '"total"' /tmp/versigo-smoke-audit.json || { echo "FAILED: audit list response missing total"; exit 1; }
   # Die Liste darf keine diffJson-Inhalte enthalten (hasDiff reicht).
-  if grep -qF '"diffJson"' /tmp/insura-smoke-audit.json; then
+  if grep -qF '"diffJson"' /tmp/versigo-smoke-audit.json; then
     echo "FAILED: audit list response must not include diffJson content"
     exit 1
   fi
@@ -533,28 +533,28 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
 
   # AP-19: Admin-Monitoring-API (nur ADMIN), keine Secrets/Payloads.
   echo "8j. Testing admin monitoring API..."
-  QUEUES_STATUS=$(curl -s -o /tmp/insura-smoke-queues.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  QUEUES_STATUS=$(curl -s -o /tmp/versigo-smoke-queues.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/admin/monitoring/queues)
   if [ "$QUEUES_STATUS" != "200" ]; then
     echo "FAILED: /admin/monitoring/queues returned HTTP $QUEUES_STATUS (expected 200 for ADMIN)"
     exit 1
   fi
-  grep -qF '"queue":"ai-extraction"' /tmp/insura-smoke-queues.json || { echo "FAILED: monitoring queues missing ai-extraction"; exit 1; }
-  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/insura-smoke-queues.json; then
+  grep -qF '"queue":"ai-extraction"' /tmp/versigo-smoke-queues.json || { echo "FAILED: monitoring queues missing ai-extraction"; exit 1; }
+  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/versigo-smoke-queues.json; then
     echo "FAILED: secret leaked in monitoring queues response"
     exit 1
   fi
-  INTEG_STATUS=$(curl -s -o /tmp/insura-smoke-integrations.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  INTEG_STATUS=$(curl -s -o /tmp/versigo-smoke-integrations.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/admin/monitoring/integrations)
   if [ "$INTEG_STATUS" != "200" ]; then
     echo "FAILED: /admin/monitoring/integrations returned HTTP $INTEG_STATUS (expected 200 for ADMIN)"
     exit 1
   fi
-  grep -qF '"ai"' /tmp/insura-smoke-integrations.json || { echo "FAILED: integrations response missing ai"; exit 1; }
-  grep -qF '"portalConnectors"' /tmp/insura-smoke-integrations.json || { echo "FAILED: integrations response missing portalConnectors"; exit 1; }
-  if [ -n "${PAPERLESS_API_TOKEN:-}" ] && grep -qF "$PAPERLESS_API_TOKEN" /tmp/insura-smoke-integrations.json; then
+  grep -qF '"ai"' /tmp/versigo-smoke-integrations.json || { echo "FAILED: integrations response missing ai"; exit 1; }
+  grep -qF '"portalConnectors"' /tmp/versigo-smoke-integrations.json || { echo "FAILED: integrations response missing portalConnectors"; exit 1; }
+  if [ -n "${PAPERLESS_API_TOKEN:-}" ] && grep -qF "$PAPERLESS_API_TOKEN" /tmp/versigo-smoke-integrations.json; then
     echo "FAILED: secret leaked in monitoring integrations response"
     exit 1
   fi
@@ -563,23 +563,23 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
 
   # AP-19: Privacy-Export (ADMIN) – redigiert, ohne Secrets/Speicherpfade.
   echo "8k. Testing privacy export (ADMIN)..."
-  PRIVACY_STATUS=$(curl -s -o /tmp/insura-smoke-privacy.json -w "%{http_code}" \
-    -b /tmp/insura-smoke-cookies-2.txt \
+  PRIVACY_STATUS=$(curl -s -o /tmp/versigo-smoke-privacy.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
     http://localhost:${APP_PORT:-3001}/privacy/export)
   if [ "$PRIVACY_STATUS" != "200" ]; then
     echo "FAILED: /privacy/export returned HTTP $PRIVACY_STATUS (expected 200 for ADMIN)"
     exit 1
   fi
-  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/insura-smoke-privacy.json || { echo "FAILED: privacy export missing username"; exit 1; }
-  if grep -qF '"passwordHash"' /tmp/insura-smoke-privacy.json; then
+  grep -qF "\"username\":\"${ADMIN_USERNAME}\"" /tmp/versigo-smoke-privacy.json || { echo "FAILED: privacy export missing username"; exit 1; }
+  if grep -qF '"passwordHash"' /tmp/versigo-smoke-privacy.json; then
     echo "FAILED: privacy export must not contain passwordHash"
     exit 1
   fi
-  if grep -qF '"storageRef"' /tmp/insura-smoke-privacy.json; then
+  if grep -qF '"storageRef"' /tmp/versigo-smoke-privacy.json; then
     echo "FAILED: privacy export must not contain storageRef"
     exit 1
   fi
-  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/insura-smoke-privacy.json; then
+  if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/versigo-smoke-privacy.json; then
     echo "FAILED: secret leaked in privacy export"
     exit 1
   fi
@@ -599,15 +599,15 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   # AP-19: Letzter-Admin-Schutz der Kontoloeschung (ADMIN ist der einzige
   # aktive Admin -> 409 Conflict; es wird nichts geloescht).
   echo "8m. Testing last-admin deletion protection (expect 409)..."
-  DELETE_ACCOUNT_STATUS=$(curl -s -o /tmp/insura-smoke-delete.json -w "%{http_code}" \
+  DELETE_ACCOUNT_STATUS=$(curl -s -o /tmp/versigo-smoke-delete.json -w "%{http_code}" \
     -X DELETE http://localhost:${APP_PORT:-3001}/privacy/account \
-    -b /tmp/insura-smoke-cookies-2.txt)
+    -b /tmp/versigo-smoke-cookies-2.txt)
   if [ "$DELETE_ACCOUNT_STATUS" != "409" ]; then
     echo "FAILED: DELETE /privacy/account should return 409 for the last active admin, got $DELETE_ACCOUNT_STATUS"
-    cat /tmp/insura-smoke-delete.json
+    cat /tmp/versigo-smoke-delete.json
     exit 1
   fi
-  ADMIN_STILL_THERE=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-insura}" -d "${POSTGRES_DB:-insura}" \
+  ADMIN_STILL_THERE=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
     -tAc "SELECT count(*) FROM users WHERE username = '${ADMIN_USERNAME}' AND role = 'ADMIN' AND status = 'ACTIVE';" | tr -d '[:space:]')
   if [ "$ADMIN_STILL_THERE" != "1" ]; then
     echo "FAILED: last-admin protection did not prevent account deletion"
@@ -646,7 +646,7 @@ echo "   PASS"
 # process only starts AFTER the entrypoint finished (DB wait + migrate
 # deploy + `exec node`), so pgrep matching that process is a genuine
 # 'application process started' signal, independent of log capture.
-WORKER_LOG=/tmp/insura-worker-smoke.log
+WORKER_LOG=/tmp/versigo-worker-smoke.log
 WORKER_READY=false
 for i in $(seq 1 30); do
   if $COMPOSE exec -T worker pgrep -f "apps/worker/dist/apps/worker/src/main.js" >/dev/null 2>&1; then

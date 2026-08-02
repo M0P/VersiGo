@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
+import { DatabaseService } from '@versigo/foundation';
 import {
   GlobalRole,
   InsurancePolicyType,

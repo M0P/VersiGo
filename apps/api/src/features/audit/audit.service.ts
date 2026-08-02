@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
+import { DatabaseService } from '@versigo/foundation';
 import { Prisma } from '@prisma/client';
 import { ListAuditEventsQueryDto } from './audit.dto';
 

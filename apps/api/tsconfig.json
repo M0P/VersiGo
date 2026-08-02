@@ -6,7 +6,7 @@
     "declaration": true,
     "outDir": "dist",
     // rootDir wird aus den Eingabedateien abgeleitet: Weil die
-    // tsconfig-paths-Zuordnung "@insura/foundation" auf die SRC-Dateien
+    // tsconfig-paths-Zuordnung "@versigo/foundation" auf die SRC-Dateien
     // unter ../../packages/foundation/src zeigt, liegen die Quelldateien
     // dieses Projekts relativ zum Workspace-Root. Dadurch entsteht der
     // verschachtelte Ausgabepfad dist/apps/api/src/main.js, auf den
@@ -22,7 +22,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@insura/foundation": ["../../packages/foundation/src/index.ts"]
+      "@versigo/foundation": ["../../packages/foundation/src/index.ts"]
     }
   }
 }

@@ -6,7 +6,7 @@ AI-Leistungszusammenfassungen mit Quellenbezug, Status und übersichtlicher UI.
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-10 im Projekt Insura.
+Du implementierst AP-10 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

@@ -35,7 +35,7 @@ importers:
 
   apps/api:
     dependencies:
-      '@insura/foundation':
+      '@versigo/foundation':
         specifier: workspace:*
         version: link:../../packages/foundation
       '@nestjs/axios':
@@ -142,7 +142,7 @@ importers:
 
   apps/worker:
     dependencies:
-      '@insura/foundation':
+      '@versigo/foundation':
         specifier: workspace:*
         version: link:../../packages/foundation
       '@nestjs/bullmq':

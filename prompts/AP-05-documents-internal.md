@@ -6,7 +6,7 @@ Interne Dokumentenablage, Metadaten, Versionierung, Zugriffsschutz und Vorschau.
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-05 im Projekt Insura.
+Du implementierst AP-05 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

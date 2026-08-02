@@ -6,7 +6,7 @@ Optionaler Paperless-ngx-Adapter für Deep Links, Metadaten und referenzierte Do
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-08 im Projekt Insura.
+Du implementierst AP-08 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`
