@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
+import { DatabaseService } from '@versigo/foundation';
 import { GlobalRole, Prisma, UserStatus } from '@prisma/client';
 import { AuthenticatedUser } from './auth.service';
 import { ListUsersQueryDto } from './user-admin.dto';

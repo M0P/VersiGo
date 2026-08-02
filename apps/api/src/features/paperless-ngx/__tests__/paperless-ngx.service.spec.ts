@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HttpService } from '@nestjs/axios';
 import { Logger } from '@nestjs/common';
-import { SettingsResolverService } from '@insura/foundation';
+import { SettingsResolverService } from '@versigo/foundation';
 import { PaperlessNgxService } from '../paperless-ngx.service';
 import { NoOpPaperlessAdapter } from '../paperless-ngx.noop';
 import { of, throwError } from 'rxjs';

@@ -205,8 +205,8 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
         style={{
           fontSize: '0.8em',
           fontStyle: 'italic',
-          color: 'var(--insura-text-muted)',
-          borderLeft: '3px solid var(--insura-border)',
+          color: 'var(--versigo-text-muted)',
+          borderLeft: '3px solid var(--versigo-border)',
           paddingLeft: '0.5rem',
           marginTop: '0.5rem',
         }}
@@ -237,7 +237,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
 
   function renderMetadata(summary: CoverageSummary): ReactElement {
     return (
-      <div style={{ marginTop: '0.5rem', fontSize: '0.85em', color: 'var(--insura-text-muted)' }}>
+      <div style={{ marginTop: '0.5rem', fontSize: '0.85em', color: 'var(--versigo-text-muted)' }}>
         Erstellt am {new Date(summary.createdAt).toLocaleDateString('de-DE', {
           day: '2-digit',
           month: '2-digit',
@@ -264,7 +264,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       return (
         <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p style={{ color: 'var(--insura-text-muted)', fontStyle: 'italic' }}>
+          <p style={{ color: 'var(--versigo-text-muted)', fontStyle: 'italic' }}>
             KI-Funktionen sind nicht verfügbar.
             {viewState.provider === 'none'
               ? ' Bitte AI-Konfiguration in den Admin-Einstellungen aktivieren.'
@@ -277,7 +277,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       return (
         <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p style={{ color: 'var(--insura-danger)' }}>{viewState.message}</p>
+          <p style={{ color: 'var(--versigo-danger)' }}>{viewState.message}</p>
         </Card>
       );
 
@@ -296,7 +296,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       return (
         <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p style={{ color: 'var(--insura-danger)' }}>{viewState.message}</p>
+          <p style={{ color: 'var(--versigo-danger)' }}>{viewState.message}</p>
           <Button variant="secondary" onClick={() => { setViewState({ status: 'loading' }); loadPersistedSummary(); }}>
             Erneut versuchen
           </Button>
@@ -335,7 +335,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
           {renderMetadata(summary)}
           {renderDisclaimer()}
 
-          <div style={{ marginTop: 'var(--insura-space-4)' }}>
+          <div style={{ marginTop: 'var(--versigo-space-4)' }}>
             <Button variant="secondary" onClick={handleGenerate}>
               Neu erstellen
             </Button>
@@ -356,7 +356,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       return (
         <Card>
           <h2>KI-Leistungszusammenfassung</h2>
-          <p style={{ color: 'var(--insura-danger)' }}>{viewState.message}</p>
+          <p style={{ color: 'var(--versigo-danger)' }}>{viewState.message}</p>
           <Button variant="secondary" onClick={handleGenerate}>
             Erneut versuchen
           </Button>

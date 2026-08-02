@@ -2,7 +2,7 @@
 
 ## Goal
 
-Create a shared, accessible, responsive design system for Insura and apply it to the existing web application without changing existing business behaviour.
+Create a shared, accessible, responsive design system for VersiGo and apply it to the existing web application without changing existing business behaviour.
 
 The UI must feel modern and calm, inspired by Material You: expressive colour, large readable surfaces, rounded components, clear hierarchy, subtle elevation, and restrained transparency/liquid-glass effects. It must work well on mobile, tablet, and desktop and provide a consistent foundation for all current and future views.
 

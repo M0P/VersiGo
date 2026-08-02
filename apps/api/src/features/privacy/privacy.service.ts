@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { AppConfigService, DatabaseService } from '@insura/foundation';
+import { AppConfigService, DatabaseService } from '@versigo/foundation';
 import { GlobalRole, UserStatus } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';

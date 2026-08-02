@@ -6,7 +6,7 @@ Versicherungsverwaltung inklusive Datenmodell, Migrationen, API und Web-UI.
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-03 im Projekt Insura.
+Du implementierst AP-03 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

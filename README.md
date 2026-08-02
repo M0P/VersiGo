@@ -1,10 +1,10 @@
-# Insura
+# VersiGo
 
-Softwarekonzept für eine private Haushalts-Versicherungsübersicht mit modularer, vertikal geschnittener Architektur.
+VersiGo ist eine modulare Versicherungszentrale für Privathaushalte.
 
 ## Ziel
 
-Insura verwaltet Versicherungsverträge, Dokumente, Kostenhistorien, Portal-Links und optionale AI-gestützte Extraktion/Zusammenfassungen für Privathaushalte.
+VersiGo verwaltet Versicherungsverträge, Dokumente, Kostenhistorien, Portal-Links und optionale AI-gestützte Extraktion/Zusammenfassungen für Privathaushalte.
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ Insura verwaltet Versicherungsverträge, Dokumente, Kostenhistorien, Portal-Link
 
 ```bash
 git clone <repository-url>
-cd insura
+cd versigo
 
 # Umgebung konfigurieren
 cp .env.example .env

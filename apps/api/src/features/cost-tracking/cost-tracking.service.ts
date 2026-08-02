@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
+import { DatabaseService } from '@versigo/foundation';
 import { GlobalRole, PaymentFrequency } from '@prisma/client';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { CreateCostEntryDto, UpdateCostEntryDto } from './dto/cost-tracking.dto';

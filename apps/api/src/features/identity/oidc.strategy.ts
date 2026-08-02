@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
-import { AppConfigService, CapabilityFlagsService } from '@insura/foundation';
+import { AppConfigService, CapabilityFlagsService } from '@versigo/foundation';
 import { AuthService, AuthenticatedUser } from './auth.service';
 
 import {

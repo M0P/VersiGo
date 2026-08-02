@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
+import { DatabaseService } from '@versigo/foundation';
 import { GlobalRole, ObjectShareScopeType, ObjectSharePermission } from '@prisma/client';
 import { CreateShareDto, UpdateShareDto } from './dto/family-sharing.dto';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { SettingsResolverService } from '@insura/foundation';
-import type { IAIAdapter } from '@insura/foundation';
+import { SettingsResolverService } from '@versigo/foundation';
+import type { IAIAdapter } from '@versigo/foundation';
 import { OllamaAdapter } from './ollama.adapter';
 import { OpenAiCompatAdapter } from './openai-compat.adapter';
 import { NoOpAIAdapter } from './noop-ai.adapter';

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserStatus } from '@prisma/client';
-import { PUBLIC_ROUTE_KEY } from '@insura/foundation';
+import { PUBLIC_ROUTE_KEY } from '@versigo/foundation';
 import { AuthService } from './auth.service';
 
 // Global-Guard: verweigert jeden Request ohne gueltige Session, ausser die

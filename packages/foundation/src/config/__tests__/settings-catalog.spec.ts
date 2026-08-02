@@ -23,7 +23,7 @@ describe('settings-catalog', () => {
   it('katalogisiert jeden Schluessel des AppConfig-Schemas', () => {
     const parsedKeys = Object.keys(
       parseAppConfig({
-        DATABASE_URL: 'postgresql://u:p@localhost:5432/insura',
+        DATABASE_URL: 'postgresql://u:p@localhost:5432/versigo',
         REDIS_URL: 'redis://localhost:6379',
         SETTINGS_ENCRYPTION_KEY: 'a'.repeat(64),
         SESSION_SECRET: 'a'.repeat(32),

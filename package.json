@@ -1,5 +1,5 @@
 {
-  "name": "insura",
+  "name": "versigo",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.17.0+sha512.cca3cea332ad254bb84145f966d19f4879615210346fc92c79a047f23a0d7b3cca3c3792f0076ba1f1831d277efbcf0a9119b31a9a60eca7fb3d6231f331ef72",
@@ -13,9 +13,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "dev:api": "turbo run dev --filter=@insura/api",
-    "dev:web": "turbo run dev --filter=@insura/web",
-    "dev:worker": "turbo run dev --filter=@insura/worker",
+    "dev:api": "turbo run dev --filter=@versigo/api",
+    "dev:web": "turbo run dev --filter=@versigo/web",
+    "dev:worker": "turbo run dev --filter=@versigo/worker",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"

@@ -6,7 +6,7 @@ Repository-Scaffold, Monorepo-Grundstruktur, Docker Compose, PostgreSQL, Redis, 
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-01 im Projekt Insura.
+Du implementierst AP-01 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

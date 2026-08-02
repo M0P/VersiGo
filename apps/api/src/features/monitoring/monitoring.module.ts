@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { CapabilityFlagsModule, SettingsFoundationModule } from '@insura/foundation';
+import { CapabilityFlagsModule, SettingsFoundationModule } from '@versigo/foundation';
 import { AiAssistModule } from '../ai-assist/ai-assist.module';
 import { PaperlessNgxModule } from '../paperless-ngx/paperless-ngx.module';
 import { PortalConnectorsModule } from '../portal-connectors/portal-connectors.module';

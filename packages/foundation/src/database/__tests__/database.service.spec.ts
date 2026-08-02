@@ -6,7 +6,7 @@ const validKey = 'a'.repeat(64);
 
 function buildConfig(): AppConfigService {
   return new AppConfigService({
-    DATABASE_URL: 'postgresql://user:pass@localhost:5432/insura',
+    DATABASE_URL: 'postgresql://user:pass@localhost:5432/versigo',
     REDIS_URL: 'redis://localhost:6379',
     SETTINGS_ENCRYPTION_KEY: validKey,
     SESSION_SECRET: 'a'.repeat(32),

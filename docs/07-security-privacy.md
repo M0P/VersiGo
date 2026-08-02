@@ -16,7 +16,7 @@
 - Der `migration`-Service erhält nur die für Migrationen notwendigen Variablen.
 
 ### Netzwerk
-- Alle Dienste kommunizieren über ein internes Bridge-Netzwerk `insura-internal`.
+- Alle Dienste kommunizieren über ein internes Bridge-Netzwerk `versigo-internal`.
 - Nur öffentliche Ports: Web (3000), API (3001).
 - Datenbank (5432), Redis (6379) und MinIO (9000, 9001) sind standardmäßig nicht nach außen exponiert.
 - Entwicklungsoverride (`docker-compose.override.yml`) kann interne Ports für lokale Tools öffnen.

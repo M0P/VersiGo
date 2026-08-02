@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
-import { SettingsFoundationModule } from '@insura/foundation';
+import { SettingsFoundationModule } from '@versigo/foundation';
 import { PaperlessNgxService } from './paperless-ngx.service';
 import { PAPERLESS_ADAPTER } from './paperless-ngx.interface';
 

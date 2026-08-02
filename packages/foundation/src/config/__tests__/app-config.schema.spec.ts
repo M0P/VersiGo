@@ -4,7 +4,7 @@ import { parseAppConfig } from '../app-config.schema';
 const validKey = 'a'.repeat(64);
 
 const baseEnv = {
-  DATABASE_URL: 'postgresql://user:pass@localhost:5432/insura',
+  DATABASE_URL: 'postgresql://user:pass@localhost:5432/versigo',
   REDIS_URL: 'redis://localhost:6379',
   SETTINGS_ENCRYPTION_KEY: validKey,
   SESSION_SECRET: 'a'.repeat(32),
@@ -148,11 +148,11 @@ describe('parseAppConfig', () => {
   it('parst CORS_ORIGINS als Komma-separierte Liste und trimmt Eintraege', () => {
     const config = parseAppConfig({
       ...baseEnv,
-      CORS_ORIGINS: ' http://localhost:3000 , https://insura.example.com ',
+      CORS_ORIGINS: ' http://localhost:3000 , https://versigo.example.com ',
     });
     expect(config.CORS_ORIGINS).toEqual([
       'http://localhost:3000',
-      'https://insura.example.com',
+      'https://versigo.example.com',
     ]);
   });
 

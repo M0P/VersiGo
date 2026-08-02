@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { DatabaseService, SettingsResolverService } from '@insura/foundation';
+import { DatabaseService, SettingsResolverService } from '@versigo/foundation';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { Prisma } from '@prisma/client';

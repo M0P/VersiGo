@@ -10,13 +10,13 @@ import { InlineSpinner } from '../../../components/ui/loading';
  */
 export default function CallbackPage(): ReactElement {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
       <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-        <h1 style={{ marginBottom: 'var(--insura-space-2)' }}>
-          <span style={{ color: 'var(--insura-accent)' }}>In</span>sura
+        <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>
+          <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
         </h1>
         <p className="text-muted">Anmeldung wird verarbeitet...</p>
-        <div style={{ marginTop: 'var(--insura-space-4)' }}>
+        <div style={{ marginTop: 'var(--versigo-space-4)' }}>
           <InlineSpinner />
         </div>
       </Card>

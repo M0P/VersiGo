@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
-import { SettingsFoundationModule } from '@insura/foundation';
+import { SettingsFoundationModule } from '@versigo/foundation';
 import { AiAssistController } from './ai-assist.controller';
 import { AiAssistService } from './ai-assist.service';
 import { AiProviderRegistry } from './ai-provider-registry';

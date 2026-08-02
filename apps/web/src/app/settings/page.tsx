@@ -92,7 +92,7 @@ export default function SettingsPage(): ReactElement {
   if (user?.role === 'READ_ONLY') {
     return (
       <AppShell navSections={NAV_SECTIONS} user={user}>
-        <PageHeader title="Mein Profil" description="Personalisieren Sie Ihr Insura-Erlebnis" />
+        <PageHeader title="Mein Profil" description="Personalisieren Sie Ihr VersiGo-Erlebnis" />
         <Alert variant="warning" title="Nur-Lese-Zugriff">
           Ihr Konto besitzt nur Lesezugriff (READ_ONLY) und kann daher keine
           Profil- oder Anzeige-Einstellungen ändern.
@@ -135,7 +135,7 @@ export default function SettingsPage(): ReactElement {
 
   return (
     <AppShell navSections={NAV_SECTIONS} user={user}>
-      <PageHeader title="Mein Profil" description="Personalisieren Sie Ihr Insura-Erlebnis" />
+      <PageHeader title="Mein Profil" description="Personalisieren Sie Ihr VersiGo-Erlebnis" />
 
       {error && <Alert variant="danger" title="Fehler">{error}</Alert>}
       {saved && <Alert variant="success" title="Gespeichert">Ihr Profil wurde aktualisiert.</Alert>}
@@ -144,7 +144,7 @@ export default function SettingsPage(): ReactElement {
         <Loading label="Lade Profil..." />
       ) : (
         <>
-          <Card style={{ marginBottom: 'var(--insura-space-6)' }}>
+          <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
             <CardHeader>
               <SectionHeader title="Profilinformationen" />
             </CardHeader>
@@ -168,7 +168,7 @@ export default function SettingsPage(): ReactElement {
                 )}
               </div>
             )}
-            <form onSubmit={handleSaveProfile} style={{ display: 'flex', gap: 'var(--insura-space-3)', alignItems: 'end', flexWrap: 'wrap' }}>
+            <form onSubmit={handleSaveProfile} style={{ display: 'flex', gap: 'var(--versigo-space-3)', alignItems: 'end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <FormField label="Anzeigename" hint="Wird im Dashboard und in Listen angezeigt.">
                   <Input

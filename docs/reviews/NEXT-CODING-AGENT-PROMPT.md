@@ -3,7 +3,7 @@
 ## Status
 Work package **AP-19** (audit-privacy-monitoring) is committed at hash `b897f74` on branch `feat/AP-19-audit-privacy-monitoring`. Final review verdict: 0 Critical / 0 High / 0 Medium / 1 Minor in round 4 (all rounds 1–4 documented in `docs/reviews/AP-19-review-{1,2,3,4}.md`). All findings were fixed and re-verified (including a migration timestamp collision with AP-18, resolved by renaming the migration to `20260801150000_ap19_worker_heartbeat`). Both canonical gates are green: the docker-compose test suite passed ("All checks passed!", 50 API test files / 554 API tests + 92 foundation + 18 web + 4 worker, lint + typecheck + prisma migrate deploy + build) and `./scripts/compose-smoke-test.sh --build` passed all steps (including the renumbered AP-19 steps 8g–8m). The branch was updated to the current `main` (`10ebaf7`, including the merged AP-18 portal-connectors) before the final test run, per the work package.
 
-Cleanup was performed after the final verification run (per AGENTS.md rule 9 / `prompts/00-gemeinsame-regeln.md` "Aufräum-Pflicht"): session containers, images (`localhost/insura:latest`, `localhost/insura-test:latest`), dangling images and session volumes were removed; pre-existing containers (e.g. `tk-epa-ubuntu`, `libation-env`) and shared base images were left untouched. Disk verified clean.
+Cleanup was performed after the final verification run (per AGENTS.md rule 9 / `prompts/00-gemeinsame-regeln.md` "Aufräum-Pflicht"): session containers, images (`localhost/versigo:latest`, `localhost/versigo-test:latest`), dangling images and session volumes were removed; pre-existing containers (e.g. `tk-epa-ubuntu`, `libation-env`) and shared base images were left untouched. Disk verified clean.
 
 AP-13 through AP-19 are committed. The next work package in rising order is **AP-20 — ready-up-for-version-1**.
 
@@ -19,14 +19,14 @@ Below is the full content of the next work package. Implement only this work pac
 
 ## Ziel
 
-Insura wird fachlich, technisch und dokumentarisch für eine erste geschlossene Beta-Version vorbereitet. Der Fokus liegt auf einem deutlich schnelleren und reproduzierbaren Produktionsbuild, reduziertem Ressourcenbedarf, vollständiger UI-Bedienbarkeit, belastbarer Release-Verifikation sowie einer vollständigen und sicherheitsbewussten GitHub-Dokumentation.
+VersiGo wird fachlich, technisch und dokumentarisch für eine erste geschlossene Beta-Version vorbereitet. Der Fokus liegt auf einem deutlich schnelleren und reproduzierbaren Produktionsbuild, reduziertem Ressourcenbedarf, vollständiger UI-Bedienbarkeit, belastbarer Release-Verifikation sowie einer vollständigen und sicherheitsbewussten GitHub-Dokumentation.
 
 Die Anwendung bleibt ausdrücklich ein experimentelles, vollständig AI-erstelltes Projekt. Sie ist nicht für einen Betrieb in einer aus dem Internet erreichbaren Umgebung vorgesehen.
 
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-20 im Projekt Insura.
+Du implementierst AP-20 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`
@@ -36,7 +36,7 @@ Verbindliche Referenzen:
 Arbeite in einem neuen Branch `feat/AP-20-ready-up-for-version-1` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
 
 Aufgabe:
-Bereite Insura umfassend auf eine erste Beta-Version vor. Betrachte dazu das gesamte Repository, nicht nur einzelne Features. Räume technische Altlasten auf, schließe erkennbare Bedienungs- und Dokumentationslücken und etabliere nachvollziehbare Beta-Release-Gates.
+Bereite VersiGo umfassend auf eine erste Beta-Version vor. Betrachte dazu das gesamte Repository, nicht nur einzelne Features. Räume technische Altlasten auf, schließe erkennbare Bedienungs- und Dokumentationslücken und etabliere nachvollziehbare Beta-Release-Gates.
 
 Es handelt sich nicht um eine kosmetische Dokumentationsänderung: Alle bestehenden fachlichen Funktionen, Betriebsfunktionen, Einstellungen und UI-Aktionen müssen auf ihre tatsächliche Verfügbarkeit, Erreichbarkeit, Berechtigung, Fehlerbehandlung und Testabdeckung geprüft werden.
 
@@ -84,7 +84,7 @@ Scope:
 5. GitHub- und Betriebsdokumentation
 - Überarbeite die Startseite des GitHub-Repositorys vollständig. README und weiterführende Dokumentation müssen den tatsächlichen Funktionsumfang widerspiegeln; keine geplante oder nicht funktionierende Funktion darf als verfügbar dargestellt werden.
 - Platziere am Anfang der README vor der Funktionsbeschreibung einen prominenten, nicht übersehbaren Warnhinweis in deutscher Sprache mit mindestens folgendem Sinn:
-  „Insura wurde vollständig mit AI erstellt. Das Projekt ist experimentell, nicht sicherheitsgeprüft und nicht für einen aus dem Internet erreichbaren Betrieb vorgesehen. Betreiben Sie es ausschließlich in einer vertrauenswürdigen, abgeschotteten privaten Umgebung und verwenden Sie keine produktiven oder besonders schützenswerten Daten ohne eigene Sicherheitsprüfung.“
+  „VersiGo wurde vollständig mit AI erstellt. Das Projekt ist experimentell, nicht sicherheitsgeprüft und nicht für einen aus dem Internet erreichbaren Betrieb vorgesehen. Betreiben Sie es ausschließlich in einer vertrauenswürdigen, abgeschotteten privaten Umgebung und verwenden Sie keine produktiven oder besonders schützenswerten Daten ohne eigene Sicherheitsprüfung.“
 - Der Warnhinweis darf nicht durch Formulierungen wie „production ready“, „sicher“ oder „öffentlich betreibbar“ relativiert werden.
 - Weise sichtbar darauf hin, dass Hilfe, Reviews, Tests, Fehlerberichte, Sicherheitsmeldungen, Dokumentationsverbesserungen und Pull Requests erwünscht sind. Beschreibe einen klaren, niedrigschwelligen Beitragsweg.
 - Ergänze oder aktualisiere mindestens: Funktionsübersicht, Architekturüberblick, Voraussetzungen, Schnellstart, lokale Entwicklung, Tests, Konfiguration, lokale Anmeldung, OIDC, Datenablage, Backups, Updates, Fehlerdiagnose, bekannte Grenzen, Sicherheitsmodell und Datenschutzhinweise.

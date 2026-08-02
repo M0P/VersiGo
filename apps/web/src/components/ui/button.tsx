@@ -25,7 +25,7 @@ const sizeClass: Record<ButtonSize, string> = {
 };
 
 /**
- * Reusable button component using the Insura design system.
+ * Reusable button component using the VersiGo design system.
  */
 export function Button({
   variant = 'primary',

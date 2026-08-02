@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { DatabaseService, CapabilityFlagsService, SettingsResolverService } from '@insura/foundation';
+import { DatabaseService, CapabilityFlagsService, SettingsResolverService } from '@versigo/foundation';
 import { AI_EXTRACTION_QUEUE } from '../ai-assist/ai-assist.constants';
 import { AiAssistService } from '../ai-assist/ai-assist.service';
 import { PAPERLESS_ADAPTER, IPaperlessAdapter } from '../paperless-ngx/paperless-ngx.interface';

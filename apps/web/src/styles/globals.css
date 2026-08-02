@@ -1,5 +1,5 @@
 /* =============================================================
- * Insura Design System – Tokens & Base Styles
+ * VersiGo Design System – Tokens & Base Styles
  * =============================================================
  *
  * This is the single authoritative source for all visual tokens.
@@ -22,127 +22,127 @@
 @layer design-tokens {
   :root {
     /* ---- Colour Palette (neutral core) ---- */
-    --insura-white:              #ffffff;
-    --insura-black:              #000000;
+    --versigo-white:              #ffffff;
+    --versigo-black:              #000000;
 
     /* Grey scale */
-    --insura-gray-50:            #f8f9fa;
-    --insura-gray-100:           #f1f3f5;
-    --insura-gray-200:           #e9ecef;
-    --insura-gray-300:           #dee2e6;
-    --insura-gray-400:           #ced4da;
-    --insura-gray-500:           #adb5bd;
-    --insura-gray-600:           #868e96;
-    --insura-gray-700:           #495057;
-    --insura-gray-800:           #343a40;
-    --insura-gray-900:           #212529;
+    --versigo-gray-50:            #f8f9fa;
+    --versigo-gray-100:           #f1f3f5;
+    --versigo-gray-200:           #e9ecef;
+    --versigo-gray-300:           #dee2e6;
+    --versigo-gray-400:           #ced4da;
+    --versigo-gray-500:           #adb5bd;
+    --versigo-gray-600:           #868e96;
+    --versigo-gray-700:           #495057;
+    --versigo-gray-800:           #343a40;
+    --versigo-gray-900:           #212529;
 
     /* Semantic accent – defaults to a calm blue (will be overridden
        by user preference or theme). */
-    --insura-accent-h:            210;
-    --insura-accent-s:            50%;
-    --insura-accent-l:            50%;
-    --insura-accent:              hsl(var(--insura-accent-h), var(--insura-accent-s), var(--insura-accent-l));
-    --insura-accent-light:        hsl(var(--insura-accent-h), var(--insura-accent-s), 85%);
-    --insura-accent-dark:         hsl(var(--insura-accent-h), var(--insura-accent-s), 35%);
-    --insura-accent-soft:         hsl(var(--insura-accent-h), var(--insura-accent-s), 95%);
-    --insura-accent-text:         hsl(var(--insura-accent-h), var(--insura-accent-s), 98%);
-    --insura-accent-on-dark:      hsl(var(--insura-accent-h), var(--insura-accent-s), 90%);
+    --versigo-accent-h:            210;
+    --versigo-accent-s:            50%;
+    --versigo-accent-l:            50%;
+    --versigo-accent:              hsl(var(--versigo-accent-h), var(--versigo-accent-s), var(--versigo-accent-l));
+    --versigo-accent-light:        hsl(var(--versigo-accent-h), var(--versigo-accent-s), 85%);
+    --versigo-accent-dark:         hsl(var(--versigo-accent-h), var(--versigo-accent-s), 35%);
+    --versigo-accent-soft:         hsl(var(--versigo-accent-h), var(--versigo-accent-s), 95%);
+    --versigo-accent-text:         hsl(var(--versigo-accent-h), var(--versigo-accent-s), 98%);
+    --versigo-accent-on-dark:      hsl(var(--versigo-accent-h), var(--versigo-accent-s), 90%);
 
     /* Semantic colours */
-    --insura-success:            #2b8a3e;
-    --insura-success-soft:       #d3f9d8;
-    --insura-warning:            #e67700;
-    --insura-warning-soft:       #fff3bf;
-    --insura-danger:             #c92a2a;
-    --insura-danger-soft:        #ffe3e3;
-    --insura-info:               #1864ab;
-    --insura-info-soft:          #d0ebff;
+    --versigo-success:            #2b8a3e;
+    --versigo-success-soft:       #d3f9d8;
+    --versigo-warning:            #e67700;
+    --versigo-warning-soft:       #fff3bf;
+    --versigo-danger:             #c92a2a;
+    --versigo-danger-soft:        #ffe3e3;
+    --versigo-info:               #1864ab;
+    --versigo-info-soft:          #d0ebff;
 
     /* ---- Typography ---- */
-    --insura-font-family:        system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    --versigo-font-family:        system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
                                  'Noto Sans', Arial, sans-serif;
-    --insura-font-mono:          'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-    --insura-font-size-xs:       0.75rem;    /* 12px */
-    --insura-font-size-sm:       0.875rem;   /* 14px */
-    --insura-font-size-base:     1rem;       /* 16px */
-    --insura-font-size-lg:       1.125rem;   /* 18px */
-    --insura-font-size-xl:       1.25rem;    /* 20px */
-    --insura-font-size-2xl:      1.5rem;     /* 24px */
-    --insura-font-size-3xl:      1.875rem;   /* 30px */
-    --insura-font-size-4xl:      2.25rem;    /* 36px */
-    --insura-font-weight-normal: 400;
-    --insura-font-weight-medium: 500;
-    --insura-font-weight-semibold: 600;
-    --insura-font-weight-bold:   700;
-    --insura-line-height-tight:  1.25;
-    --insura-line-height-base:   1.5;
-    --insura-line-height-relaxed: 1.75;
+    --versigo-font-mono:          'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --versigo-font-size-xs:       0.75rem;    /* 12px */
+    --versigo-font-size-sm:       0.875rem;   /* 14px */
+    --versigo-font-size-base:     1rem;       /* 16px */
+    --versigo-font-size-lg:       1.125rem;   /* 18px */
+    --versigo-font-size-xl:       1.25rem;    /* 20px */
+    --versigo-font-size-2xl:      1.5rem;     /* 24px */
+    --versigo-font-size-3xl:      1.875rem;   /* 30px */
+    --versigo-font-size-4xl:      2.25rem;    /* 36px */
+    --versigo-font-weight-normal: 400;
+    --versigo-font-weight-medium: 500;
+    --versigo-font-weight-semibold: 600;
+    --versigo-font-weight-bold:   700;
+    --versigo-line-height-tight:  1.25;
+    --versigo-line-height-base:   1.5;
+    --versigo-line-height-relaxed: 1.75;
 
     /* ---- Spacing ---- */
-    --insura-space-0:           0;
-    --insura-space-1:           0.25rem;   /*  4px */
-    --insura-space-2:           0.5rem;    /*  8px */
-    --insura-space-3:           0.75rem;   /* 12px */
-    --insura-space-4:           1rem;      /* 16px */
-    --insura-space-5:           1.25rem;   /* 20px */
-    --insura-space-6:           1.5rem;    /* 24px */
-    --insura-space-8:           2rem;      /* 32px */
-    --insura-space-10:          2.5rem;    /* 40px */
-    --insura-space-12:          3rem;      /* 48px */
-    --insura-space-16:          4rem;      /* 64px */
+    --versigo-space-0:           0;
+    --versigo-space-1:           0.25rem;   /*  4px */
+    --versigo-space-2:           0.5rem;    /*  8px */
+    --versigo-space-3:           0.75rem;   /* 12px */
+    --versigo-space-4:           1rem;      /* 16px */
+    --versigo-space-5:           1.25rem;   /* 20px */
+    --versigo-space-6:           1.5rem;    /* 24px */
+    --versigo-space-8:           2rem;      /* 32px */
+    --versigo-space-10:          2.5rem;    /* 40px */
+    --versigo-space-12:          3rem;      /* 48px */
+    --versigo-space-16:          4rem;      /* 64px */
 
     /* ---- Shape / Border Radius ---- */
-    --insura-radius-sm:         4px;
-    --insura-radius-md:         8px;
-    --insura-radius-lg:         12px;
-    --insura-radius-xl:         16px;
-    --insura-radius-full:       9999px;
-    --insura-border-width:      1px;
-    --insura-border-width-thick: 2px;
+    --versigo-radius-sm:         4px;
+    --versigo-radius-md:         8px;
+    --versigo-radius-lg:         12px;
+    --versigo-radius-xl:         16px;
+    --versigo-radius-full:       9999px;
+    --versigo-border-width:      1px;
+    --versigo-border-width-thick: 2px;
 
     /* ---- Elevation / Shadows ---- */
-    --insura-shadow-sm:          0 1px 2px rgba(0, 0, 0, 0.05);
-    --insura-shadow-md:          0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-    --insura-shadow-lg:          0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
-    --insura-shadow-xl:          0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+    --versigo-shadow-sm:          0 1px 2px rgba(0, 0, 0, 0.05);
+    --versigo-shadow-md:          0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --versigo-shadow-lg:          0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    --versigo-shadow-xl:          0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
 
     /* ---- Opacity ---- */
-    --insura-opacity-disabled:  0.5;
-    --insura-opacity-muted:     0.7;
-    --insura-opacity-glass:     0.15;
-    --insura-opacity-glass-strong: 0.85;
+    --versigo-opacity-disabled:  0.5;
+    --versigo-opacity-muted:     0.7;
+    --versigo-opacity-glass:     0.15;
+    --versigo-opacity-glass-strong: 0.85;
 
     /* ---- Motion / Transitions ---- */
-    --insura-transition-fast:   150ms ease;
-    --insura-transition-base:   200ms ease;
-    --insura-transition-slow:   300ms ease;
-    --insura-duration-fast:     150ms;
-    --insura-duration-base:     200ms;
-    --insura-duration-slow:     300ms;
+    --versigo-transition-fast:   150ms ease;
+    --versigo-transition-base:   200ms ease;
+    --versigo-transition-slow:   300ms ease;
+    --versigo-duration-fast:     150ms;
+    --versigo-duration-base:     200ms;
+    --versigo-duration-slow:     300ms;
 
     /* ---- Breakpoints (for reference; used in media queries) ----
      * Mobile:  0 – 639px
      * Tablet:  640px – 1023px
      * Desktop: 1024px+
      */
-    --insura-bp-mobile-max:     639px;
-    --insura-bp-tablet-min:     640px;
-    --insura-bp-tablet-max:     1023px;
-    --insura-bp-desktop-min:    1024px;
+    --versigo-bp-mobile-max:     639px;
+    --versigo-bp-tablet-min:     640px;
+    --versigo-bp-tablet-max:     1023px;
+    --versigo-bp-desktop-min:    1024px;
 
     /* ---- Z-index scale ---- */
-    --insura-z-base:            0;
-    --insura-z-dropdown:        100;
-    --insura-z-sticky:          200;
-    --insura-z-drawer:          300;
-    --insura-z-modal:           400;
-    --insura-z-toast:           500;
+    --versigo-z-base:            0;
+    --versigo-z-dropdown:        100;
+    --versigo-z-sticky:          200;
+    --versigo-z-drawer:          300;
+    --versigo-z-modal:           400;
+    --versigo-z-toast:           500;
 
     /* ---- Focus ---- */
-    --insura-focus-ring:        0 0 0 3px hsl(var(--insura-accent-h), var(--insura-accent-s), 80%);
-    --insura-focus-ring-offset: 2px;
-    --insura-focus-color:       var(--insura-accent);
+    --versigo-focus-ring:        0 0 0 3px hsl(var(--versigo-accent-h), var(--versigo-accent-s), 80%);
+    --versigo-focus-ring-offset: 2px;
+    --versigo-focus-color:       var(--versigo-accent);
   }
 }
 
@@ -152,37 +152,37 @@
 @layer theme {
   :root,
   [data-theme='light'] {
-    --insura-bg:                  var(--insura-gray-50);
-    --insura-bg-elevated:         var(--insura-white);
-    --insura-bg-subtle:           var(--insura-gray-100);
-    --insura-surface:             var(--insura-white);
-    --insura-surface-hover:       var(--insura-gray-50);
-    --insura-border:              var(--insura-gray-200);
-    --insura-border-strong:       var(--insura-gray-300);
-    --insura-text-primary:        var(--insura-gray-900);
-    --insura-text-secondary:      var(--insura-gray-700);
-    --insura-text-muted:          var(--insura-gray-500);
-    --insura-text-inverse:        var(--insura-white);
-    --insura-glass-bg:            rgba(255, 255, 255, var(--insura-opacity-glass-strong));
-    --insura-glass-border:        rgba(255, 255, 255, 0.3);
-    --insura-glass-shadow:        0 4px 30px rgba(0, 0, 0, 0.08);
+    --versigo-bg:                  var(--versigo-gray-50);
+    --versigo-bg-elevated:         var(--versigo-white);
+    --versigo-bg-subtle:           var(--versigo-gray-100);
+    --versigo-surface:             var(--versigo-white);
+    --versigo-surface-hover:       var(--versigo-gray-50);
+    --versigo-border:              var(--versigo-gray-200);
+    --versigo-border-strong:       var(--versigo-gray-300);
+    --versigo-text-primary:        var(--versigo-gray-900);
+    --versigo-text-secondary:      var(--versigo-gray-700);
+    --versigo-text-muted:          var(--versigo-gray-500);
+    --versigo-text-inverse:        var(--versigo-white);
+    --versigo-glass-bg:            rgba(255, 255, 255, var(--versigo-opacity-glass-strong));
+    --versigo-glass-border:        rgba(255, 255, 255, 0.3);
+    --versigo-glass-shadow:        0 4px 30px rgba(0, 0, 0, 0.08);
   }
 
   [data-theme='dark'] {
-    --insura-bg:                  #1a1b1e;
-    --insura-bg-elevated:         #25262b;
-    --insura-bg-subtle:           #2c2e33;
-    --insura-surface:             #2c2e33;
-    --insura-surface-hover:       #373a40;
-    --insura-border:              #373a40;
-    --insura-border-strong:       #4c4f55;
-    --insura-text-primary:        #e9ecef;
-    --insura-text-secondary:      #ced4da;
-    --insura-text-muted:          #868e96;
-    --insura-text-inverse:        #1a1b1e;
-    --insura-glass-bg:            rgba(37, 38, 43, var(--insura-opacity-glass-strong));
-    --insura-glass-border:        rgba(55, 58, 64, 0.5);
-    --insura-glass-shadow:        0 4px 30px rgba(0, 0, 0, 0.3);
+    --versigo-bg:                  #1a1b1e;
+    --versigo-bg-elevated:         #25262b;
+    --versigo-bg-subtle:           #2c2e33;
+    --versigo-surface:             #2c2e33;
+    --versigo-surface-hover:       #373a40;
+    --versigo-border:              #373a40;
+    --versigo-border-strong:       #4c4f55;
+    --versigo-text-primary:        #e9ecef;
+    --versigo-text-secondary:      #ced4da;
+    --versigo-text-muted:          #868e96;
+    --versigo-text-inverse:        #1a1b1e;
+    --versigo-glass-bg:            rgba(37, 38, 43, var(--versigo-opacity-glass-strong));
+    --versigo-glass-border:        rgba(55, 58, 64, 0.5);
+    --versigo-glass-shadow:        0 4px 30px rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -199,11 +199,11 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
-    line-height: var(--insura-line-height-base);
-    font-family: var(--insura-font-family);
-    font-size: var(--insura-font-size-base);
-    color: var(--insura-text-primary);
-    background-color: var(--insura-bg);
+    line-height: var(--versigo-line-height-base);
+    font-family: var(--versigo-font-family);
+    font-size: var(--versigo-font-size-base);
+    color: var(--versigo-text-primary);
+    background-color: var(--versigo-bg);
     scroll-behavior: smooth;
   }
 
@@ -215,27 +215,27 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    margin: 0 0 var(--insura-space-2);
-    font-weight: var(--insura-font-weight-semibold);
-    line-height: var(--insura-line-height-tight);
-    color: var(--insura-text-primary);
+    margin: 0 0 var(--versigo-space-2);
+    font-weight: var(--versigo-font-weight-semibold);
+    line-height: var(--versigo-line-height-tight);
+    color: var(--versigo-text-primary);
   }
 
-  h1 { font-size: var(--insura-font-size-3xl); }
-  h2 { font-size: var(--insura-font-size-2xl); }
-  h3 { font-size: var(--insura-font-size-xl); }
-  h4 { font-size: var(--insura-font-size-lg); }
+  h1 { font-size: var(--versigo-font-size-3xl); }
+  h2 { font-size: var(--versigo-font-size-2xl); }
+  h3 { font-size: var(--versigo-font-size-xl); }
+  h4 { font-size: var(--versigo-font-size-lg); }
 
   p {
-    margin: 0 0 var(--insura-space-4);
-    line-height: var(--insura-line-height-relaxed);
-    color: var(--insura-text-secondary);
+    margin: 0 0 var(--versigo-space-4);
+    line-height: var(--versigo-line-height-relaxed);
+    color: var(--versigo-text-secondary);
   }
 
   a {
-    color: var(--insura-accent);
+    color: var(--versigo-accent);
     text-decoration: none;
-    transition: color var(--insura-transition-fast);
+    transition: color var(--versigo-transition-fast);
   }
 
   a:hover {
@@ -248,43 +248,43 @@
   }
 
   ul, ol {
-    margin: 0 0 var(--insura-space-4);
-    padding-left: var(--insura-space-6);
+    margin: 0 0 var(--versigo-space-4);
+    padding-left: var(--versigo-space-6);
   }
 
   li {
-    margin-bottom: var(--insura-space-1);
+    margin-bottom: var(--versigo-space-1);
   }
 
   code, pre {
-    font-family: var(--insura-font-mono);
+    font-family: var(--versigo-font-mono);
     font-size: 0.9em;
   }
 
   code {
     padding: 0.1em 0.3em;
-    background-color: var(--insura-bg-subtle);
-    border-radius: var(--insura-radius-sm);
+    background-color: var(--versigo-bg-subtle);
+    border-radius: var(--versigo-radius-sm);
   }
 
   pre {
-    padding: var(--insura-space-4);
+    padding: var(--versigo-space-4);
     overflow-x: auto;
-    background-color: var(--insura-bg-subtle);
-    border-radius: var(--insura-radius-md);
+    background-color: var(--versigo-bg-subtle);
+    border-radius: var(--versigo-radius-md);
   }
 
   hr {
     border: none;
-    border-top: var(--insura-border-width) solid var(--insura-border);
-    margin: var(--insura-space-6) 0;
+    border-top: var(--versigo-border-width) solid var(--versigo-border);
+    margin: var(--versigo-space-6) 0;
   }
 
   /* ---- Focus visible ---- */
   :focus-visible {
-    outline: var(--insura-border-width-thick) solid var(--insura-focus-color);
-    outline-offset: var(--insura-focus-ring-offset);
-    border-radius: var(--insura-radius-sm);
+    outline: var(--versigo-border-width-thick) solid var(--versigo-focus-color);
+    outline-offset: var(--versigo-focus-ring-offset);
+    border-radius: var(--versigo-radius-sm);
   }
 
   /* Remove focus ring for pointer interactions */
@@ -304,8 +304,8 @@
   }
 
   ::selection {
-    background-color: var(--insura-accent-light);
-    color: var(--insura-accent-dark);
+    background-color: var(--versigo-accent-light);
+    color: var(--versigo-accent-dark);
   }
 }
 
@@ -318,21 +318,21 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: var(--insura-space-2);
-    padding: var(--insura-space-2) var(--insura-space-4);
+    gap: var(--versigo-space-2);
+    padding: var(--versigo-space-2) var(--versigo-space-4);
     font-family: inherit;
-    font-size: var(--insura-font-size-sm);
-    font-weight: var(--insura-font-weight-medium);
-    line-height: var(--insura-line-height-base);
-    border: var(--insura-border-width) solid transparent;
-    border-radius: var(--insura-radius-md);
+    font-size: var(--versigo-font-size-sm);
+    font-weight: var(--versigo-font-weight-medium);
+    line-height: var(--versigo-line-height-base);
+    border: var(--versigo-border-width) solid transparent;
+    border-radius: var(--versigo-radius-md);
     cursor: pointer;
     transition:
-      background-color var(--insura-transition-fast),
-      color var(--insura-transition-fast),
-      box-shadow var(--insura-transition-fast),
-      border-color var(--insura-transition-fast),
-      opacity var(--insura-transition-fast);
+      background-color var(--versigo-transition-fast),
+      color var(--versigo-transition-fast),
+      box-shadow var(--versigo-transition-fast),
+      border-color var(--versigo-transition-fast),
+      opacity var(--versigo-transition-fast);
     user-select: none;
     text-decoration: none;
     white-space: nowrap;
@@ -341,130 +341,130 @@
 
   .btn:disabled,
   .btn[aria-disabled='true'] {
-    opacity: var(--insura-opacity-disabled);
+    opacity: var(--versigo-opacity-disabled);
     pointer-events: none;
     cursor: not-allowed;
   }
 
   .btn:focus-visible {
-    outline: var(--insura-border-width-thick) solid var(--insura-focus-color);
-    outline-offset: var(--insura-focus-ring-offset);
+    outline: var(--versigo-border-width-thick) solid var(--versigo-focus-color);
+    outline-offset: var(--versigo-focus-ring-offset);
   }
 
   .btn-primary {
-    background-color: var(--insura-accent);
-    color: var(--insura-accent-text);
-    border-color: var(--insura-accent);
+    background-color: var(--versigo-accent);
+    color: var(--versigo-accent-text);
+    border-color: var(--versigo-accent);
   }
 
   .btn-primary:hover:not(:disabled) {
-    background-color: var(--insura-accent-dark);
-    border-color: var(--insura-accent-dark);
+    background-color: var(--versigo-accent-dark);
+    border-color: var(--versigo-accent-dark);
   }
 
   .btn-secondary {
-    background-color: var(--insura-bg-subtle);
-    color: var(--insura-text-primary);
-    border-color: var(--insura-border);
+    background-color: var(--versigo-bg-subtle);
+    color: var(--versigo-text-primary);
+    border-color: var(--versigo-border);
   }
 
   .btn-secondary:hover:not(:disabled) {
-    background-color: var(--insura-surface-hover);
-    border-color: var(--insura-border-strong);
+    background-color: var(--versigo-surface-hover);
+    border-color: var(--versigo-border-strong);
   }
 
   .btn-outline {
     background-color: transparent;
-    color: var(--insura-accent);
-    border-color: var(--insura-accent);
+    color: var(--versigo-accent);
+    border-color: var(--versigo-accent);
   }
 
   .btn-outline:hover:not(:disabled) {
-    background-color: var(--insura-accent-soft);
+    background-color: var(--versigo-accent-soft);
   }
 
   .btn-ghost {
     background-color: transparent;
-    color: var(--insura-text-primary);
+    color: var(--versigo-text-primary);
     border-color: transparent;
   }
 
   .btn-ghost:hover:not(:disabled) {
-    background-color: var(--insura-surface-hover);
+    background-color: var(--versigo-surface-hover);
   }
 
   .btn-danger {
-    background-color: var(--insura-danger);
-    color: var(--insura-white);
-    border-color: var(--insura-danger);
+    background-color: var(--versigo-danger);
+    color: var(--versigo-white);
+    border-color: var(--versigo-danger);
   }
 
   .btn-danger:hover:not(:disabled) {
-    background-color: color-mix(in srgb, var(--insura-danger), black 20%);
-    border-color: color-mix(in srgb, var(--insura-danger), black 20%);
+    background-color: color-mix(in srgb, var(--versigo-danger), black 20%);
+    border-color: color-mix(in srgb, var(--versigo-danger), black 20%);
   }
 
   .btn-sm {
-    padding: var(--insura-space-1) var(--insura-space-3);
-    font-size: var(--insura-font-size-xs);
+    padding: var(--versigo-space-1) var(--versigo-space-3);
+    font-size: var(--versigo-font-size-xs);
     min-height: 32px;
   }
 
   .btn-lg {
-    padding: var(--insura-space-3) var(--insura-space-6);
-    font-size: var(--insura-font-size-base);
+    padding: var(--versigo-space-3) var(--versigo-space-6);
+    font-size: var(--versigo-font-size-base);
     min-height: 48px;
   }
 
   /* --- Card / Surface --- */
   .card {
-    background-color: var(--insura-surface);
-    border: var(--insura-border-width) solid var(--insura-border);
-    border-radius: var(--insura-radius-lg);
-    padding: var(--insura-space-6);
-    box-shadow: var(--insura-shadow-sm);
-    transition: box-shadow var(--insura-transition-base);
+    background-color: var(--versigo-surface);
+    border: var(--versigo-border-width) solid var(--versigo-border);
+    border-radius: var(--versigo-radius-lg);
+    padding: var(--versigo-space-6);
+    box-shadow: var(--versigo-shadow-sm);
+    transition: box-shadow var(--versigo-transition-base);
   }
 
   .card:hover {
-    box-shadow: var(--insura-shadow-md);
+    box-shadow: var(--versigo-shadow-md);
   }
 
   .card-header {
-    margin-bottom: var(--insura-space-4);
-    padding-bottom: var(--insura-space-4);
-    border-bottom: var(--insura-border-width) solid var(--insura-border);
+    margin-bottom: var(--versigo-space-4);
+    padding-bottom: var(--versigo-space-4);
+    border-bottom: var(--versigo-border-width) solid var(--versigo-border);
   }
 
   .card-footer {
-    margin-top: var(--insura-space-4);
-    padding-top: var(--insura-space-4);
-    border-top: var(--insura-border-width) solid var(--insura-border);
+    margin-top: var(--versigo-space-4);
+    padding-top: var(--versigo-space-4);
+    border-top: var(--versigo-border-width) solid var(--versigo-border);
   }
 
   /* --- Page / Section Headers --- */
   .page-header {
-    margin-bottom: var(--insura-space-8);
+    margin-bottom: var(--versigo-space-8);
   }
 
   .page-header h1 {
-    margin-bottom: var(--insura-space-1);
+    margin-bottom: var(--versigo-space-1);
   }
 
   .page-header p {
-    color: var(--insura-text-muted);
-    font-size: var(--insura-font-size-base);
+    color: var(--versigo-text-muted);
+    font-size: var(--versigo-font-size-base);
     margin-bottom: 0;
   }
 
   .section-header {
-    margin-bottom: var(--insura-space-4);
-    padding-bottom: var(--insura-space-2);
-    border-bottom: var(--insura-border-width) solid var(--insura-border);
+    margin-bottom: var(--versigo-space-4);
+    padding-bottom: var(--versigo-space-2);
+    border-bottom: var(--versigo-border-width) solid var(--versigo-border);
   }
 
   .section-header h2 {
-    font-size: var(--insura-font-size-xl);
+    font-size: var(--versigo-font-size-xl);
     margin-bottom: 0;
   }
 
@@ -472,78 +472,78 @@
   .form-group {
     display: flex;
     flex-direction: column;
-    gap: var(--insura-space-1);
-    margin-bottom: var(--insura-space-4);
+    gap: var(--versigo-space-1);
+    margin-bottom: var(--versigo-space-4);
   }
 
   .form-label {
-    font-size: var(--insura-font-size-sm);
-    font-weight: var(--insura-font-weight-medium);
-    color: var(--insura-text-primary);
+    font-size: var(--versigo-font-size-sm);
+    font-weight: var(--versigo-font-weight-medium);
+    color: var(--versigo-text-primary);
   }
 
   .form-input,
   .form-select,
   .form-textarea {
     width: 100%;
-    padding: var(--insura-space-2) var(--insura-space-3);
+    padding: var(--versigo-space-2) var(--versigo-space-3);
     font-family: inherit;
-    font-size: var(--insura-font-size-base);
-    line-height: var(--insura-line-height-base);
-    color: var(--insura-text-primary);
-    background-color: var(--insura-surface);
-    border: var(--insura-border-width) solid var(--insura-border);
-    border-radius: var(--insura-radius-md);
+    font-size: var(--versigo-font-size-base);
+    line-height: var(--versigo-line-height-base);
+    color: var(--versigo-text-primary);
+    background-color: var(--versigo-surface);
+    border: var(--versigo-border-width) solid var(--versigo-border);
+    border-radius: var(--versigo-radius-md);
     transition:
-      border-color var(--insura-transition-fast),
-      box-shadow var(--insura-transition-fast);
+      border-color var(--versigo-transition-fast),
+      box-shadow var(--versigo-transition-fast);
     min-height: 40px;
   }
 
   .form-input::placeholder,
   .form-textarea::placeholder {
-    color: var(--insura-text-muted);
+    color: var(--versigo-text-muted);
   }
 
   .form-input:hover,
   .form-select:hover,
   .form-textarea:hover {
-    border-color: var(--insura-border-strong);
+    border-color: var(--versigo-border-strong);
   }
 
   .form-input:focus,
   .form-select:focus,
   .form-textarea:focus {
     outline: none;
-    border-color: var(--insura-accent);
-    box-shadow: 0 0 0 3px hsl(var(--insura-accent-h), var(--insura-accent-s), 90%);
+    border-color: var(--versigo-accent);
+    box-shadow: 0 0 0 3px hsl(var(--versigo-accent-h), var(--versigo-accent-s), 90%);
   }
 
   .form-input[aria-invalid='true'],
   .form-select[aria-invalid='true'],
   .form-textarea[aria-invalid='true'] {
-    border-color: var(--insura-danger);
-    box-shadow: 0 0 0 3px var(--insura-danger-soft);
+    border-color: var(--versigo-danger);
+    box-shadow: 0 0 0 3px var(--versigo-danger-soft);
   }
 
   .form-error {
-    font-size: var(--insura-font-size-xs);
-    color: var(--insura-danger);
-    margin-top: var(--insura-space-1);
+    font-size: var(--versigo-font-size-xs);
+    color: var(--versigo-danger);
+    margin-top: var(--versigo-space-1);
   }
 
   .form-hint {
-    font-size: var(--insura-font-size-xs);
-    color: var(--insura-text-muted);
-    margin-top: var(--insura-space-1);
+    font-size: var(--versigo-font-size-xs);
+    color: var(--versigo-text-muted);
+    margin-top: var(--versigo-space-1);
   }
 
   .form-select {
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23495057' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right var(--insura-space-3) center;
-    padding-right: var(--insura-space-8);
+    background-position: right var(--versigo-space-3) center;
+    padding-right: var(--versigo-space-8);
   }
 
   .form-textarea {
@@ -555,53 +555,53 @@
   .form-check {
     display: flex;
     align-items: center;
-    gap: var(--insura-space-2);
+    gap: var(--versigo-space-2);
     cursor: pointer;
-    font-size: var(--insura-font-size-sm);
+    font-size: var(--versigo-font-size-sm);
   }
 
   .form-check input[type='checkbox'],
   .form-check input[type='radio'] {
     width: 18px;
     height: 18px;
-    accent-color: var(--insura-accent);
+    accent-color: var(--versigo-accent);
     cursor: pointer;
   }
 
   /* --- Alert / Notice --- */
   .alert {
     display: flex;
-    gap: var(--insura-space-3);
-    padding: var(--insura-space-3) var(--insura-space-4);
-    border-radius: var(--insura-radius-md);
-    border: var(--insura-border-width) solid transparent;
-    font-size: var(--insura-font-size-sm);
-    line-height: var(--insura-line-height-base);
-    margin-bottom: var(--insura-space-4);
+    gap: var(--versigo-space-3);
+    padding: var(--versigo-space-3) var(--versigo-space-4);
+    border-radius: var(--versigo-radius-md);
+    border: var(--versigo-border-width) solid transparent;
+    font-size: var(--versigo-font-size-sm);
+    line-height: var(--versigo-line-height-base);
+    margin-bottom: var(--versigo-space-4);
   }
 
   .alert-info {
-    background-color: var(--insura-info-soft);
-    border-color: var(--insura-info);
-    color: var(--insura-info);
+    background-color: var(--versigo-info-soft);
+    border-color: var(--versigo-info);
+    color: var(--versigo-info);
   }
 
   .alert-success {
-    background-color: var(--insura-success-soft);
-    border-color: var(--insura-success);
+    background-color: var(--versigo-success-soft);
+    border-color: var(--versigo-success);
     color: #1c6b2f;
   }
 
   .alert-warning {
-    background-color: var(--insura-warning-soft);
-    border-color: var(--insura-warning);
+    background-color: var(--versigo-warning-soft);
+    border-color: var(--versigo-warning);
     color: #b85900;
   }
 
   .alert-danger {
-    background-color: var(--insura-danger-soft);
-    border-color: var(--insura-danger);
-    color: var(--insura-danger);
+    background-color: var(--versigo-danger-soft);
+    border-color: var(--versigo-danger);
+    color: var(--versigo-danger);
   }
 
   .alert-icon {
@@ -616,8 +616,8 @@
   }
 
   .alert-title {
-    font-weight: var(--insura-font-weight-semibold);
-    margin-bottom: var(--insura-space-1);
+    font-weight: var(--versigo-font-weight-semibold);
+    margin-bottom: var(--versigo-space-1);
   }
 
   /* --- Empty State --- */
@@ -627,27 +627,27 @@
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: var(--insura-space-12) var(--insura-space-6);
-    color: var(--insura-text-muted);
+    padding: var(--versigo-space-12) var(--versigo-space-6);
+    color: var(--versigo-text-muted);
   }
 
   .empty-state-icon {
     font-size: 3rem;
-    margin-bottom: var(--insura-space-4);
+    margin-bottom: var(--versigo-space-4);
     opacity: 0.5;
   }
 
   .empty-state-title {
-    font-size: var(--insura-font-size-lg);
-    font-weight: var(--insura-font-weight-semibold);
-    color: var(--insura-text-secondary);
-    margin-bottom: var(--insura-space-2);
+    font-size: var(--versigo-font-size-lg);
+    font-weight: var(--versigo-font-weight-semibold);
+    color: var(--versigo-text-secondary);
+    margin-bottom: var(--versigo-space-2);
   }
 
   .empty-state-text {
-    font-size: var(--insura-font-size-sm);
+    font-size: var(--versigo-font-size-sm);
     max-width: 320px;
-    margin-bottom: var(--insura-space-6);
+    margin-bottom: var(--versigo-space-6);
   }
 
   /* --- Loading State --- */
@@ -655,8 +655,8 @@
     display: inline-block;
     width: 24px;
     height: 24px;
-    border: 3px solid var(--insura-border);
-    border-top-color: var(--insura-accent);
+    border: 3px solid var(--versigo-border);
+    border-top-color: var(--versigo-accent);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
   }
@@ -670,39 +670,39 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: var(--insura-space-12);
-    gap: var(--insura-space-4);
-    color: var(--insura-text-muted);
+    padding: var(--versigo-space-12);
+    gap: var(--versigo-space-4);
+    color: var(--versigo-text-muted);
   }
 
   /* --- Table --- */
   .table-container {
     overflow-x: auto;
-    border-radius: var(--insura-radius-md);
-    border: var(--insura-border-width) solid var(--insura-border);
-    background-color: var(--insura-surface);
+    border-radius: var(--versigo-radius-md);
+    border: var(--versigo-border-width) solid var(--versigo-border);
+    background-color: var(--versigo-surface);
   }
 
   .table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--insura-font-size-sm);
+    font-size: var(--versigo-font-size-sm);
   }
 
   .table th {
     text-align: left;
-    padding: var(--insura-space-3) var(--insura-space-4);
-    font-weight: var(--insura-font-weight-semibold);
-    color: var(--insura-text-secondary);
-    background-color: var(--insura-bg-subtle);
-    border-bottom: var(--insura-border-width) solid var(--insura-border);
+    padding: var(--versigo-space-3) var(--versigo-space-4);
+    font-weight: var(--versigo-font-weight-semibold);
+    color: var(--versigo-text-secondary);
+    background-color: var(--versigo-bg-subtle);
+    border-bottom: var(--versigo-border-width) solid var(--versigo-border);
     white-space: nowrap;
   }
 
   .table td {
-    padding: var(--insura-space-3) var(--insura-space-4);
-    border-bottom: var(--insura-border-width) solid var(--insura-border);
-    color: var(--insura-text-primary);
+    padding: var(--versigo-space-3) var(--versigo-space-4);
+    border-bottom: var(--versigo-border-width) solid var(--versigo-border);
+    color: var(--versigo-text-primary);
     vertical-align: top;
   }
 
@@ -711,44 +711,44 @@
   }
 
   .table tr:hover td {
-    background-color: var(--insura-surface-hover);
+    background-color: var(--versigo-surface-hover);
   }
 
   /* --- Definition list (detail views) --- */
   .detail-list {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: var(--insura-space-2) var(--insura-space-4);
+    gap: var(--versigo-space-2) var(--versigo-space-4);
     margin: 0;
   }
 
   .detail-list dt {
-    font-weight: var(--insura-font-weight-semibold);
-    color: var(--insura-text-secondary);
+    font-weight: var(--versigo-font-weight-semibold);
+    color: var(--versigo-text-secondary);
   }
 
   .detail-list dd {
     margin: 0;
-    color: var(--insura-text-primary);
+    color: var(--versigo-text-primary);
   }
 
   /* --- Dialog / Modal --- */
   .dialog-overlay {
     position: fixed;
     inset: 0;
-    z-index: var(--insura-z-modal);
+    z-index: var(--versigo-z-modal);
     display: flex;
     align-items: center;
     justify-content: center;
     background-color: rgba(0, 0, 0, 0.5);
-    padding: var(--insura-space-4);
+    padding: var(--versigo-space-4);
   }
 
   .dialog-panel {
-    background-color: var(--insura-surface);
-    border-radius: var(--insura-radius-xl);
-    box-shadow: var(--insura-shadow-xl);
-    padding: var(--insura-space-6);
+    background-color: var(--versigo-surface);
+    border-radius: var(--versigo-radius-xl);
+    box-shadow: var(--versigo-shadow-xl);
+    padding: var(--versigo-space-6);
     width: 100%;
     max-width: 480px;
     max-height: 90vh;
@@ -756,54 +756,54 @@
   }
 
   .dialog-header {
-    margin-bottom: var(--insura-space-4);
+    margin-bottom: var(--versigo-space-4);
   }
 
   .dialog-body {
-    margin-bottom: var(--insura-space-6);
+    margin-bottom: var(--versigo-space-6);
   }
 
   .dialog-footer {
     display: flex;
     justify-content: flex-end;
-    gap: var(--insura-space-3);
+    gap: var(--versigo-space-3);
   }
 
   /* --- Badge / Chip --- */
   .badge {
     display: inline-flex;
     align-items: center;
-    padding: 2px var(--insura-space-2);
-    font-size: var(--insura-font-size-xs);
-    font-weight: var(--insura-font-weight-medium);
-    border-radius: var(--insura-radius-full);
+    padding: 2px var(--versigo-space-2);
+    font-size: var(--versigo-font-size-xs);
+    font-weight: var(--versigo-font-weight-medium);
+    border-radius: var(--versigo-radius-full);
     line-height: 1.4;
     white-space: nowrap;
   }
 
   .badge-accent {
-    background-color: var(--insura-accent-soft);
-    color: var(--insura-accent-dark);
+    background-color: var(--versigo-accent-soft);
+    color: var(--versigo-accent-dark);
   }
 
   .badge-success {
-    background-color: var(--insura-success-soft);
+    background-color: var(--versigo-success-soft);
     color: #1c6b2f;
   }
 
   .badge-warning {
-    background-color: var(--insura-warning-soft);
+    background-color: var(--versigo-warning-soft);
     color: #b85900;
   }
 
   .badge-danger {
-    background-color: var(--insura-danger-soft);
-    color: var(--insura-danger);
+    background-color: var(--versigo-danger-soft);
+    color: var(--versigo-danger);
   }
 
   .badge-neutral {
-    background-color: var(--insura-bg-subtle);
-    color: var(--insura-text-secondary);
+    background-color: var(--versigo-bg-subtle);
+    color: var(--versigo-text-secondary);
   }
 
   /* --- Navigation / App Shell --- */
@@ -815,26 +815,26 @@
   .app-sidebar {
     width: 260px;
     flex-shrink: 0;
-    background-color: var(--insura-surface);
-    border-right: var(--insura-border-width) solid var(--insura-border);
-    padding: var(--insura-space-4);
+    background-color: var(--versigo-surface);
+    border-right: var(--versigo-border-width) solid var(--versigo-border);
+    padding: var(--versigo-space-4);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: var(--insura-space-1);
-    z-index: var(--insura-z-sticky);
+    gap: var(--versigo-space-1);
+    z-index: var(--versigo-z-sticky);
   }
 
   .app-sidebar-logo {
-    font-size: var(--insura-font-size-xl);
-    font-weight: var(--insura-font-weight-bold);
-    color: var(--insura-text-primary);
-    padding: var(--insura-space-2) var(--insura-space-3);
-    margin-bottom: var(--insura-space-4);
+    font-size: var(--versigo-font-size-xl);
+    font-weight: var(--versigo-font-weight-bold);
+    color: var(--versigo-text-primary);
+    padding: var(--versigo-space-2) var(--versigo-space-3);
+    margin-bottom: var(--versigo-space-4);
     text-decoration: none;
     display: flex;
     align-items: center;
-    gap: var(--insura-space-2);
+    gap: var(--versigo-space-2);
   }
 
   .app-sidebar-logo:hover {
@@ -842,34 +842,34 @@
   }
 
   .app-sidebar-logo .logo-accent {
-    color: var(--insura-accent);
+    color: var(--versigo-accent);
   }
 
   .nav-item {
     display: flex;
     align-items: center;
-    gap: var(--insura-space-3);
-    padding: var(--insura-space-2) var(--insura-space-3);
-    border-radius: var(--insura-radius-md);
-    color: var(--insura-text-secondary);
+    gap: var(--versigo-space-3);
+    padding: var(--versigo-space-2) var(--versigo-space-3);
+    border-radius: var(--versigo-radius-md);
+    color: var(--versigo-text-secondary);
     text-decoration: none;
-    font-size: var(--insura-font-size-sm);
-    font-weight: var(--insura-font-weight-medium);
+    font-size: var(--versigo-font-size-sm);
+    font-weight: var(--versigo-font-weight-medium);
     transition:
-      background-color var(--insura-transition-fast),
-      color var(--insura-transition-fast);
+      background-color var(--versigo-transition-fast),
+      color var(--versigo-transition-fast);
   }
 
   .nav-item:hover {
-    background-color: var(--insura-surface-hover);
-    color: var(--insura-text-primary);
+    background-color: var(--versigo-surface-hover);
+    color: var(--versigo-text-primary);
     text-decoration: none;
   }
 
   .nav-item.active,
   .nav-item[aria-current='page'] {
-    background-color: var(--insura-accent-soft);
-    color: var(--insura-accent-dark);
+    background-color: var(--versigo-accent-soft);
+    color: var(--versigo-accent-dark);
   }
 
   .nav-item-icon {
@@ -884,10 +884,10 @@
   }
 
   .nav-section-label {
-    padding: var(--insura-space-2) var(--insura-space-3) var(--insura-space-1);
-    font-size: var(--insura-font-size-xs);
-    font-weight: var(--insura-font-weight-semibold);
-    color: var(--insura-text-muted);
+    padding: var(--versigo-space-2) var(--versigo-space-3) var(--versigo-space-1);
+    font-size: var(--versigo-font-size-xs);
+    font-weight: var(--versigo-font-weight-semibold);
+    color: var(--versigo-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -896,38 +896,38 @@
     display: none;
     align-items: center;
     justify-content: space-between;
-    padding: var(--insura-space-3) var(--insura-space-4);
-    background-color: var(--insura-glass-bg);
+    padding: var(--versigo-space-3) var(--versigo-space-4);
+    background-color: var(--versigo-glass-bg);
     backdrop-filter: blur(12px) saturate(180%);
     -webkit-backdrop-filter: blur(12px) saturate(180%);
-    border-bottom: var(--insura-border-width) solid var(--insura-border);
+    border-bottom: var(--versigo-border-width) solid var(--versigo-border);
     position: sticky;
     top: 0;
-    z-index: var(--insura-z-sticky);
+    z-index: var(--versigo-z-sticky);
     min-height: 56px;
-    gap: var(--insura-space-3);
-    box-shadow: var(--insura-glass-shadow);
+    gap: var(--versigo-space-3);
+    box-shadow: var(--versigo-glass-shadow);
   }
 
   .app-topbar-logo {
-    font-weight: var(--insura-font-weight-bold);
-    font-size: var(--insura-font-size-lg);
-    color: var(--insura-text-primary);
+    font-weight: var(--versigo-font-weight-bold);
+    font-size: var(--versigo-font-size-lg);
+    color: var(--versigo-text-primary);
   }
 
   .app-topbar-logo .logo-accent {
-    color: var(--insura-accent);
+    color: var(--versigo-accent);
   }
 
   .app-topbar-actions {
     display: flex;
     align-items: center;
-    gap: var(--insura-space-2);
+    gap: var(--versigo-space-2);
   }
 
   .app-main {
     flex: 1;
-    padding: var(--insura-space-6);
+    padding: var(--versigo-space-6);
     overflow-y: auto;
     max-width: 1200px;
     width: 100%;
@@ -939,12 +939,12 @@
 
   /* --- Glass surface for decorative non-essential elements --- */
   .glass-panel {
-    background: var(--insura-glass-bg);
+    background: var(--versigo-glass-bg);
     backdrop-filter: blur(12px) saturate(180%);
     -webkit-backdrop-filter: blur(12px) saturate(180%);
-    border: var(--insura-border-width) solid var(--insura-glass-border);
-    border-radius: var(--insura-radius-lg);
-    box-shadow: var(--insura-glass-shadow);
+    border: var(--versigo-border-width) solid var(--versigo-glass-border);
+    border-radius: var(--versigo-radius-lg);
+    box-shadow: var(--versigo-glass-shadow);
   }
 
   /* --- Colour swatch / picker --- */
@@ -952,36 +952,36 @@
     display: inline-block;
     width: 32px;
     height: 32px;
-    border-radius: var(--insura-radius-full);
-    border: var(--insura-border-width) solid var(--insura-border);
+    border-radius: var(--versigo-radius-full);
+    border: var(--versigo-border-width) solid var(--versigo-border);
     cursor: pointer;
     transition:
-      transform var(--insura-transition-fast),
-      box-shadow var(--insura-transition-fast);
+      transform var(--versigo-transition-fast),
+      box-shadow var(--versigo-transition-fast);
   }
 
   .color-swatch:hover {
     transform: scale(1.15);
-    box-shadow: var(--insura-shadow-md);
+    box-shadow: var(--versigo-shadow-md);
   }
 
   .color-swatch.selected {
-    border: var(--insura-border-width-thick) solid var(--insura-text-primary);
+    border: var(--versigo-border-width-thick) solid var(--versigo-text-primary);
     transform: scale(1.1);
-    box-shadow: 0 0 0 2px var(--insura-surface), 0 0 0 4px var(--insura-accent);
+    box-shadow: 0 0 0 2px var(--versigo-surface), 0 0 0 4px var(--versigo-accent);
   }
 
   /* --- Split layout --- */
   .split-layout {
     display: grid;
     grid-template-columns: 1fr;
-    gap: var(--insura-space-6);
+    gap: var(--versigo-space-6);
   }
 
   /* --- Button group --- */
   .btn-group {
     display: flex;
-    gap: var(--insura-space-2);
+    gap: var(--versigo-space-2);
     align-items: center;
     flex-wrap: wrap;
   }
@@ -992,15 +992,15 @@
     background: none;
     border: none;
     cursor: pointer;
-    padding: var(--insura-space-2);
-    color: var(--insura-text-primary);
-    font-size: var(--insura-font-size-xl);
+    padding: var(--versigo-space-2);
+    color: var(--versigo-text-primary);
+    font-size: var(--versigo-font-size-xl);
     line-height: 1;
   }
 
   .nav-toggle:focus-visible {
-    outline: var(--insura-border-width-thick) solid var(--insura-focus-color);
-    outline-offset: var(--insura-focus-ring-offset);
+    outline: var(--versigo-border-width-thick) solid var(--versigo-focus-color);
+    outline-offset: var(--versigo-focus-ring-offset);
   }
 }
 
@@ -1022,25 +1022,25 @@
 
   .text-center  { text-align: center; }
   .text-right   { text-align: right; }
-  .text-muted   { color: var(--insura-text-muted); }
-  .text-sm      { font-size: var(--insura-font-size-sm); }
-  .text-xs      { font-size: var(--insura-font-size-xs); }
-  .font-mono    { font-family: var(--insura-font-mono); }
-  .font-bold    { font-weight: var(--insura-font-weight-bold); }
+  .text-muted   { color: var(--versigo-text-muted); }
+  .text-sm      { font-size: var(--versigo-font-size-sm); }
+  .text-xs      { font-size: var(--versigo-font-size-xs); }
+  .font-mono    { font-family: var(--versigo-font-mono); }
+  .font-bold    { font-weight: var(--versigo-font-weight-bold); }
 
   .mt-0  { margin-top: 0; }
-  .mt-2  { margin-top: var(--insura-space-2); }
-  .mt-4  { margin-top: var(--insura-space-4); }
-  .mt-6  { margin-top: var(--insura-space-6); }
-  .mt-8  { margin-top: var(--insura-space-8); }
+  .mt-2  { margin-top: var(--versigo-space-2); }
+  .mt-4  { margin-top: var(--versigo-space-4); }
+  .mt-6  { margin-top: var(--versigo-space-6); }
+  .mt-8  { margin-top: var(--versigo-space-8); }
   .mb-0  { margin-bottom: 0; }
-  .mb-2  { margin-bottom: var(--insura-space-2); }
-  .mb-4  { margin-bottom: var(--insura-space-4); }
-  .mb-6  { margin-bottom: var(--insura-space-6); }
-  .mb-8  { margin-bottom: var(--insura-space-8); }
+  .mb-2  { margin-bottom: var(--versigo-space-2); }
+  .mb-4  { margin-bottom: var(--versigo-space-4); }
+  .mb-6  { margin-bottom: var(--versigo-space-6); }
+  .mb-8  { margin-bottom: var(--versigo-space-8); }
   .p-0   { padding: 0; }
-  .p-4   { padding: var(--insura-space-4); }
-  .p-6   { padding: var(--insura-space-6); }
+  .p-4   { padding: var(--versigo-space-4); }
+  .p-6   { padding: var(--versigo-space-6); }
 
   .flex         { display: flex; }
   .flex-col     { flex-direction: column; }
@@ -1049,9 +1049,9 @@
   .items-end    { align-items: flex-end; }
   .items-start  { align-items: flex-start; }
   .justify-between { justify-content: space-between; }
-  .gap-2        { gap: var(--insura-space-2); }
-  .gap-4        { gap: var(--insura-space-4); }
-  .gap-6        { gap: var(--insura-space-6); }
+  .gap-2        { gap: var(--versigo-space-2); }
+  .gap-4        { gap: var(--versigo-space-4); }
+  .gap-6        { gap: var(--versigo-space-6); }
   .flex-1       { flex: 1; }
 
   .w-full       { width: 100%; }
@@ -1078,7 +1078,7 @@
 /* Desktop (>= 1024px) */
 @media (min-width: 1024px) {
   .app-main {
-    padding: var(--insura-space-8);
+    padding: var(--versigo-space-8);
   }
 
   .split-layout {
@@ -1093,10 +1093,10 @@
     position: fixed;
     inset: 0;
     width: 100%;
-    z-index: var(--insura-z-drawer);
+    z-index: var(--versigo-z-drawer);
     border-right: none;
     border-radius: 0;
-    padding-top: var(--insura-space-16);
+    padding-top: var(--versigo-space-16);
   }
 
   .app-sidebar.open {
@@ -1107,7 +1107,7 @@
     display: flex;
     /* Keep the top bar above the open drawer so the toggle
        (hamburger / close) stays reachable on touch-only devices. */
-    z-index: calc(var(--insura-z-drawer) + 1);
+    z-index: calc(var(--versigo-z-drawer) + 1);
   }
 
   .nav-toggle {
@@ -1115,7 +1115,7 @@
   }
 
   .app-main {
-    padding: var(--insura-space-4);
+    padding: var(--versigo-space-4);
   }
 
   .table-container {
@@ -1130,19 +1130,19 @@
 
   .table tr {
     display: block;
-    margin-bottom: var(--insura-space-4);
-    border: var(--insura-border-width) solid var(--insura-border);
-    border-radius: var(--insura-radius-md);
-    background-color: var(--insura-surface);
-    padding: var(--insura-space-3);
+    margin-bottom: var(--versigo-space-4);
+    border: var(--versigo-border-width) solid var(--versigo-border);
+    border-radius: var(--versigo-radius-md);
+    background-color: var(--versigo-surface);
+    padding: var(--versigo-space-3);
   }
 
   .table td {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--insura-space-2) 0;
-    border-bottom: var(--insura-border-width) solid var(--insura-border);
+    padding: var(--versigo-space-2) 0;
+    border-bottom: var(--versigo-border-width) solid var(--versigo-border);
   }
 
   .table td:last-child {
@@ -1151,10 +1151,10 @@
 
   .table td::before {
     content: attr(data-label);
-    font-weight: var(--insura-font-weight-semibold);
-    color: var(--insura-text-secondary);
-    font-size: var(--insura-font-size-xs);
-    margin-right: var(--insura-space-4);
+    font-weight: var(--versigo-font-weight-semibold);
+    color: var(--versigo-text-secondary);
+    font-size: var(--versigo-font-size-xs);
+    margin-right: var(--versigo-space-4);
     flex-shrink: 0;
   }
 
@@ -1168,114 +1168,114 @@
   }
 
   .card {
-    border-radius: var(--insura-radius-md);
-    padding: var(--insura-space-4);
+    border-radius: var(--versigo-radius-md);
+    padding: var(--versigo-space-4);
   }
 }
 
 /* --- AP-17: Systemeinstellungen (Admin) & Profil --- */
 .settings-toolbar {
   display: flex;
-  gap: var(--insura-space-4);
+  gap: var(--versigo-space-4);
   align-items: end;
   flex-wrap: wrap;
 }
 
 .settings-filter-checks {
   display: flex;
-  gap: var(--insura-space-4);
+  gap: var(--versigo-space-4);
   flex-wrap: wrap;
-  padding-bottom: var(--insura-space-2);
+  padding-bottom: var(--versigo-space-2);
 }
 
 .settings-group .section-header {
-  margin-bottom: var(--insura-space-2);
+  margin-bottom: var(--versigo-space-2);
 }
 
 .settings-entry-list {
   display: flex;
   flex-direction: column;
-  gap: var(--insura-space-4);
+  gap: var(--versigo-space-4);
 }
 
 .settings-entry {
-  border: var(--insura-border-width) solid var(--insura-border);
-  border-radius: var(--insura-radius-md);
-  padding: var(--insura-space-4);
-  background-color: var(--insura-surface);
+  border: var(--versigo-border-width) solid var(--versigo-border);
+  border-radius: var(--versigo-radius-md);
+  padding: var(--versigo-space-4);
+  background-color: var(--versigo-surface);
 }
 
 .settings-entry-invalid {
-  border-color: var(--insura-warning);
+  border-color: var(--versigo-warning);
 }
 
 .settings-entry-head {
   display: flex;
   align-items: center;
-  gap: var(--insura-space-2);
+  gap: var(--versigo-space-2);
   flex-wrap: wrap;
-  margin-bottom: var(--insura-space-2);
+  margin-bottom: var(--versigo-space-2);
 }
 
 .settings-entry-key {
-  font-weight: var(--insura-font-weight-semibold);
-  margin-right: var(--insura-space-1);
+  font-weight: var(--versigo-font-weight-semibold);
+  margin-right: var(--versigo-space-1);
 }
 
 .settings-entry-description {
-  margin: 0 0 var(--insura-space-2);
-  color: var(--insura-text-secondary);
+  margin: 0 0 var(--versigo-space-2);
+  color: var(--versigo-text-secondary);
 }
 
 .settings-entry-form {
   display: flex;
-  gap: var(--insura-space-3);
+  gap: var(--versigo-space-3);
   align-items: end;
   flex-wrap: wrap;
-  margin-top: var(--insura-space-2);
+  margin-top: var(--versigo-space-2);
 }
 
 .settings-entry-value {
   display: flex;
   align-items: baseline;
-  gap: var(--insura-space-2);
+  gap: var(--versigo-space-2);
   flex-wrap: wrap;
-  margin-bottom: var(--insura-space-1);
+  margin-bottom: var(--versigo-space-1);
 }
 
 .settings-entry-value-label {
-  font-size: var(--insura-font-size-xs);
-  font-weight: var(--insura-font-weight-semibold);
-  color: var(--insura-text-secondary);
+  font-size: var(--versigo-font-size-xs);
+  font-weight: var(--versigo-font-weight-semibold);
+  color: var(--versigo-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
 .settings-entry-value-text {
-  font-family: var(--insura-font-mono, monospace);
-  font-weight: var(--insura-font-weight-medium);
+  font-family: var(--versigo-font-mono, monospace);
+  font-weight: var(--versigo-font-weight-medium);
 }
 
 .settings-entry-reason {
-  margin: 0 0 var(--insura-space-2);
-  font-size: var(--insura-font-size-sm);
-  color: var(--insura-text-secondary);
+  margin: 0 0 var(--versigo-space-2);
+  font-size: var(--versigo-font-size-sm);
+  color: var(--versigo-text-secondary);
 }
 
 .settings-entry-updated {
-  color: var(--insura-text-tertiary, var(--insura-text-secondary));
+  color: var(--versigo-text-tertiary, var(--versigo-text-secondary));
 }
 
 .profile-meta {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--insura-space-3);
-  margin-bottom: var(--insura-space-4);
+  gap: var(--versigo-space-3);
+  margin-bottom: var(--versigo-space-4);
 }
 
 .profile-meta-value {
   margin: 0;
-  font-weight: var(--insura-font-weight-medium);
+  font-weight: var(--versigo-font-weight-medium);
 }
 
 @media (max-width: 639px) {
@@ -1285,7 +1285,7 @@
 
   .settings-filter-checks {
     flex-direction: column;
-    gap: var(--insura-space-2);
+    gap: var(--versigo-space-2);
   }
 
   .settings-entry-form {

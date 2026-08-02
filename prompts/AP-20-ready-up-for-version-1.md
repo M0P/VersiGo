@@ -2,14 +2,14 @@
 
 ## Ziel
 
-Insura wird fachlich, technisch und dokumentarisch für eine erste geschlossene Beta-Version vorbereitet. Der Fokus liegt auf einem deutlich schnelleren und reproduzierbaren Produktionsbuild, reduziertem Ressourcenbedarf, vollständiger UI-Bedienbarkeit, belastbarer Release-Verifikation sowie einer vollständigen und sicherheitsbewussten GitHub-Dokumentation.
+VersiGo wird fachlich, technisch und dokumentarisch für eine erste geschlossene Beta-Version vorbereitet. Der Fokus liegt auf einem deutlich schnelleren und reproduzierbaren Produktionsbuild, reduziertem Ressourcenbedarf, vollständiger UI-Bedienbarkeit, belastbarer Release-Verifikation sowie einer vollständigen und sicherheitsbewussten GitHub-Dokumentation.
 
 Die Anwendung bleibt ausdrücklich ein experimentelles, vollständig AI-erstelltes Projekt. Sie ist nicht für einen Betrieb in einer aus dem Internet erreichbaren Umgebung vorgesehen.
 
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-20 im Projekt Insura.
+Du implementierst AP-20 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`
@@ -19,7 +19,7 @@ Verbindliche Referenzen:
 Arbeite in einem neuen Branch `feat/AP-20-ready-up-for-version-1` auf Basis des aktuellen `main`. Direkte Änderungen an `main` sind verboten.
 
 Aufgabe:
-Bereite Insura umfassend auf eine erste Beta-Version vor. Betrachte dazu das gesamte Repository, nicht nur einzelne Features. Räume technische Altlasten auf, schließe erkennbare Bedienungs- und Dokumentationslücken und etabliere nachvollziehbare Beta-Release-Gates.
+Bereite VersiGo umfassend auf eine erste Beta-Version vor. Betrachte dazu das gesamte Repository, nicht nur einzelne Features. Räume technische Altlasten auf, schließe erkennbare Bedienungs- und Dokumentationslücken und etabliere nachvollziehbare Beta-Release-Gates.
 
 Es handelt sich nicht um eine kosmetische Dokumentationsänderung: Alle bestehenden fachlichen Funktionen, Betriebsfunktionen, Einstellungen und UI-Aktionen müssen auf ihre tatsächliche Verfügbarkeit, Erreichbarkeit, Berechtigung, Fehlerbehandlung und Testabdeckung geprüft werden.
 
@@ -67,7 +67,7 @@ Scope:
 5. GitHub- und Betriebsdokumentation
 - Überarbeite die Startseite des GitHub-Repositorys vollständig. README und weiterführende Dokumentation müssen den tatsächlichen Funktionsumfang widerspiegeln; keine geplante oder nicht funktionierende Funktion darf als verfügbar dargestellt werden.
 - Platziere am Anfang der README vor der Funktionsbeschreibung einen prominenten, nicht übersehbaren Warnhinweis in deutscher Sprache mit mindestens folgendem Sinn:
-  „Insura wurde vollständig mit AI erstellt. Das Projekt ist experimentell, nicht sicherheitsgeprüft und nicht für einen aus dem Internet erreichbaren Betrieb vorgesehen. Betreiben Sie es ausschließlich in einer vertrauenswürdigen, abgeschotteten privaten Umgebung und verwenden Sie keine produktiven oder besonders schützenswerten Daten ohne eigene Sicherheitsprüfung.“
+  „VersiGo wurde vollständig mit AI erstellt. Das Projekt ist experimentell, nicht sicherheitsgeprüft und nicht für einen aus dem Internet erreichbaren Betrieb vorgesehen. Betreiben Sie es ausschließlich in einer vertrauenswürdigen, abgeschotteten privaten Umgebung und verwenden Sie keine produktiven oder besonders schützenswerten Daten ohne eigene Sicherheitsprüfung.“
 - Der Warnhinweis darf nicht durch Formulierungen wie „production ready“, „sicher“ oder „öffentlich betreibbar“ relativiert werden.
 - Weise sichtbar darauf hin, dass Hilfe, Reviews, Tests, Fehlerberichte, Sicherheitsmeldungen, Dokumentationsverbesserungen und Pull Requests erwünscht sind. Beschreibe einen klaren, niedrigschwelligen Beitragsweg.
 - Ergänze oder aktualisiere mindestens: Funktionsübersicht, Architekturüberblick, Voraussetzungen, Schnellstart, lokale Entwicklung, Tests, Konfiguration, lokale Anmeldung, OIDC, Datenablage, Backups, Updates, Fehlerdiagnose, bekannte Grenzen, Sicherheitsmodell und Datenschutzhinweise.

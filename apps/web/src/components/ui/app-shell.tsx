@@ -106,7 +106,7 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
           </svg>
         </button>
         <Link href="/" className="app-topbar-logo" onClick={closeSidebar}>
-          <span className="logo-accent">In</span>sura
+          <span className="logo-accent">Ver</span>siGo
         </Link>
         <div className="app-topbar-actions">
           <button
@@ -139,7 +139,7 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
       {/* Sidebar */}
       <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`}>
         <Link href="/" className="app-sidebar-logo" onClick={closeSidebar}>
-          <span className="logo-accent">In</span>sura
+          <span className="logo-accent">Ver</span>siGo
         </Link>
 
         {visibleSections.map((section) => (

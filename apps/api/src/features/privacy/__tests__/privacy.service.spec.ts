@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import { PrivacyService } from '../privacy.service';
 import type { AuthenticatedUser } from '../../identity/auth.service';
 
-const STORAGE_ROOT = '/tmp/insura-test-storage';
+const STORAGE_ROOT = '/tmp/versigo-test-storage';
 
 const adminUser: AuthenticatedUser = {
   id: 'user-1',
@@ -124,7 +124,7 @@ describe('PrivacyService', () => {
               documentDate: null,
               uploadedAt: new Date('2026-01-03T00:00:00Z'),
               // darf nicht exportiert werden:
-              storageRef: '/tmp/insura-test-storage/p1/doc1/doc1',
+              storageRef: '/tmp/versigo-test-storage/p1/doc1/doc1',
             },
           ],
           portalLinks: [

@@ -16,7 +16,7 @@
 **Verification of the two Round 6 fixes:**
 
 1. **`apps/web/src/app/admin/page.tsx:82` — dead `className` removed**
-   - The `<strong>` element now reads `<strong style={{ color: validation?.valid ? 'var(--insura-success)' : 'var(--insura-danger)' }}>` — no `className` attribute. The `style` attribute is intact, and the conditional rendering `{validation?.valid ? 'Gültig' : 'Fehlerhaft'}` on line 83 is untouched. A repo-wide grep for `className={validation?` returns zero matches.
+   - The `<strong>` element now reads `<strong style={{ color: validation?.valid ? 'var(--versigo-success)' : 'var(--versigo-danger)' }}>` — no `className` attribute. The `style` attribute is intact, and the conditional rendering `{validation?.valid ? 'Gültig' : 'Fehlerhaft'}` on line 83 is untouched. A repo-wide grep for `className={validation?` returns zero matches.
 
 2. **`apps/web/src/components/ui/dialog.tsx` — `useId`-based title id**
    - `useId` is imported from `'react'` (line 3) alongside `useEffect`, `useRef`, and the type imports.

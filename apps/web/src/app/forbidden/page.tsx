@@ -13,11 +13,11 @@ import { Alert } from '../../components/ui/alert';
  */
 export default function ForbiddenPage(): ReactElement {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
       <Card style={{ maxWidth: 420, width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--insura-space-6)' }}>
-          <h1 style={{ marginBottom: 'var(--insura-space-1)' }}>
-            <span style={{ color: 'var(--insura-accent)' }}>In</span>sura
+        <div style={{ textAlign: 'center', marginBottom: 'var(--versigo-space-6)' }}>
+          <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
+            <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
           </h1>
           <p className="text-muted">Zugriff verweigert</p>
         </div>
@@ -27,7 +27,7 @@ export default function ForbiddenPage(): ReactElement {
           Falls Sie einen Fehler vermuten, wenden Sie sich an Ihre Administration.
         </Alert>
 
-        <div style={{ display: 'flex', gap: 'var(--insura-space-3)', marginTop: 'var(--insura-space-6)' }}>
+        <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', marginTop: 'var(--versigo-space-6)' }}>
           <a href="/" style={{ flex: 1, textDecoration: 'none' }}>
             <Button variant="outline" style={{ width: '100%' }}>Zur Startseite</Button>
           </a>

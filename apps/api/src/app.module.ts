@@ -6,7 +6,7 @@ import {
   CapabilityFlagsModule,
   EncryptionModule,
   QueueFoundationModule,
-} from '@insura/foundation';
+} from '@versigo/foundation';
 import { AdminSettingsModule } from './features/admin-settings/admin-settings.module';
 import { AiAssistModule } from './features/ai-assist/ai-assist.module';
 import { AuditModule } from './features/audit/audit.module';

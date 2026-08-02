@@ -6,7 +6,7 @@ Admin-UI, verschlüsselter Settings-Store, Feature Flags und Integrationsverwalt
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-07 im Projekt Insura.
+Du implementierst AP-07 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

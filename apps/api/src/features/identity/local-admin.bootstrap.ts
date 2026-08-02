@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DatabaseService, AppConfigService } from '@insura/foundation';
+import { DatabaseService, AppConfigService } from '@versigo/foundation';
 import { GlobalRole, UserStatus } from '@prisma/client';
 import { PasswordHashingService } from './password-hashing.service';
 import { normalizeIdentifier } from './auth.service';

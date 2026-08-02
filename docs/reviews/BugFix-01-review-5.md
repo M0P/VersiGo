@@ -22,7 +22,7 @@ Scope: uncommitted BugFix-01 changes (`fix/BugFix-01-docker-setup`) nach Behebun
 
 ## Findings (verbatim aus dem Review-Tool)
 
-- **[Minor]** `scripts/compose-smoke-test.sh:444` (+ cleanup trap at `48-57`) — Temp worker-log file is only removed on the success path. Every failure exit (`exit 1`) and any interrupt leaves `/tmp/insura-worker-smoke.log` behind; the `cleanup()` trap runs `$COMPOSE down` but does not remove it. The leftover file is overwritten with `>` on the next run, so there is no correctness impact — purely hygiene. Fix: remove the file in the `cleanup()` trap, e.g. `rm -f "${WORKER_LOG:-}"`.
+- **[Minor]** `scripts/compose-smoke-test.sh:444` (+ cleanup trap at `48-57`) — Temp worker-log file is only removed on the success path. Every failure exit (`exit 1`) and any interrupt leaves `/tmp/versigo-worker-smoke.log` behind; the `cleanup()` trap runs `$COMPOSE down` but does not remove it. The leftover file is overwritten with `>` on the next run, so there is no correctness impact — purely hygiene. Fix: remove the file in the `cleanup()` trap, e.g. `rm -f "${WORKER_LOG:-}"`.
 
 - **[Minor]** `scripts/compose-smoke-test.sh:76-78` — Fix 1 depends on sourcing the entire user-editable `.env`, which is fragile under `set -euo pipefail`. `set -a; [ -f .env ] && . .env; set +a` executes the whole `.env` as shell code, and step 10's `REDIS_URL` now relies on it. Any value containing spaces or shell metacharacters (common in local passwords) makes the `source` fail, aborting the entire smoke test with an obscure error. (`scripts/dev-services.sh` already shows the safer pattern: parse only the needed keys with `while IFS='=' read -r key value`.) Fix: replace the raw `source` with a key-selective parser (only `REDIS_URL`, `APP_PORT`, `WEB_PORT`, `POSTGRES_*`, `LOCAL_ADMIN_*`).
 
@@ -30,7 +30,7 @@ Scope: uncommitted BugFix-01 changes (`fix/BugFix-01-docker-setup`) nach Behebun
 
 Beide Minor-Findings wurden behoben und per Smoke-Test verifiziert:
 
-1. `cleanup()`-Trap entfernt die Temp-Datei auch auf Fehlerpfaden (`rm -f "${WORKER_LOG:-/tmp/insura-worker-smoke.log}"`); das explizite `rm` am Erfolgspfad entfällt (Trap ist einziger Cleanup-Punkt).
+1. `cleanup()`-Trap entfernt die Temp-Datei auch auf Fehlerpfaden (`rm -f "${WORKER_LOG:-/tmp/versigo-worker-smoke.log}"`); das explizite `rm` am Erfolgspfad entfällt (Trap ist einziger Cleanup-Punkt).
 2. Das rohe `source .env` wurde durch einen schlüsselselektiven Parser ersetzt (Muster aus `scripts/dev-services.sh`): nur `APP_PORT`, `WEB_PORT`, `POSTGRES_USER`, `POSTGRES_DB`, `LOCAL_ADMIN_EMAIL`, `LOCAL_ADMIN_PASSWORD`, `REDIS_URL` werden gelesen, Kommentar-/Leerzeilen übersprungen, CR getrimmt, bestehende Umgebungsvariablen haben Vorrang. Werte mit Leerzeichen/Sonderzeichen brechen den Test nicht mehr.
 
 ## Verifikation

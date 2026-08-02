@@ -96,36 +96,36 @@ export default function PolicyDetailPage(): ReactElement {
         <Card>
           <SectionHeader title="Stammdaten" />
           <dl style={{ margin: 0 }}>
-            <dt className="text-xs text-muted" style={{ marginTop: 'var(--insura-space-2)' }}>Vertragsnummer</dt>
+            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Vertragsnummer</dt>
             <dd style={{ margin: 0 }}>{policy.contractNumber}</dd>
 
             {policy.tariffName && (
               <>
-                <dt className="text-xs text-muted" style={{ marginTop: 'var(--insura-space-2)' }}>Tarif</dt>
+                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Tarif</dt>
                 <dd style={{ margin: 0 }}>{policy.tariffName}</dd>
               </>
             )}
 
-            <dt className="text-xs text-muted" style={{ marginTop: 'var(--insura-space-2)' }}>Status</dt>
+            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Status</dt>
             <dd style={{ margin: 0 }}>
               <span className={`badge ${policy.status === 'ACTIVE' ? 'badge-success' : policy.status === 'CANCELLED' ? 'badge-warning' : 'badge-neutral'}`}>
                 {policy.status}
               </span>
             </dd>
 
-            <dt className="text-xs text-muted" style={{ marginTop: 'var(--insura-space-2)' }}>Beginn</dt>
+            <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Beginn</dt>
             <dd style={{ margin: 0 }}>{new Date(policy.startDate).toLocaleDateString()}</dd>
 
             {policy.endDate && (
               <>
-                <dt className="text-xs text-muted" style={{ marginTop: 'var(--insura-space-2)' }}>Ende</dt>
+                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Ende</dt>
                 <dd style={{ margin: 0 }}>{new Date(policy.endDate).toLocaleDateString()}</dd>
               </>
             )}
 
             {policy.premiumAmount != null && (
               <>
-                <dt className="text-xs text-muted" style={{ marginTop: 'var(--insura-space-2)' }}>Prämie</dt>
+                <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>Prämie</dt>
                 <dd style={{ margin: 0 }}>{policy.premiumAmount} EUR</dd>
               </>
             )}
@@ -139,7 +139,7 @@ export default function PolicyDetailPage(): ReactElement {
               <p>Keine Personen eingetragen.</p>
             </EmptyState>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: 'var(--insura-space-4)' }}>
+            <ul style={{ margin: 0, paddingLeft: 'var(--versigo-space-4)' }}>
               {policy.coveredPersons.map((p) => (
                 <li key={p.id}>{p.personName} ({p.relationType})</li>
               ))}
@@ -154,16 +154,16 @@ export default function PolicyDetailPage(): ReactElement {
               <p>Keine Portal-Links vorhanden.</p>
             </EmptyState>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: 'var(--insura-space-4)', listStyle: 'none' }}>
+            <ul style={{ margin: 0, paddingLeft: 'var(--versigo-space-4)', listStyle: 'none' }}>
               {policy.portalLinks.map((l) => {
                 const displayName = l.catalog?.displayName ?? l.providerKey;
                 const targetUrl = l.deepLinkUrl ?? l.portalUrl;
                 return (
-                  <li key={l.id} style={{ marginBottom: 'var(--insura-space-3)' }}>
+                  <li key={l.id} style={{ marginBottom: 'var(--versigo-space-3)' }}>
                     <strong>{displayName}</strong>
                     {l.connector && (
                       <span className={`badge ${l.connector.available ? 'badge-success' : 'badge-neutral'}`}
-                        style={{ marginLeft: 'var(--insura-space-2)' }}
+                        style={{ marginLeft: 'var(--versigo-space-2)' }}
                         title={`Plugin: ${l.connector.displayName}`}>
                         {l.connector.experimental ? 'Experimentell' : 'Connector'}
                         {!l.connector.available ? ' (deaktiviert)' : ''}
@@ -177,7 +177,7 @@ export default function PolicyDetailPage(): ReactElement {
                       </div>
                     )}
                     {l.accessHint && (
-                      <div className="text-xs text-muted" style={{ marginTop: 'var(--insura-space-1)' }}>
+                      <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
                         {l.accessHint}
                       </div>
                     )}
@@ -189,7 +189,7 @@ export default function PolicyDetailPage(): ReactElement {
         </Card>
       </div>
 
-      <div style={{ marginTop: 'var(--insura-space-6)' }}>
+      <div style={{ marginTop: 'var(--versigo-space-6)' }}>
         <CoverageSummarySection householdId="default" policyId={policyId} />
       </div>
     </AppShell>

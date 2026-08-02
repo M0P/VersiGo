@@ -83,11 +83,11 @@ export default function AdminDashboardPage(): ReactElement {
         <SectionHeader title="Konfigurationsvalidierung" />
         <p>
           Gesamtstatus:{' '}
-          <strong style={{ color: validation?.valid ? 'var(--insura-success)' : 'var(--insura-danger)' }}>
+          <strong style={{ color: validation?.valid ? 'var(--versigo-success)' : 'var(--versigo-danger)' }}>
             {validation?.valid ? 'Gültig' : 'Fehlerhaft'}
           </strong>
         </p>
-        <div className="table-container" style={{ marginTop: 'var(--insura-space-4)' }}>
+        <div className="table-container" style={{ marginTop: 'var(--versigo-space-4)' }}>
           <table className="table">
             <thead>
               <tr>

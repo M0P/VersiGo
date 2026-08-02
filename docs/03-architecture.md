@@ -48,7 +48,7 @@ Empfohlen wird ein **modularer Monolith** mit vertikal geschnittenen Feature-Sli
 ```
 
 ### Netzwerke
-- Alle Dienste kommunizieren über das interne Bridge-Netzwerk `insura-internal`.
+- Alle Dienste kommunizieren über das interne Bridge-Netzwerk `versigo-internal`.
 - Nur öffentliche Dienste (Web, API) exponieren Ports nach außen.
 - Datenbank, Redis, Worker sind nur intern erreichbar.
 

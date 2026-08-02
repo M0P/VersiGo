@@ -264,7 +264,7 @@ export default function AdminSettingsPage(): ReactElement {
       {error && <Alert variant="danger" title="Fehler">{error}</Alert>}
 
       {/* Werkzeugleiste: Suche + Filter */}
-      <Card style={{ marginBottom: 'var(--insura-space-6)' }}>
+      <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <div className="settings-toolbar">
           <div className="form-group" style={{ flex: 2, minWidth: 220 }}>
             <label className="form-label" htmlFor="settings-search">Suche</label>
@@ -320,7 +320,7 @@ export default function AdminSettingsPage(): ReactElement {
         </Card>
       ) : (
         grouped.map(([group, groupEntries]) => (
-          <Card key={group} className="settings-group" style={{ marginBottom: 'var(--insura-space-6)' }}>
+          <Card key={group} className="settings-group" style={{ marginBottom: 'var(--versigo-space-6)' }}>
             <SectionHeader title={group} />
             <div className="settings-entry-list">
               {groupEntries.map((entry) => (

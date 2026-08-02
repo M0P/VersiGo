@@ -12,7 +12,7 @@ Siehe `.env.example` für alle Konfigurationsvariablen. Erforderliche Variablen:
 
 | Variable | Beschreibung | Beispiel |
 |----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL-Verbindung | `postgresql://insura:pass@db:5432/insura` |
+| `DATABASE_URL` | PostgreSQL-Verbindung | `postgresql://versigo:pass@db:5432/versigo` |
 | `REDIS_URL` | Redis-Verbindung | `redis://redis:6379` |
 | `SESSION_SECRET` | Session-Secret (min. 32 Zeichen) | `openssl rand -hex 32` |
 | `SETTINGS_ENCRYPTION_KEY` | AES-256-GCM Schlüssel (64 Hex-Zeichen) | `openssl rand -hex 32` |
@@ -78,24 +78,24 @@ URLs, Tokens oder Zugangsdaten (siehe `docs/05-feature-slices.md`).
 
 #### Datenbank
 ```bash
-docker compose exec -T db pg_dump -U insura insura > backup_$(date +%Y%m%d).sql
+docker compose exec -T db pg_dump -U versigo versigo > backup_$(date +%Y%m%d).sql
 ```
 
 #### Uploads
 ```bash
-docker run --rm -v insura_uploads-data:/data -v $(pwd):/backup alpine tar czf /backup/uploads_$(date +%Y%m%d).tar.gz -C /data .
+docker run --rm -v versigo_uploads-data:/data -v $(pwd):/backup alpine tar czf /backup/uploads_$(date +%Y%m%d).tar.gz -C /data .
 ```
 
 ### Restore
 
 #### Datenbank
 ```bash
-docker compose exec -T db psql -U insura -d insura < backup_20260101.sql
+docker compose exec -T db psql -U versigo -d versigo < backup_20260101.sql
 ```
 
 #### Uploads
 ```bash
-docker run --rm -v insura_uploads-data:/data -v $(pwd):/backup alpine tar xzf /backup/uploads_20260101.tar.gz -C /data
+docker run --rm -v versigo_uploads-data:/data -v $(pwd):/backup alpine tar xzf /backup/uploads_20260101.tar.gz -C /data
 ```
 
 ### Migration
@@ -126,7 +126,7 @@ docker compose logs api
 
 #### Datenbankverbindungsfehler
 ```bash
-docker compose exec -T db pg_isready -U insura -d insura
+docker compose exec -T db pg_isready -U versigo -d versigo
 ```
 
 #### Worker startet nicht

@@ -75,8 +75,8 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactEleme
 
     // Restore the accent from the CSS custom properties the bootstrap script set.
     const root = document.documentElement;
-    const hRaw = root.style.getPropertyValue('--insura-accent-h');
-    const sRaw = root.style.getPropertyValue('--insura-accent-s');
+    const hRaw = root.style.getPropertyValue('--versigo-accent-h');
+    const sRaw = root.style.getPropertyValue('--versigo-accent-s');
     const h = Number.parseFloat(hRaw);
     const s = Number.parseFloat(sRaw);
     if (Number.isFinite(h) && Number.isFinite(s)) {
@@ -132,20 +132,20 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactEleme
   useEffect(() => {
     if (!ready) return;
     const root = document.documentElement;
-    root.style.setProperty('--insura-accent-h', String(accentH));
-    root.style.setProperty('--insura-accent-s', `${accentS}%`);
-    root.style.setProperty('--insura-accent-l', '50%');
+    root.style.setProperty('--versigo-accent-h', String(accentH));
+    root.style.setProperty('--versigo-accent-s', `${accentS}%`);
+    root.style.setProperty('--versigo-accent-l', '50%');
     // Derived values
-    root.style.setProperty('--insura-accent', `hsl(${accentH}, ${accentS}%, 50%)`);
-    root.style.setProperty('--insura-accent-light', `hsl(${accentH}, ${accentS}%, 85%)`);
-    root.style.setProperty('--insura-accent-dark', `hsl(${accentH}, ${accentS}%, 35%)`);
-    root.style.setProperty('--insura-accent-soft', `hsl(${accentH}, ${accentS}%, 95%)`);
-    root.style.setProperty('--insura-accent-text', `hsl(${accentH}, ${accentS}%, 98%)`);
-    root.style.setProperty('--insura-accent-on-dark', `hsl(${accentH}, ${accentS}%, 90%)`);
-    root.style.setProperty('--insura-focus-color', `var(--insura-accent)`);
+    root.style.setProperty('--versigo-accent', `hsl(${accentH}, ${accentS}%, 50%)`);
+    root.style.setProperty('--versigo-accent-light', `hsl(${accentH}, ${accentS}%, 85%)`);
+    root.style.setProperty('--versigo-accent-dark', `hsl(${accentH}, ${accentS}%, 35%)`);
+    root.style.setProperty('--versigo-accent-soft', `hsl(${accentH}, ${accentS}%, 95%)`);
+    root.style.setProperty('--versigo-accent-text', `hsl(${accentH}, ${accentS}%, 98%)`);
+    root.style.setProperty('--versigo-accent-on-dark', `hsl(${accentH}, ${accentS}%, 90%)`);
+    root.style.setProperty('--versigo-focus-color', `var(--versigo-accent)`);
     // Cache for the inline bootstrap script on the next visit
     try {
-      localStorage.setItem('insura:accent', JSON.stringify({ h: accentH, s: accentS }));
+      localStorage.setItem('versigo:accent', JSON.stringify({ h: accentH, s: accentS }));
     } catch {
       // Ignore storage failures (e.g. private mode)
     }
@@ -156,7 +156,7 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactEleme
     if (!ready) return;
     document.documentElement.setAttribute('data-theme', theme);
     try {
-      localStorage.setItem('insura:theme', theme);
+      localStorage.setItem('versigo:theme', theme);
     } catch {
       // Ignore storage failures (e.g. private mode)
     }

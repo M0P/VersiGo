@@ -18,8 +18,8 @@ import {
   DatabaseService,
   getSettingDefinition,
   validateSettingValue,
-} from '@insura/foundation';
-import type { SettingDefinition } from '@insura/foundation';
+} from '@versigo/foundation';
+import type { SettingDefinition } from '@versigo/foundation';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
 import { Roles } from '../identity/roles.decorator';

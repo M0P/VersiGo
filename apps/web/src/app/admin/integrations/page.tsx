@@ -65,9 +65,9 @@ export default function AdminIntegrationsPage(): ReactElement {
 
       {error && <Alert variant="danger">Fehler: {error}</Alert>}
 
-      <Card style={{ marginBottom: 'var(--insura-space-6)' }}>
+      <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <SectionHeader title="Connectivity-Test" />
-        <form onSubmit={handleTest} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--insura-space-3)', maxWidth: 480 }}>
+        <form onSubmit={handleTest} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--versigo-space-3)', maxWidth: 480 }}>
           <div className="form-group">
             <label className="form-label">Integrations-Key</label>
             <Select
@@ -119,7 +119,7 @@ export default function AdminIntegrationsPage(): ReactElement {
           <SectionHeader title="Testergebnis" />
           <p>
             Status:{' '}
-            <strong style={{ color: result.success ? 'var(--insura-success)' : 'var(--insura-danger)' }}>
+            <strong style={{ color: result.success ? 'var(--versigo-success)' : 'var(--versigo-danger)' }}>
               {result.success ? 'Erfolgreich' : 'Fehlgeschlagen'}
             </strong>
           </p>

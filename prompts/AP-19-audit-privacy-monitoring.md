@@ -6,7 +6,7 @@ Audit, Datenschutzexport/-löschung, Health Checks, Monitoring und Produktionsh�
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-19 im Projekt Insura.
+Du implementierst AP-19 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

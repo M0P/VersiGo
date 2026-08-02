@@ -104,9 +104,9 @@ export default function LoginPage(): ReactElement {
 
   if (configError) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
         <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-          <h1 style={{ marginBottom: 'var(--insura-space-2)' }}>Anmeldung</h1>
+          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>Anmeldung</h1>
           <Alert variant="danger">
             Der Anmeldedienst ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.
           </Alert>
@@ -117,11 +117,11 @@ export default function LoginPage(): ReactElement {
 
   if (!config) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
         <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-          <h1 style={{ marginBottom: 'var(--insura-space-2)' }}>Anmeldung</h1>
+          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>Anmeldung</h1>
           <p className="text-muted">Lade Anmeldeoptionen...</p>
-          <div style={{ marginTop: 'var(--insura-space-4)' }}>
+          <div style={{ marginTop: 'var(--versigo-space-4)' }}>
             <InlineSpinner />
           </div>
         </Card>
@@ -133,9 +133,9 @@ export default function LoginPage(): ReactElement {
 
   if (!hasAnyAuth) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
         <Card style={{ maxWidth: 400, width: '100%', textAlign: 'center' }}>
-          <h1 style={{ marginBottom: 'var(--insura-space-2)' }}>Anmeldung</h1>
+          <h1 style={{ marginBottom: 'var(--versigo-space-2)' }}>Anmeldung</h1>
           <Alert variant="warning">
             Es ist keine Anmeldeart konfiguriert. Bitte wenden Sie sich an Ihre Administration.
           </Alert>
@@ -145,11 +145,11 @@ export default function LoginPage(): ReactElement {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--insura-space-4)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 'var(--versigo-space-4)' }}>
       <Card style={{ maxWidth: 420, width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--insura-space-6)' }}>
-          <h1 style={{ marginBottom: 'var(--insura-space-1)' }}>
-            <span style={{ color: 'var(--insura-accent)' }}>In</span>sura
+        <div style={{ textAlign: 'center', marginBottom: 'var(--versigo-space-6)' }}>
+          <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
+            <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
           </h1>
           <p className="text-muted">Versicherungsverwaltung</p>
         </div>
@@ -195,21 +195,21 @@ export default function LoginPage(): ReactElement {
         )}
 
         {config.localEnabled && config.registrationEnabled && (
-          <p className="text-sm text-muted" style={{ textAlign: 'center', marginTop: 'var(--insura-space-4)' }}>
+          <p className="text-sm text-muted" style={{ textAlign: 'center', marginTop: 'var(--versigo-space-4)' }}>
             Noch kein Konto?{' '}
-            <a href="/register" style={{ color: 'var(--insura-accent)' }}>
+            <a href="/register" style={{ color: 'var(--versigo-accent)' }}>
               Registrieren
             </a>
           </p>
         )}
 
         {config.localEnabled && config.oidcEnabled && (
-          <hr role="separator" aria-label="oder" style={{ margin: 'var(--insura-space-6) 0' }} />
+          <hr role="separator" aria-label="oder" style={{ margin: 'var(--versigo-space-6) 0' }} />
         )}
 
         {config.oidcEnabled && (
           <div style={{ textAlign: 'center' }}>
-            <p className="text-sm text-muted" style={{ marginBottom: 'var(--insura-space-3)' }}>
+            <p className="text-sm text-muted" style={{ marginBottom: 'var(--versigo-space-3)' }}>
               Alternativ mit Ihrem Identity-Provider anmelden:
             </p>
             <a href={`${apiBaseUrl}/auth/login`}>

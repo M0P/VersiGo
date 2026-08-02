@@ -77,16 +77,16 @@ export default function HouseholdCostsPage(): ReactElement {
         }
       />
 
-      <div className="split-layout" style={{ marginBottom: 'var(--insura-space-6)' }}>
+      <div className="split-layout" style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <Card>
           <h3>Gesamt (jährlich)</h3>
-          <p style={{ fontSize: 'var(--insura-font-size-3xl)', fontWeight: 'var(--insura-font-weight-bold)', color: 'var(--insura-accent)', margin: 0 }}>
+          <p style={{ fontSize: 'var(--versigo-font-size-3xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
             {summary.totalAnnualGross.toFixed(2)} EUR
           </p>
         </Card>
         <Card>
           <h3>Anzahl Versicherungen</h3>
-          <p style={{ fontSize: 'var(--insura-font-size-3xl)', fontWeight: 'var(--insura-font-weight-bold)', color: 'var(--insura-accent)', margin: 0 }}>
+          <p style={{ fontSize: 'var(--versigo-font-size-3xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
             {summary.policyCount}
           </p>
         </Card>

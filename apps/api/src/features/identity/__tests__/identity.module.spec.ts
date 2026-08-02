@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IdentityModule } from '../identity.module';
-import { CapabilityFlagsService } from '@insura/foundation';
+import { CapabilityFlagsService } from '@versigo/foundation';
 import { LocalAdminBootstrapService } from '../local-admin.bootstrap';
 
 type Flags = { oidc: boolean; local: boolean };

@@ -12,7 +12,7 @@
 ### Findings
 
 - [Minor] `apps/web/src/styles/globals.css:1145-1146` — duplicated `border-bottom` declaration in the mobile `.table td` rule
-  - Evidence: Within the `@media (max-width: 639px)` block, `.table td` declares `border-bottom: none;` immediately followed by `border-bottom: var(--insura-border-width) solid var(--insura-border);`. The first declaration is dead code — the second always wins, so the reset has no effect (the intended behaviour of the latter declaration is preserved). Harmless at runtime, but it is a leftover/confusing duplicate in the new design-system stylesheet.
+  - Evidence: Within the `@media (max-width: 639px)` block, `.table td` declares `border-bottom: none;` immediately followed by `border-bottom: var(--versigo-border-width) solid var(--versigo-border);`. The first declaration is dead code — the second always wins, so the reset has no effect (the intended behaviour of the latter declaration is preserved). Harmless at runtime, but it is a leftover/confusing duplicate in the new design-system stylesheet.
   - Required fix: Remove the `border-bottom: none;` line (1145) so the rule contains a single `border-bottom` declaration.
 
 ### Verification

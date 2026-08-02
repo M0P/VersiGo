@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
-import { DatabaseService } from '@insura/foundation';
-import { ENCRYPTION_PORT, type EncryptionPort } from '@insura/foundation';
+import { DatabaseService } from '@versigo/foundation';
+import { ENCRYPTION_PORT, type EncryptionPort } from '@versigo/foundation';
 import { Inject } from '@nestjs/common';
 
 /**

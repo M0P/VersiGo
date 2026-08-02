@@ -2,7 +2,7 @@
 
 ## Ziel
 
-Erweitere Insura um getrennte, sichere und responsive Profil- sowie System-Einstellungen. `USER` und `ADMIN` erhalten persönliche Profileinstellungen; `ADMIN` erhält zusätzlich eine zentrale Systemkonfiguration für alle fachlich und betrieblich konfigurierbaren Optionen. Datenbankgestützte UI-Konfiguration hat Vorrang vor `.env`; `.env` bleibt ausschließlich der dokumentierte Fallback. Für jeden Fallback muss die Admin-UI sichtbar machen, dass, warum und mit welchem effektiven Wert der Fallback greift.
+Erweitere VersiGo um getrennte, sichere und responsive Profil- sowie System-Einstellungen. `USER` und `ADMIN` erhalten persönliche Profileinstellungen; `ADMIN` erhält zusätzlich eine zentrale Systemkonfiguration für alle fachlich und betrieblich konfigurierbaren Optionen. Datenbankgestützte UI-Konfiguration hat Vorrang vor `.env`; `.env` bleibt ausschließlich der dokumentierte Fallback. Für jeden Fallback muss die Admin-UI sichtbar machen, dass, warum und mit welchem effektiven Wert der Fallback greift.
 
 Dies ist ein vollständiger vertikaler Slice aus Settings-Katalog, Prioritätsauflösung, Persistenz/Verschlüsselung, API, Admin- und Profil-UI, Audit, Tests, Compose/CI und Dokumentation. Die Änderung muss auf dem in der Rollen-/Rechte-Funktion etablierten Modell aufbauen; falls diese noch nicht umgesetzt ist, muss der Slice die erforderlichen Berechtigungsgrenzen explizit und kompatibel vorbereiten, ohne konkurrierende Rollenlogik einzuführen.
 

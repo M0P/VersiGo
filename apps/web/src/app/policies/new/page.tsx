@@ -98,7 +98,7 @@ export default function NewPolicyPage(): ReactElement {
             />
           </FormField>
 
-          <div style={{ marginTop: 'var(--insura-space-6)' }}>
+          <div style={{ marginTop: 'var(--versigo-space-6)' }}>
             <Button type="submit" disabled={submitting}>
               {submitting ? <><InlineSpinner /> Speichert...</> : 'Erstellen'}
             </Button>

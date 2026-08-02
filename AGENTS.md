@@ -70,17 +70,17 @@ have cost agents significant time in the past — read carefully:
 3. **Layer cache is normally reliable.** After editing source files,
    `COPY apps/ apps/` / `COPY packages/ packages/` must show a NEW layer ID
    (no `Using cache` line) in the build log. If a cached layer looks wrong,
-   force it: `podman build --no-cache --target build -t insura-test:latest .`
+   force it: `podman build --no-cache --target build -t versigo-test:latest .`
 4. **Fast verification of image content** (no compose involved):
-   `podman run --rm --entrypoint sh insura-test:latest -c 'sha256sum <path>; grep -c "<pattern>" <path>'`
+   `podman run --rm --entrypoint sh versigo-test:latest -c 'sha256sum <path>; grep -c "<pattern>" <path>'`
 5. **Image names are prefixed** with `localhost/` (e.g.
-   `localhost/insura:latest`, `localhost/insura-test:latest`). Stray older
-   images (e.g. `localhost/insura:test`) may exist and are not used.
+   `localhost/versigo:latest`, `localhost/versigo-test:latest`). Stray older
+   images (e.g. `localhost/versigo:test`) may exist and are not used.
 6. **Transient crun errors** like `unable to start container ... exec.fifo`
    appear occasionally in compose logs; simply retry the command.
-7. **Two separate stacks coexist:** the running dev stack (`insura_*`
-   containers, image `localhost/insura:latest`) and the test stack
-   (`insura_test_*`, image `localhost/insura-test:latest`, from
+7. **Two separate stacks coexist:** the running dev stack (`versigo_*`
+   containers, image `localhost/versigo:latest`) and the test stack
+   (`versigo_test_*`, image `localhost/versigo-test:latest`, from
    `docker-compose.test.yml`). They share no volumes or networks.
 8. **Disk fills up quickly.** Podman storage sits on `/var/home` (a 123 GB
    partition that also holds the host home directory). Repeated image builds
@@ -99,7 +99,7 @@ have cost agents significant time in the past — read carefully:
      only the ones you created — never touch pre-existing containers such as
      `tk-epa-ubuntu` or `libation-env`).
    - Build/test images produced by your session
-     (`podman rmi localhost/insura:latest localhost/insura-test:latest` after
+     (`podman rmi localhost/versigo:latest localhost/versigo-test:latest` after
      the final verification run) plus any dangling images
      (`podman image prune -f`).
    - Scratch volumes (`podman volume ls` + `podman volume rm` for volumes you
@@ -108,6 +108,24 @@ have cost agents significant time in the past — read carefully:
      fedora, ...) or containers that were already running before your
      session. Verify with `podman ps -a`, `podman images` and `df -h`
      afterwards.
+10. **Never redirect podman storage to another directory.** Do NOT set
+    `CONTAINERS_STORAGE_CONF` (or `STORAGE_DRIVER`/`graphroot` overrides)
+    to a scratch directory in `/tmp`, `/home`, or anywhere else. The podman
+    storage root is fixed (the `containers/storage` subtree of the program
+    data partition). If the disk is full:
+    - Clean up your own artifacts first: `podman system prune -a -f`,
+      remove images/volumes/containers you created (see point 9), then
+      re-check `df -h`.
+    - If that is not enough, stop and ask the user — do NOT relocate the
+      storage. Redirecting storage to `/tmp` (a tmpfs) or another partition
+      breaks the machine's storage model and leaves root/subuid-owned
+      artifacts that only `podman unshare` can remove.
+11. **Clean up every file you create, in every location.** Any scratch file,
+    config, log, or directory you write outside the repo during a session
+    (e.g. under `/tmp`) must be deleted before you finish. Leftover files
+    from interrupted builds may be owned by root or by subordinate UIDs; to
+    remove those use `podman unshare rm -rf <path>`. Verify afterwards that
+    the paths you created are gone.
 
 ## Required Future-Feature Contract
 

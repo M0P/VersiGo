@@ -1,8 +1,8 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
-import { DatabaseService, SettingsResolverService } from '@insura/foundation';
-import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@insura/foundation';
+import { DatabaseService, SettingsResolverService } from '@versigo/foundation';
+import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/foundation';
 import type { Prisma } from '@prisma/client';
 import axios, { AxiosError } from 'axios';
 

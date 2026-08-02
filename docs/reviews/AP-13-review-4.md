@@ -25,11 +25,11 @@
 
 **Delta 2 — globals.css:**
 - `.detail-list` (lines 717-733): correct `auto 1fr` grid; conditional `<>...</>` fragments flatten into the grid so dt/dd pairs auto-place correctly.
-- Mobile topbar `z-index: calc(var(--insura-z-drawer) + 1)` = 301 over drawer 300 (lines 1106-1111): correct layering, toggle remains reachable/clickable above the open drawer; the mobile media block follows the tablet block in source order so the override wins. Sidebar `padding-top: var(--insura-space-16)` (64px) clears the 56px topbar.
+- Mobile topbar `z-index: calc(var(--versigo-z-drawer) + 1)` = 301 over drawer 300 (lines 1106-1111): correct layering, toggle remains reachable/clickable above the open drawer; the mobile media block follows the tablet block in source order so the override wins. Sidebar `padding-top: var(--versigo-space-16)` (64px) clears the 56px topbar.
 - Migration-naming judgment: **confirmed, no rename needed.** `20260730130000_ap13_user_preferences` matches the `YYYYMMDDHHMMSS_apN_description` convention of every sibling migration. The only oddity is that `20260730120000_ap14_local_credentials` sorts before ap13; this is harmless because neither migration depends on the other (both only FK to `users`), and `prisma migrate deploy` passed.
 
 **Delta 3 — app-shell matchMedia:**
-- Listener add/remove symmetry correct for both `keydown` and `change` (lines 45-51); cleanup restores `previousOverflow` captured at effect start; no stale closures (`setSidebarOpen` is stable, deps `[sidebarOpen]` correct). The 640px breakpoint matches the CSS tablet breakpoint (`--insura-bp-tablet-min`). Drawer cannot be opened at ≥640px because the toggle is `display:none` there, so the "open while already desktop" edge case is unreachable.
+- Listener add/remove symmetry correct for both `keydown` and `change` (lines 45-51); cleanup restores `previousOverflow` captured at effect start; no stale closures (`setSidebarOpen` is stable, deps `[sidebarOpen]` correct). The 640px breakpoint matches the CSS tablet breakpoint (`--versigo-bp-tablet-min`). Drawer cannot be opened at ≥640px because the toggle is `display:none` there, so the "open while already desktop" edge case is unreachable.
 
 **Security (user-preferences API):** All endpoints protected by the global `SessionAuthGuard` (APP_GUARD, `identity.module.ts:22`); reads/writes scoped to the session user via `userId` composite key; `ui:accentColour` values strictly validated (3/6-digit hex, `user-preferences.service.ts:27-36`); no cross-user/household leakage. Service tests cover validation rejection and scoping.
 

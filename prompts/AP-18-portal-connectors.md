@@ -6,7 +6,7 @@ Versicherungsportal-Katalog, Deeplinks und Plugin-Rahmen für optionale Connecto
 ## Prompt für das Umsetzungsmodell
 
 ```text
-Du implementierst AP-18 im Projekt Insura.
+Du implementierst AP-18 im Projekt VersiGo.
 
 Verbindliche Referenzen:
 - `/prompts/00-gemeinsame-regeln.md`

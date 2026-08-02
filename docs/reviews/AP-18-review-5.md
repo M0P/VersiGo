@@ -38,7 +38,7 @@ Both Minor findings addressed as follows (verified by the canonical test suite a
 ### Verification after fixes
 - Canonical suite `docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test`: EXIT=0, "All checks passed!", 44 API test files / 517 API tests, web 18, foundation 75, worker 4.
 - Compose smoke test `./scripts/compose-smoke-test.sh --build`: EXIT=0, all checks including 8f (authenticated catalog/plugins) and step 9 (unauthenticated 401).
-- Cleanup (per new AGENTS.md rule 9 / `prompts/00-gemeinsame-regeln.md` "Aufräum-Pflicht"): removed debug containers `iter-test` and `mig-pg` (+ the `mig-pg` volume), removed session images `localhost/insura:latest` and `localhost/insura-test:latest`, pruned dangling images; pre-existing containers (`tk-epa-ubuntu`, `libation-env`) and shared base images (node/postgres/redis/ubuntu/fedora) left untouched.
+- Cleanup (per new AGENTS.md rule 9 / `prompts/00-gemeinsame-regeln.md` "Aufräum-Pflicht"): removed debug containers `iter-test` and `mig-pg` (+ the `mig-pg` volume), removed session images `localhost/versigo:latest` and `localhost/versigo-test:latest`, pruned dangling images; pre-existing containers (`tk-epa-ubuntu`, `libation-env`) and shared base images (node/postgres/redis/ubuntu/fedora) left untouched.
 
 ### Final review state (across all iterations)
 | Iteration | Critical | High | Medium | Minor | Verdict |
