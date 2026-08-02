@@ -1,24 +1,3 @@
-# Next Work Package
-
-## Status
-Work package **AP-22** (rename product Insura → VersiGo) is committed at hash `db9f9e5` on branch `feat/AP-22-new-name`. Final state: 130 files changed (873 insertions, 850 deletions). The old-identifier search is clean (`grep -rniE '\binsura\b|@insura/|insura[-_]'` returns zero hits outside `insurance*` domain terms); both canonical gates are green after a fresh storage wipe: the docker-compose test suite passed ("All checks passed!", 50 test files / 554 tests, lint + typecheck + prisma migrate deploy) and `./scripts/compose-smoke-test.sh --build` passed all steps under the new `versigo` compose project name. Cleanup was performed per AGENTS.md rules 9–11 (session images `localhost/versigo:latest` / `localhost/versigo-test:latest`, dangling images, session volumes removed; shared base images left untouched). `/tmp/opencode` is empty.
-
-AGENTS.md was extended with two new rules (10: never redirect podman storage to another directory; 11: clean up every file created in every location) so that the scratch-storage incident from the AP-22 session cannot recur.
-
-NOTE on branch base for the next package: AP-22 is committed but **not yet merged into `main`** (the user pushes/merges manually). The next agent must base `feat/AP-21-multi-language-support` on a `main` that already contains the VersiGo rename (commit `db9f9e5`), i.e. after the user has merged AP-22, or explicitly branch from `feat/AP-22-new-name`. The whole repository now uses `VersiGo`/`versigo` naming; the next agent must not reintroduce `Insura` identifiers.
-
-The next work package in the sequence is **AP-21 — multi-language support**.
-
-## Prompt for the next coding-agent
-
-Below is the full content of the next work package. Implement only this work package. Use the same review loop (invoke @code-reviewer, save each result verbatim under `docs/reviews/`, fix Critical/High/Medium findings, iterate until 0 Critical / 0 High / 0 Medium and at most 8 Minor findings, with the canonical Docker Compose test suite green). Clean up all Docker/Podman artifacts you create at the end of the work package (see AGENTS.md rules 9–11). Do not start any later work package.
-
----
-
-/prompts/AP-21-multi-language-support.md
-
-# Arbeitspaket AP-21: multi-language support
-
 Du implementierst AP-21 im Projekt VersiGo.
 
 Verbindliche Referenzen:
