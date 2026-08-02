@@ -46,7 +46,8 @@ Admin-UI zeigt `uiValueInvalid` sichtbar an.
 - Admin-API: `apps/api/src/features/system-config/` (`/admin/system-config`)
 - Profil-API: `apps/api/src/features/profile/` (`/user/profile`)
 - Persönliche UI-Präferenzen: `apps/api/src/features/user-preferences/`
-  (versionierte Katalog-Allowlist `ui:accentColour`, `theme`, `language`)
+  (versionierte Katalog-Allowlist `ui:accentColour`, `theme`; die Sprache liegt
+  seit AP-21 in `users.locale` bzw. der Sitzung, siehe unten)
 
 API und Worker verwenden exakt dieselbe Auflösung. Features lesen **niemals**
 direkt `process.env` und umgehen damit keine UI-Overrides.
@@ -56,6 +57,7 @@ direkt `process.env` und umgehen damit keine UI-Overrides.
 | Bereich | `READ_ONLY` | `USER` | `ADMIN` |
 |---|---|---|---|
 | Profil & persönliche UI-Präferenzen | Kein Zugriff (API: 403) | Eigenes Profil lesen/ändern | Eigenes Profil lesen/ändern |
+| Sprache (`/user/language`, AP-21) | **Nur eigene Sprache lesen/ändern, sitzungsbezogen (nie persistiert)** | Eigene Sprache lesen/ändern (persistent) | Eigene Sprache lesen/ändern (persistent) |
 | Systemeinstellungen (`/admin/system-config`) | Kein Zugriff (403) | Kein Zugriff (403) | Vollzugriff auf erlaubte Schlüssel |
 
 Die API erzwingt die Grenzen unabhängig von sichtbaren Navigationspunkten.
@@ -129,15 +131,33 @@ setzbar; die Admin-API lehnt diese Schlüssel ab (`ForbiddenException`):
 ## Persönliche Profileinstellungen (versionierte Allowlist)
 
 - `User.displayName` (Profil) – über `PATCH /user/profile` (1–100 Zeichen).
-- `User.locale` – über `PATCH /user/profile` (Allowlist: `de-DE`, `en-US`,
-  `fr-FR`, `it-IT`, `es-ES`, `pt-BR`).
+- `User.locale` – **Sprachcode** (`en` | `de`), Default `en` (globaler
+  Standard). Seit AP-21 **nicht** mehr über `PATCH /user/profile`, sondern
+  über den Sprachen-Endpunkt `/user/language` verwaltet (siehe unten).
 - `UserPreference.key` – persönliche UI-Präferenzen, versionierter Katalog:
   - `ui:accentColour` – Hex-Farbwert (#rrggbb) für die Akzentfarbe.
   - `theme` – `light` | `dark` | `system`.
-  - `language` – Locale-Allowlist (identisch zur Profil-Locale).
-- Änderungen sind auf den aktuellen Nutzer begrenzt. `READ_ONLY` erhält 403.
-- Keine sensiblen Zugangsdaten, Rollen, Freigaben oder Systemwerte sind über
-  die Profilseite editierbar.
+  - (Die frühere Präferenz `language` ist seit AP-21 obsolet und wurde per
+    Migration entfernt; Sprache liegt jetzt in `users.locale` bzw. der Sitzung.)
+- Änderungen am Profil sind auf den aktuellen Nutzer begrenzt. `READ_ONLY`
+  erhält für das Profil 403 – **ausgenommen** der Sprachen-Endpunkt.
+
+## Sprache (AP-21: Multi-Language Support)
+
+- Endpunkt: `GET`/`PUT /user/language` (alle authentifizierten Rollen,
+  inkl. `READ_ONLY`).
+- Angefragt/gesetzt wird ein Sprachcode aus `en` | `de`; Englisch ist der
+  globale Standard. Ungültige Werte liefern `400`, unbekannte Locale-Werte
+  (z. B. Altbestand `fr-FR`) fallen sicher auf `en` zurück.
+- **`USER`/`ADMIN`:** `users.locale` wird persistiert (`persistence:
+  "persistent"`); Auflösung: Konto → Browserpräferenz (Accept-Language) →
+  `en`.
+- **`READ_ONLY`:** Nur die eigene Sprache, **ausschließlich sitzungsbezogen**
+  (`persistence: "session"`, `express-session`-Feld `language`); niemals in
+  der Datenbank, kein Audit, kein Verlauf. Auflösung: Sitzung →
+  Browserpräferenz → `en`.
+- Es gibt **keine systemweite Sprache** und keine Übersetzungsverwaltung in
+  der UI – die Kataloge liegen im Web-Repo (`apps/web/src/i18n/locales/`).
 
 ## Admin-UI-Verhalten (`/admin/settings`)
 

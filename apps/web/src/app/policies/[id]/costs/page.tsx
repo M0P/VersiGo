@@ -10,8 +10,11 @@ import { Button } from '../../../../components/ui/button';
 import { Loading } from '../../../../components/ui/loading';
 import { Input, Select, FormField } from '../../../../components/ui/form-field';
 import { NAV_SECTIONS } from '../../../../components/ui/nav-config';
+import { formatCurrency, formatDate, useI18n } from '../../../../i18n';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+
+const FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL'];
 
 type AnnualCost = {
   policyId: string;
@@ -43,6 +46,7 @@ type CostEntry = {
 export default function PolicyCostsPage(): ReactElement {
   const params = useParams();
   const policyId = params.id as string;
+  const { t, language } = useI18n();
   const [annual, setAnnual] = useState<AnnualCost | null>(null);
   const [entries, setEntries] = useState<CostEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,21 +105,21 @@ export default function PolicyCostsPage(): ReactElement {
     })
       .then((res) => {
         if (res.status === 401) { window.location.href = '/login'; return null; }
-        if (!res.ok) throw new Error('Fehler beim Anlegen');
+        if (!res.ok) throw new Error(t('costs.createError'));
         return res.json();
       })
       .then(() => {
         window.location.reload();
       })
-      .catch(() => alert('Fehler beim Anlegen der Kostenposition'))
+      .catch(() => alert(t('costs.createErrorDetail')))
       .finally(() => setSubmitting(false));
   }
 
   if (loading) {
     return (
       <AppShell navSections={NAV_SECTIONS}>
-        <PageHeader title="Kosten" />
-        <Loading label="Lade Kosten..." />
+        <PageHeader title={t('costs.policyTitle')} />
+        <Loading label={t('costs.policyLoading')} />
       </AppShell>
     );
   }
@@ -123,49 +127,51 @@ export default function PolicyCostsPage(): ReactElement {
   return (
     <AppShell navSections={NAV_SECTIONS}>
       <PageHeader
-        title="Kosten"
-        actions={<Link className="btn btn-secondary btn-sm" href={`/policies/${policyId}`}>Zurueck zur Police</Link>}
+        title={t('costs.policyTitle')}
+        actions={<Link className="btn btn-secondary btn-sm" href={`/policies/${policyId}`}>{t('costs.backToPolicy')}</Link>}
       />
 
       <Card>
-        <h2>Jaehresuebersicht</h2>
+        <h2>{t('costs.annualOverview')}</h2>
         {annual ? (
           <dl className="detail-list">
-            <dt>Jaereskosten (brutto)</dt><dd>{annual.annualGross.toFixed(2)} EUR</dd>
-            {annual.annualNet != null && <><dt>Jaereskosten (netto)</dt><dd>{annual.annualNet.toFixed(2)} EUR</dd></>}
-            <dt>Frequenz</dt><dd>{annual.calculationBasis.frequency}</dd>
-            <dt>Berechnungsbasis</dt><dd>seit {new Date(annual.calculationBasis.validFrom).toLocaleDateString()}</dd>
+            <dt>{t('costs.annualGross')}</dt><dd>{formatCurrency(annual.annualGross, language)}</dd>
+            {annual.annualNet != null && <><dt>{t('costs.annualNet')}</dt><dd>{formatCurrency(annual.annualNet, language)}</dd></>}
+            <dt>{t('costs.frequency')}</dt>
+            <dd>{t(`costs.frequencies.${annual.calculationBasis.frequency}`) ?? annual.calculationBasis.frequency}</dd>
+            <dt>{t('costs.calculationBasis')}</dt>
+            <dd>{t('costs.since', { date: formatDate(annual.calculationBasis.validFrom, language) })}</dd>
           </dl>
         ) : (
-          <p>Keine Kostenpositionen vorhanden.</p>
+          <p>{t('costs.noCostEntries')}</p>
         )}
       </Card>
 
       <Card>
-        <h2>Kostenpositionen</h2>
-        {entries.length === 0 && <p>Keine Eintraege.</p>}
+        <h2>{t('costs.entriesTitle')}</h2>
+        {entries.length === 0 && <p>{t('costs.noEntries')}</p>}
         {entries.length > 0 && (
           <div className="table-container">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Gueltig von</th>
-                  <th>Gueltig bis</th>
-                  <th>Brutto</th>
-                  <th>Netto</th>
-                  <th>Frequenz</th>
-                  <th>Notiz</th>
+                  <th>{t('costs.validFrom')}</th>
+                  <th>{t('costs.validTo')}</th>
+                  <th>{t('costs.gross')}</th>
+                  <th>{t('costs.net')}</th>
+                  <th>{t('costs.frequency')}</th>
+                  <th>{t('costs.note')}</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.map((e) => (
                   <tr key={e.id}>
-                    <td data-label="Gueltig von">{new Date(e.validFrom).toLocaleDateString()}</td>
-                    <td data-label="Gueltig bis">{e.validTo ? new Date(e.validTo).toLocaleDateString() : '-'}</td>
-                    <td data-label="Brutto">{Number(e.grossAmount).toFixed(2)} EUR</td>
-                    <td data-label="Netto">{e.netAmount != null ? `${Number(e.netAmount).toFixed(2)} EUR` : '-'}</td>
-                    <td data-label="Frequenz">{e.frequency}</td>
-                    <td data-label="Notiz">{e.note ?? '-'}</td>
+                    <td data-label={t('costs.validFrom')}>{formatDate(e.validFrom, language)}</td>
+                    <td data-label={t('costs.validTo')}>{e.validTo ? formatDate(e.validTo, language) : '-'}</td>
+                    <td data-label={t('costs.gross')}>{formatCurrency(Number(e.grossAmount), language)}</td>
+                    <td data-label={t('costs.net')}>{e.netAmount != null ? formatCurrency(Number(e.netAmount), language) : '-'}</td>
+                    <td data-label={t('costs.frequency')}>{t(`costs.frequencies.${e.frequency}`) ?? e.frequency}</td>
+                    <td data-label={t('costs.note')}>{e.note ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -175,9 +181,9 @@ export default function PolicyCostsPage(): ReactElement {
       </Card>
 
       <Card>
-        <h2>Neue Kostenposition</h2>
+        <h2>{t('costs.newEntry')}</h2>
         <form onSubmit={handleCreate}>
-          <FormField label="Gueltig von" required>
+          <FormField label={t('costs.validFrom')} required>
             <Input
               type="date"
               value={newEntry.validFrom}
@@ -185,14 +191,14 @@ export default function PolicyCostsPage(): ReactElement {
               required
             />
           </FormField>
-          <FormField label="Gueltig bis">
+          <FormField label={t('costs.validTo')}>
             <Input
               type="date"
               value={newEntry.validTo}
               onChange={(e) => setNewEntry({ ...newEntry, validTo: e.target.value })}
             />
           </FormField>
-          <FormField label="Bruttobetrag" required>
+          <FormField label={t('costs.grossAmount')} required>
             <Input
               type="number"
               step="0.01"
@@ -201,7 +207,7 @@ export default function PolicyCostsPage(): ReactElement {
               required
             />
           </FormField>
-          <FormField label="Nettobetrag">
+          <FormField label={t('costs.netAmount')}>
             <Input
               type="number"
               step="0.01"
@@ -209,18 +215,19 @@ export default function PolicyCostsPage(): ReactElement {
               onChange={(e) => setNewEntry({ ...newEntry, netAmount: e.target.value })}
             />
           </FormField>
-          <FormField label="Frequenz">
+          <FormField label={t('costs.frequency')}>
             <Select
               value={newEntry.frequency}
               onChange={(e) => setNewEntry({ ...newEntry, frequency: e.target.value })}
             >
-              <option value="MONTHLY">Monatlich</option>
-              <option value="QUARTERLY">Vierteljaehrlich</option>
-              <option value="SEMI_ANNUAL">Halbjaehrlich</option>
-              <option value="ANNUAL">Jaehrlich</option>
+              {FREQUENCIES.map((frequency) => (
+                <option key={frequency} value={frequency}>
+                  {t(`costs.frequencies.${frequency}`)}
+                </option>
+              ))}
             </Select>
           </FormField>
-          <FormField label="Notiz">
+          <FormField label={t('costs.note')}>
             <Input
               type="text"
               value={newEntry.note}
@@ -228,7 +235,7 @@ export default function PolicyCostsPage(): ReactElement {
             />
           </FormField>
           <Button type="submit" disabled={submitting}>
-            {submitting ? 'Speichern...' : 'Speichern'}
+            {submitting ? t('costs.saving') : t('costs.save')}
           </Button>
         </form>
       </Card>

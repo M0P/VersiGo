@@ -18,7 +18,7 @@
 - status (`UserStatus`: `ACTIVE` | `PENDING_APPROVAL` | `DISABLED`)
 - oidcIssuer (nullable, optional gebundene OIDC-Identität, AP-16/ADR-007)
 - oidcSubject (nullable, UNIQUE zusammen mit oidcIssuer)
-- locale
+- locale (Sprachcode `en` | `de`, Default `en` – globaler Standard; AP-21)
 - credential (optional 1:1 relation)
 
 ### Credential
@@ -128,7 +128,9 @@
 ### UserPreference (AP-13)
 - id
 - userId (FK -> users.id, unique per [userId, key], cascading delete)
-- key (versionierte Katalog-Allowlist AP-17: `ui:accentColour`, `theme`, `language`)
+- key (versionierte Katalog-Allowlist AP-17/AP-21: `ui:accentColour`, `theme`;
+  die frühere Präferenz `language` ist obsolet – Sprache liegt seit AP-21 in
+  `users.locale` bzw. der Sitzung)
 - value (Klartext, z. B. `#1a73e8`)
 - createdAt
 - updatedAt

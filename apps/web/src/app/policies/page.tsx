@@ -9,6 +9,7 @@ import { Loading } from '../../components/ui/loading';
 import { Alert } from '../../components/ui/alert';
 import { EmptyState } from '../../components/ui/empty-state';
 import { NAV_SECTIONS } from '../../components/ui/nav-config';
+import { formatCurrency, useI18n } from '../../i18n';
 
 type Policy = {
   id: string;
@@ -22,14 +23,8 @@ type Policy = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
-const statusLabels: Record<string, string> = {
-  ACTIVE: 'Aktiv',
-  CANCELLED: 'Gekündigt',
-  EXPIRED: 'Abgelaufen',
-  ARCHIVED: 'Archiviert',
-};
-
 export default function PolicyListPage(): ReactElement {
+  const { t, language } = useI18n();
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,19 +33,19 @@ export default function PolicyListPage(): ReactElement {
     fetch(`${API_BASE}/households/default/policies`, { credentials: 'include' })
       .then((res) => {
         if (res.status === 401) { window.location.href = '/login'; return Promise.resolve(null); }
-        if (!res.ok) throw new Error('Fehler beim Laden');
+        if (!res.ok) throw new Error(t('policies.errorLoading'));
         return res.json();
       })
       .then((data) => { if (data) setPolicies(data); })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   if (loading) {
     return (
       <AppShell navSections={NAV_SECTIONS}>
-        <PageHeader title="Versicherungen" />
-        <Loading label="Lade Versicherungen..." />
+        <PageHeader title={t('policies.title')} />
+        <Loading label={t('policies.loading')} />
       </AppShell>
     );
   }
@@ -58,8 +53,8 @@ export default function PolicyListPage(): ReactElement {
   if (error) {
     return (
       <AppShell navSections={NAV_SECTIONS}>
-        <PageHeader title="Versicherungen" />
-        <Alert variant="danger">Fehler: {error}</Alert>
+        <PageHeader title={t('policies.title')} />
+        <Alert variant="danger">{t('common.error')}: {error}</Alert>
       </AppShell>
     );
   }
@@ -67,15 +62,15 @@ export default function PolicyListPage(): ReactElement {
   return (
     <AppShell navSections={NAV_SECTIONS}>
       <PageHeader
-        title="Versicherungen"
-        description="Alle Ihre Versicherungsverträge auf einen Blick"
-        actions={<a href="/policies/new"><Button variant="primary">Neue Versicherung</Button></a>}
+        title={t('policies.title')}
+        description={t('policies.description')}
+        actions={<a href="/policies/new"><Button variant="primary">{t('policies.newPolicy')}</Button></a>}
       />
 
       {policies.length === 0 ? (
-        <EmptyState icon="📋" title="Keine Versicherungen">
-          <p>Sie haben noch keine Versicherungen erfasst.</p>
-          <a href="/policies/new"><Button variant="primary">Erste Versicherung anlegen</Button></a>
+        <EmptyState icon="📋" title={t('policies.emptyTitle')}>
+          <p>{t('policies.emptyBody')}</p>
+          <a href="/policies/new"><Button variant="primary">{t('policies.createFirst')}</Button></a>
         </EmptyState>
       ) : (
         <div className="split-layout">
@@ -84,16 +79,17 @@ export default function PolicyListPage(): ReactElement {
               <h3>{p.insurerName}</h3>
               <p className="text-sm text-muted">{p.type}</p>
               <p className="text-sm">
-                Status: <span className={`badge ${p.status === 'ACTIVE' ? 'badge-success' : p.status === 'CANCELLED' ? 'badge-warning' : 'badge-neutral'}`}>
-                  {statusLabels[p.status] ?? p.status}
+                {t('policies.status')}{' '}
+                <span className={`badge ${p.status === 'ACTIVE' ? 'badge-success' : p.status === 'CANCELLED' ? 'badge-warning' : 'badge-neutral'}`}>
+                  {t(`policies.statuses.${p.status}`) ?? p.status}
                 </span>
               </p>
               {p.premiumAmount != null && (
-                <p className="text-sm">Prämie: {p.premiumAmount.toFixed(2)} EUR</p>
+                <p className="text-sm">{t('policies.premium')}: {formatCurrency(p.premiumAmount, language)}</p>
               )}
               <div style={{ marginTop: 'var(--versigo-space-3)' }}>
                 <a href={`/policies/${p.id}`}>
-                  <Button variant="secondary" size="sm">Details</Button>
+                  <Button variant="secondary" size="sm">{t('policies.details')}</Button>
                 </a>
               </div>
             </Card>

@@ -101,6 +101,17 @@
   Portal-Zugangsdaten (nur `providerKey`/Sync-Metadaten), Binärdateien oder
   rohe AI-Payloads. Keine Konfigurationswerte oder Secrets.
 
+### Sprache (AP-21)
+- Der Sprachen-Endpunkt `/user/language` ist die **einzige** Freigabe für
+  `READ_ONLY` über die Profil-Grenze hinaus: Er darf ausschließlich die
+  **eigene** Sprache lesen/ändern.
+- `READ_ONLY`-Sprachwahl wird **niemals persistiert** (nur
+  `express-session`), erzeugt **keine** Audit-Einträge und hinterlässt keinen
+  Verlauf – Session-Ende = Sprache verworfen.
+- Es gibt keine systemweite Sprache und keine Übersetzungsverwaltung über die
+  API; Browserpräferenzen werden nur als Fallback ausgewertet (kein
+  Tracking, kein Persistieren von Header-Daten).
+
 ### Kontolöschung (`DELETE /privacy/account`)
 - Letzter-Admin-Schutz: Der letzte aktive `ADMIN` kann sein Konto nicht
   löschen (409 `ConflictException`), um einen System-Lockout zu verhindern.

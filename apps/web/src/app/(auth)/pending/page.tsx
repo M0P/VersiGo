@@ -5,6 +5,7 @@ import { Card } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Alert } from '../../../components/ui/alert';
 import { InlineSpinner } from '../../../components/ui/loading';
+import { useI18n } from '../../../i18n';
 
 /**
  * AP-16: Seite fuer Konten im Status PENDING_APPROVAL. Ein noch nicht
@@ -15,6 +16,7 @@ import { InlineSpinner } from '../../../components/ui/loading';
  */
 export default function PendingPage(): ReactElement {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+  const { t } = useI18n();
 
   async function checkStatus(): Promise<void> {
     try {
@@ -36,21 +38,19 @@ export default function PendingPage(): ReactElement {
           <h1 style={{ marginBottom: 'var(--versigo-space-1)' }}>
             <span style={{ color: 'var(--versigo-accent)' }}>Ver</span>siGo
           </h1>
-          <p className="text-muted">Konto noch nicht freigeschaltet</p>
+          <p className="text-muted">{t('auth.pendingTagline')}</p>
         </div>
 
-        <Alert variant="info" title="Freischaltung ausstehend">
-          Ihr Konto wurde noch nicht durch einen Administrator freigeschaltet.
-          Sie koennen sich erst anmelden, sobald Ihr Konto den Status
-          &bdquo;aktiv&ldquo; hat. Bitte versuchen Sie es spaeter erneut.
+        <Alert variant="info" title={t('auth.pendingTitle')}>
+          {t('auth.pendingBody')}
         </Alert>
 
         <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', marginTop: 'var(--versigo-space-6)' }}>
           <a href="/login" style={{ flex: 1, textDecoration: 'none' }}>
-            <Button variant="outline" style={{ width: '100%' }}>Zur Anmeldung</Button>
+            <Button variant="outline" style={{ width: '100%' }}>{t('auth.pendingToLogin')}</Button>
           </a>
           <Button style={{ flex: 1 }} onClick={() => void checkStatus()}>
-            <InlineSpinner /> Status pruefen
+            <InlineSpinner /> {t('auth.checkStatus')}
           </Button>
         </div>
       </Card>

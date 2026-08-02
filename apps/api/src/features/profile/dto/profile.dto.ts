@@ -3,8 +3,13 @@ import { IsIn, IsOptional, IsString, Length } from 'class-validator';
 /**
  * Von der Profilseite aenderbare Locales. Bewusste Allowlist statt
  * freiem String – die UI nutzt ausschliesslich diese Werte.
+ *
+ * AP-21: Nur noch die produktiv unterstuetzten Sprachcodes 'en' und 'de'
+ * (die uebrigen Legacy-Locales sind entfernt). Die Web-UI zeigt die
+ * Sprachwahl kuenftig ueber den zentralen /user/language-Endpunkt;
+ * das Profil-Feld bleibt aus API-Kompatibilitaetsgruenden bestehen.
  */
-export const SUPPORTED_PROFILE_LOCALES = ['de-DE', 'en-US', 'fr-FR', 'it-IT', 'es-ES', 'pt-BR'] as const;
+export const SUPPORTED_PROFILE_LOCALES = ['en', 'de'] as const;
 
 /**
  * DTO fuer Profilaenderungen. NUR persoenliche Profilfelder; Rollen,

@@ -8,6 +8,7 @@ import { SectionHeader } from './page-header';
 import { Button } from './button';
 import { Input } from './form-field';
 import { Alert } from './alert';
+import { useI18n } from '../../i18n';
 
 /**
  * Appearance settings panel for colour customisation.
@@ -17,6 +18,7 @@ import { Alert } from './alert';
  */
 export function AppearanceSettings(): ReactElement {
   const { accentH, accentS, setAccent, theme, toggleTheme } = useTheme();
+  const { t } = useI18n();
   const [customHex, setCustomHex] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +38,7 @@ export function AppearanceSettings(): ReactElement {
 
     const valid = validateHex(cleaned);
     if (!valid) {
-      setError('Ungültiger Hex-Farbwert. Erwartet wird z. B. #1a73e8 oder #1ae.');
+      setError(t('appearance.invalidHex'));
       return;
     }
 
@@ -50,50 +52,53 @@ export function AppearanceSettings(): ReactElement {
   return (
     <Card>
       <CardHeader>
-        <SectionHeader title="Design-Anpassung" />
+        <SectionHeader title={t('appearance.title')} />
       </CardHeader>
 
       <div className="form-group">
-        <label className="form-label">Farbmodus</label>
+        <label className="form-label">{t('appearance.colourMode')}</label>
         <div className="btn-group">
           <Button
             variant={theme === 'light' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => { if (theme !== 'light') toggleTheme(); }}
           >
-            Hell
+            {t('appearance.light')}
           </Button>
           <Button
             variant={theme === 'dark' ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => { if (theme !== 'dark') toggleTheme(); }}
           >
-            Dunkel
+            {t('appearance.dark')}
           </Button>
         </div>
       </div>
 
       <div className="form-group">
-        <label className="form-label">Akzentfarbe</label>
+        <label className="form-label">{t('appearance.accentColour')}</label>
         <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
-          {ACCENT_PRESETS.map((preset) => (
-            <button
-              key={preset.name}
-              type="button"
-              className={`color-swatch ${currentPresetIndex === ACCENT_PRESETS.indexOf(preset) ? 'selected' : ''}`}
-              style={{ backgroundColor: `hsl(${preset.h}, ${preset.s}%, 50%)` }}
-              onClick={() => handlePresetSelect(preset.h, preset.s)}
-              aria-label={`Akzentfarbe: ${preset.name}`}
-              aria-pressed={currentPresetIndex === ACCENT_PRESETS.indexOf(preset)}
-              title={preset.name}
-            />
-          ))}
+          {ACCENT_PRESETS.map((preset) => {
+            const presetName = t(preset.name);
+            return (
+              <button
+                key={preset.name}
+                type="button"
+                className={`color-swatch ${currentPresetIndex === ACCENT_PRESETS.indexOf(preset) ? 'selected' : ''}`}
+                style={{ backgroundColor: `hsl(${preset.h}, ${preset.s}%, 50%)` }}
+                onClick={() => handlePresetSelect(preset.h, preset.s)}
+                aria-label={t('appearance.accentAria', { name: presetName })}
+                aria-pressed={currentPresetIndex === ACCENT_PRESETS.indexOf(preset)}
+                title={presetName}
+              />
+            );
+          })}
         </div>
       </div>
 
       <div className="form-group">
         <label className="form-label" htmlFor="custom-colour">
-          Eigene Farbe (Hex)
+          {t('appearance.customColour')}
         </label>
         <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', alignItems: 'center' }}>
           <Input
@@ -107,7 +112,7 @@ export function AppearanceSettings(): ReactElement {
             style={{ maxWidth: 180 }}
           />
           <Button variant="secondary" size="sm" onClick={handleCustomSubmit}>
-            Übernehmen
+            {t('appearance.apply')}
           </Button>
         </div>
         {error && <Alert variant="danger" id="custom-colour-error">{error}</Alert>}

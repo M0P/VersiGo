@@ -104,12 +104,28 @@ All UI primitives live in `apps/web/src/components/ui/` and use the CSS classes 
 
 #### Mein Profil (`/settings`, `USER`/`ADMIN`)
 - Profilinformationen (Benutzername, Rolle, Kontoerstellt) schreibgeschützt;
-  Anzeigename und Sprache (Locale-Allowlist) editierbar via `PATCH /user/profile`.
+  Anzeigename editierbar via `PATCH /user/profile`.
+- **Sprache (AP-21):** Sprachauswahl über den `LanguageSelector`
+  (`/user/language`, Sprachcodes `en`/`de`). Englisch ist der globale
+  Standard; die Wahl wird für `USER`/`ADMIN` persistent in `users.locale`
+  gespeichert.
 - Design-Anpassung (Farbmodus, Akzentfarbe) bleibt über `AppearanceSettings`
   erreichbar (persönliche UI-Präferenz `ui:accentColour`, Allowlist `theme`).
-- `READ_ONLY` sieht ausschließlich eine Hinweis-Meldung („Nur-Lese-Zugriff"),
-  keine editierbaren Felder; die API blockiert alle Profil-/Präferenz-Endpunkte
+- `READ_ONLY` sieht eine Hinweis-Meldung („Nur-Lese-Zugriff") und –
+  **ausschließlich** – den `LanguageSelector` mit Sitzungshinweis
+  (Sprache gilt nur für diese Browser-Sitzung, wird nicht gespeichert).
+  Alle anderen Profil-/Präferenz-Endpunkte blockiert die API für `READ_ONLY`
   mit 403.
+
+#### Internationalisierung (AP-21)
+- Alle sichtbaren Texte der Web-App laufen über die typsicheren Kataloge
+  `apps/web/src/i18n/locales/en.ts` (Quelle der Wahrheit) und `de.ts`
+  (strukturgleich per TypeScript erzwungen); Zugriff über `t()` (`useI18n`).
+- Die Sprache wird initial aus dem Cookie `versigo:locale` gelesen und nach
+  dem Setzen gesetzt; `<html lang>` und Metadaten folgen der Sprache.
+- Fallback-Kette: gewählte Sprache → Englisch → roher Schüssel (nie leerer
+  Text). Ein i18n-Guard (`pnpm --filter @versigo/web run test:i18n`)
+  verhindert hartkodierte deutsche UI-Texte in `src/`.
 
 #### Systemeinstellungen (`/admin/settings`, nur `ADMIN`)
 - Katalogbasierte Ansicht, gruppiert nach Katalog-Gruppe; Toolbar mit Suche

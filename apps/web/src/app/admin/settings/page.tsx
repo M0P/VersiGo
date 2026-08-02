@@ -10,7 +10,7 @@ import { Alert } from '../../../components/ui/alert';
 import { Loading } from '../../../components/ui/loading';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { NAV_SECTIONS } from '../../../components/ui/nav-config';
-
+import { useI18n, formatDate } from '../../../i18n';
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
 type Source = 'UI' | 'ENV' | 'DEFAULT';
@@ -51,26 +51,23 @@ type ConnectivityResult = {
   timestamp: string;
 };
 
-const SOURCE_LABEL: Record<Source, string> = {
-  UI: 'UI',
-  ENV: '.env',
-  DEFAULT: 'Default',
-};
-
 const SOURCE_BADGE: Record<Source, string> = {
   UI: 'badge-accent',
   ENV: 'badge-neutral',
   DEFAULT: 'badge-neutral',
 };
 
-/** Lesbares Anzeigeformat eines effektiven Werts (Secrets immer maskiert). */
-function formatEffectiveValue(entry: SystemConfigEntry): string {
+/**
+ * Lesbares Anzeigeformat eines effektiven Werts (Secrets immer maskiert).
+ * Uebersetzte Werte stammen aus dem aufrufenden Hook (t).
+ */
+function formatEffectiveValue(entry: SystemConfigEntry, t: (key: string, params?: Record<string, string>) => string): string {
   if (entry.secret) {
-    return entry.secretSet ? '••••••••' : 'Nicht gesetzt';
+    return entry.secretSet ? '••••••••' : t('admin.settings.notSet');
   }
   if (entry.type === 'boolean') {
-    if (entry.effectiveValue === true) return 'Ja';
-    if (entry.effectiveValue === false) return 'Nein';
+    if (entry.effectiveValue === true) return t('common.yes');
+    if (entry.effectiveValue === false) return t('common.no');
     return '—';
   }
   return entry.effectiveValue !== null && entry.effectiveValue !== undefined
@@ -78,16 +75,8 @@ function formatEffectiveValue(entry: SystemConfigEntry): string {
     : '—';
 }
 
-function formatDate(iso: string | null): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleString('de-DE');
-  } catch {
-    return iso;
-  }
-}
-
 export default function AdminSettingsPage(): ReactElement {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<SystemConfigEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +98,7 @@ export default function AdminSettingsPage(): ReactElement {
       .then((res) => {
         if (res.status === 401) { window.location.href = '/login'; return Promise.resolve(null); }
         if (res.status === 403) { window.location.href = '/forbidden'; return Promise.resolve(null); }
-        if (!res.ok) throw new Error('Fehler beim Laden der Systemeinstellungen');
+        if (!res.ok) throw new Error(t('admin.settings.errorLoading'));
         return res.json();
       })
       .then((data: SystemConfigEntry[] | null) => { if (data) setEntries(data); })
@@ -117,7 +106,12 @@ export default function AdminSettingsPage(): ReactElement {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadEntries(); }, []);
+  useEffect(() => {
+    // `t` ist bewusst NICHT in den Dependencies: ein Sprachwechsel erzeugt
+    // eine neue `t`-Referenz und wuerde sonst ein redundantes
+    // GET /admin/system-config ausloesen (Review-3, Minor #1).
+    loadEntries();
+  }, []);
 
   // --- Filterung (Suche + Quelle + Probleme + Neustartbedarf) ---
   const filtered = useMemo(() => {
@@ -152,12 +146,12 @@ export default function AdminSettingsPage(): ReactElement {
       const res = await fetch(`${API_BASE}/admin/system-config/${encodeURIComponent(key)}`, {
         credentials: 'include',
       });
-      if (!res.ok) throw new Error('Fehler beim Aktualisieren');
+      if (!res.ok) throw new Error(t('admin.settings.refreshError'));
       const updated: SystemConfigEntry = await res.json();
       setEntries((prev) => prev.map((e) => (e.key === updated.key ? updated : e)));
       setTestState((prev) => ({ ...prev, [updated.key]: { testing: false, result: null } }));
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Unbekannter Fehler';
+      const message = e instanceof Error ? e.message : t('common.unknownError');
       setError(message);
     }
   };
@@ -191,12 +185,12 @@ export default function AdminSettingsPage(): ReactElement {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.message ?? 'Fehler beim Speichern');
+        throw new Error(data?.message ?? t('admin.settings.saveError'));
       }
       setEditingKey(null);
       await refreshEntry(editingKey);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Unbekannter Fehler';
+      const message = e instanceof Error ? e.message : t('common.unknownError');
       setError(message);
     } finally {
       setSaving(false);
@@ -204,7 +198,7 @@ export default function AdminSettingsPage(): ReactElement {
   };
 
   const handleReset = async (entry: SystemConfigEntry) => {
-    if (!window.confirm(`UI-Wert für "${entry.key}" zurücksetzen?\n\nDer effektive Wert fällt danach auf .env bzw. den Code-Default zurück.`)) {
+    if (!window.confirm(t('admin.settings.confirmReset', { key: entry.key }))) {
       return;
     }
     setError(null);
@@ -215,12 +209,12 @@ export default function AdminSettingsPage(): ReactElement {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.message ?? 'Fehler beim Zurücksetzen');
+        throw new Error(data?.message ?? t('admin.settings.resetError'));
       }
       if (editingKey === entry.key) setEditingKey(null);
       await refreshEntry(entry.key);
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Unbekannter Fehler';
+      const message = e instanceof Error ? e.message : t('common.unknownError');
       setError(message);
     }
   };
@@ -235,12 +229,12 @@ export default function AdminSettingsPage(): ReactElement {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.message ?? 'Fehler beim Verbindungstest');
+        throw new Error(data?.message ?? t('admin.settings.testError'));
       }
       const result: ConnectivityResult = await res.json();
       setTestState((prev) => ({ ...prev, [entry.key]: { testing: false, result } }));
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Unbekannter Fehler';
+      const message = e instanceof Error ? e.message : t('common.unknownError');
       setTestState((prev) => ({ ...prev, [entry.key]: { testing: false, result: { success: false, message, timestamp: new Date().toISOString() } } }));
     }
   };
@@ -248,8 +242,8 @@ export default function AdminSettingsPage(): ReactElement {
   if (loading) {
     return (
       <AppShell navSections={NAV_SECTIONS}>
-        <PageHeader title="Systemeinstellungen" />
-        <Loading label="Lade Systemeinstellungen..." />
+        <PageHeader title={t('admin.settings.title')} />
+        <Loading label={t('admin.settings.loading')} />
       </AppShell>
     );
   }
@@ -257,36 +251,36 @@ export default function AdminSettingsPage(): ReactElement {
   return (
     <AppShell navSections={NAV_SECTIONS}>
       <PageHeader
-        title="Systemeinstellungen"
-        description="Zentrale, katalogbasierte Konfiguration. UI-Werte haben Vorrang vor .env; fehlt ein Wert, greift ein dokumentierter Code-Default."
+        title={t('admin.settings.title')}
+        description={t('admin.settings.description')}
       />
 
-      {error && <Alert variant="danger" title="Fehler">{error}</Alert>}
+      {error && <Alert variant="danger" title={t('common.error')}>{error}</Alert>}
 
       {/* Werkzeugleiste: Suche + Filter */}
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <div className="settings-toolbar">
           <div className="form-group" style={{ flex: 2, minWidth: 220 }}>
-            <label className="form-label" htmlFor="settings-search">Suche</label>
+            <label className="form-label" htmlFor="settings-search">{t('admin.settings.search')}</label>
             <Input
               id="settings-search"
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Schlüssel, Gruppe oder Beschreibung…"
+              placeholder={t('admin.settings.searchPlaceholder')}
             />
           </div>
           <div className="form-group" style={{ flex: 1, minWidth: 160 }}>
-            <label className="form-label" htmlFor="settings-source">Quelle</label>
+            <label className="form-label" htmlFor="settings-source">{t('admin.settings.source')}</label>
             <Select
               id="settings-source"
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value as 'ALL' | Source)}
             >
-              <option value="ALL">Alle Quellen</option>
-              <option value="UI">UI (Datenbank)</option>
-              <option value="ENV">.env / Umgebung</option>
-              <option value="DEFAULT">Code-Default</option>
+              <option value="ALL">{t('admin.settings.allSources')}</option>
+              <option value="UI">{t('admin.settings.uiSource')}</option>
+              <option value="ENV">{t('admin.settings.envSource')}</option>
+              <option value="DEFAULT">{t('admin.settings.defaultSource')}</option>
             </Select>
           </div>
           <div className="settings-filter-checks">
@@ -296,7 +290,7 @@ export default function AdminSettingsPage(): ReactElement {
                 checked={onlyProblems}
                 onChange={(e) => setOnlyProblems(e.target.checked)}
               />
-              Nur ungültige UI-Werte
+              {t('admin.settings.onlyInvalid')}
             </label>
             <label className="form-check">
               <input
@@ -304,7 +298,7 @@ export default function AdminSettingsPage(): ReactElement {
                 checked={onlyRestart}
                 onChange={(e) => setOnlyRestart(e.target.checked)}
               />
-              Nur Neustart erforderlich
+              {t('admin.settings.onlyRestart')}
             </label>
           </div>
         </div>
@@ -312,10 +306,10 @@ export default function AdminSettingsPage(): ReactElement {
 
       {filtered.length === 0 ? (
         <Card>
-          <EmptyState icon="⚙️" title={hasActiveFilters ? 'Keine Treffer' : 'Keine Einstellungen'}>
+          <EmptyState icon="⚙️" title={hasActiveFilters ? t('admin.settings.noResults') : t('admin.settings.noSettings')}>
             {hasActiveFilters
-              ? 'Kein Eintrag passt zur aktuellen Suche bzw. den aktiven Filtern.'
-              : 'Es sind keine katalogisierten Systemeinstellungen vorhanden.'}
+              ? t('admin.settings.noResultsBody')
+              : t('admin.settings.noSettingsBody')}
           </EmptyState>
         </Card>
       ) : (
@@ -346,10 +340,7 @@ export default function AdminSettingsPage(): ReactElement {
 
       {/* M5: Transparenz zur SSRF-Beschraenkung der Verbindungstests. */}
       <p className="form-hint">
-        Verbindungstests sind aus Sicherheitsgründen (SSRF-Schutz) nur gegen
-        öffentliche http(s)-Endpunkte möglich. Lokale Dienste (z.&nbsp;B. Ollama
-        unter localhost) sind nicht über die UI testbar – prüfen Sie deren
-        Erreichbarkeit bitte direkt auf dem Host.
+        {t('admin.settings.ssrfHint')}
       </p>
     </AppShell>
   );
@@ -382,29 +373,34 @@ function SettingRow({
   onReset,
   onTest,
 }: SettingRowProps): ReactElement {
+  const { t, language } = useI18n();
   const editFieldId = `settings-value-${entry.key}`;
   const invalid = entry.uiValueInvalid;
+
+  const sourceLabel: Record<Source, string> = {
+    UI: t('admin.settings.uiSource'),
+    ENV: t('admin.settings.envSource'),
+    DEFAULT: t('admin.settings.defaultSource'),
+  };
 
   return (
     <div className={`settings-entry ${invalid ? 'settings-entry-invalid' : ''}`}>
       <div className="settings-entry-head">
         <code className="settings-entry-key">{entry.key}</code>
         <span className={`badge ${SOURCE_BADGE[entry.source]}`} title={entry.reason}>
-          {SOURCE_LABEL[entry.source]}
+          {sourceLabel[entry.source]}
         </span>
-        {entry.secret && <span className="badge badge-neutral">Secret</span>}
+        {entry.secret && <span className="badge badge-neutral">{t('admin.settings.secret')}</span>}
         {entry.restartRequired && (
-          <span className="badge badge-warning">Neustart erforderlich</span>
+          <span className="badge badge-warning">{t('admin.settings.restartRequired')}</span>
         )}
       </div>
 
       <p className="settings-entry-description">{entry.description}</p>
 
       {invalid && (
-        <Alert variant="warning" title="Ungültiger UI-Wert">
-          Der gespeicherte UI-Wert ist ungültig und wird ignoriert – der
-          effektive Wert stammt aus .env bzw. dem Code-Default. Bitte korrigieren
-          oder zurücksetzen.
+        <Alert variant="warning" title={t('admin.settings.invalidUiValue')}>
+          {t('admin.settings.invalidUiValueBody')}
         </Alert>
       )}
 
@@ -412,16 +408,16 @@ function SettingRow({
         <form onSubmit={onSave} className="settings-entry-form">
           <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
             <label className="form-label" htmlFor={editFieldId}>
-              {entry.secret ? 'Neuer Wert (ersetzt den gespeicherten)' : 'Wert'}
+              {entry.secret ? t('admin.settings.newSecretValue') : t('admin.settings.value')}
             </label>
             {entry.type === 'boolean' ? (
               <Select id={editFieldId} value={editValue} onChange={(e) => onEditValueChange(e.target.value)} required>
-                <option value="true">Ja</option>
-                <option value="false">Nein</option>
+                <option value="true">{t('common.yes')}</option>
+                <option value="false">{t('common.no')}</option>
               </Select>
             ) : entry.allowedValues ? (
               <Select id={editFieldId} value={editValue} onChange={(e) => onEditValueChange(e.target.value)} required>
-                <option value="" disabled>Bitte wählen…</option>
+                <option value="" disabled>{t('admin.settings.choose')}</option>
                 {entry.allowedValues.map((option) => (
                   <option key={option} value={option}>{option}</option>
                 ))}
@@ -435,7 +431,7 @@ function SettingRow({
                 min={entry.min ?? undefined}
                 max={entry.max ?? undefined}
                 step={entry.type === 'number' ? 1 : undefined}
-                placeholder={entry.secret ? 'Neuen Wert eingeben' : 'Wert eingeben'}
+                placeholder={entry.secret ? t('admin.settings.enterNewValue') : t('admin.settings.enterValue')}
                 required
                 autoFocus
               />
@@ -444,20 +440,20 @@ function SettingRow({
           </div>
           <div className="btn-group" style={{ alignItems: 'end' }}>
             <Button type="submit" variant="primary" size="sm" disabled={saving}>
-              {saving ? 'Speichert…' : 'Speichern'}
+              {saving ? t('common.saving') : t('common.save')}
             </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={onCancel}>Abbrechen</Button>
+            <Button type="button" variant="ghost" size="sm" onClick={onCancel}>{t('common.cancel')}</Button>
           </div>
         </form>
       ) : (
         <>
           <div className="settings-entry-value">
-            <span className="settings-entry-value-label">Effektiver Wert</span>
-            <span className="settings-entry-value-text">{formatEffectiveValue(entry)}</span>
+            <span className="settings-entry-value-label">{t('admin.settings.effectiveValue')}</span>
+            <span className="settings-entry-value-text">{formatEffectiveValue(entry, t)}</span>
           </div>
           {entry.pendingRestartValue !== null && entry.pendingRestartValue !== undefined && (
             <div className="settings-entry-value">
-              <span className="settings-entry-value-label">Wert nach Neustart</span>
+              <span className="settings-entry-value-label">{t('admin.settings.valueAfterRestart')}</span>
               <span className="settings-entry-value-text">
                 {entry.secret ? '••••••••' : String(entry.pendingRestartValue)}
               </span>
@@ -467,19 +463,19 @@ function SettingRow({
             {entry.reason}
             {entry.uiUpdatedAt && (
               <span className="settings-entry-updated">
-                {' · '}Zuletzt geändert: {formatDate(entry.uiUpdatedAt)}
-                {entry.uiUpdatedBy ? ` durch ${entry.uiUpdatedBy}` : ''}
+                {' · '}{t('admin.settings.lastChanged', { date: formatDate(entry.uiUpdatedAt, language) })}
+                {entry.uiUpdatedBy ? t('admin.settings.by', { user: entry.uiUpdatedBy }) : ''}
               </span>
             )}
           </p>
           <div className="btn-group">
-            <Button variant="secondary" size="sm" onClick={onEdit}>Bearbeiten</Button>
+            <Button variant="secondary" size="sm" onClick={onEdit}>{t('common.edit')}</Button>
             {entry.uiValuePresent && (
-              <Button variant="ghost" size="sm" onClick={onReset}>Zurücksetzen</Button>
+              <Button variant="ghost" size="sm" onClick={onReset}>{t('common.reset')}</Button>
             )}
             {entry.connectivityTestable && (
               <Button variant="outline" size="sm" onClick={onTest} disabled={testState.testing}>
-                {testState.testing ? 'Testet…' : 'Verbindung testen'}
+                {testState.testing ? t('admin.integrations.testing') : t('admin.settings.connectionTest')}
               </Button>
             )}
           </div>

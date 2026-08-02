@@ -56,7 +56,7 @@ model User {
   oidcSubject  String?
   email        String?
   displayName  String
-  locale       String      @default("de-DE")
+  locale       String      @default("en")
   status       UserStatus  @default(ACTIVE)
   createdAt    DateTime    @default(now())
 

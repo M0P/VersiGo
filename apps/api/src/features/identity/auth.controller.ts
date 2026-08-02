@@ -78,7 +78,15 @@ export class AuthController {
     @Body() body: RegisterLocalAccountDto,
   ): Promise<{ status: 'PENDING_APPROVAL' }> {
     if (!this.capabilities.isEnabled('local')) {
-      throw new ConflictException('Lokale Registrierung ist nicht konfiguriert');
+      // 501 (nicht 409): Registrierung ist NICHT aktiviert. Der Status
+      // unterscheidet sich bewusst von einem Namens-Konflikt (409,
+      // "Benutzername bereits vergeben") und spiegelt das 501-Verhalten des
+      // Login-Endpunkts wider – so kann die Web-UI Fehler ueber den
+      // HTTP-Status auf lokalisierte Meldungen abbilden (AP-21).
+      throw new HttpException(
+        'Lokale Registrierung ist nicht konfiguriert',
+        HttpStatus.NOT_IMPLEMENTED,
+      );
     }
 
     // AP-16/ADR-007: Per-IP-Rate-Limit auf die Registrierung, damit die

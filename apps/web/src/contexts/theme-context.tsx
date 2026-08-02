@@ -13,16 +13,20 @@ import { hexToHSL, hslToHex, normalizeHS } from '../lib/colour-utils';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
-/** Preset accent colours a user can pick from. */
+/**
+ * Preset accent colours a user can pick from.
+ * `name` ist ein i18n-Schluessel (accents.*) und wird an der
+ * Aufrufstelle uebersetzt.
+ */
 const ACCENT_PRESETS = [
-  { name: 'Blau', h: 210, s: 50 },
-  { name: 'Grün', h: 145, s: 45 },
-  { name: 'Violett', h: 270, s: 45 },
-  { name: 'Orange', h: 25, s: 70 },
-  { name: 'Rot', h: 0, s: 60 },
-  { name: 'Türkis', h: 180, s: 45 },
-  { name: 'Rosa', h: 330, s: 50 },
-  { name: 'Indigo', h: 240, s: 40 },
+  { name: 'accents.blue', h: 210, s: 50 },
+  { name: 'accents.green', h: 145, s: 45 },
+  { name: 'accents.violet', h: 270, s: 45 },
+  { name: 'accents.orange', h: 25, s: 70 },
+  { name: 'accents.red', h: 0, s: 60 },
+  { name: 'accents.turquoise', h: 180, s: 45 },
+  { name: 'accents.pink', h: 330, s: 50 },
+  { name: 'accents.indigo', h: 240, s: 40 },
 ] as const;
 
 export { ACCENT_PRESETS };

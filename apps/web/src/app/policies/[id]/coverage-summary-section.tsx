@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { Card } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Loading } from '../../../components/ui/loading';
+import { useI18n } from '../../../i18n';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -49,7 +50,7 @@ type ViewState =
  * - Markdown-Rendering unterstuetzt nur #, ##, - und Absaetze.
  *   Andere Markdown-Elemente (**, `, num. Listen, Links) werden als
  *   Klartext dargestellt. Bei Bedarf kann eine sandboxed Markdown-
- *   Bibliothek nach Maintenance-Prüfung ergaenzt werden.
+ *   Bibliothek nach Maintenance-Pruefung ergaenzt werden.
  * - API_BASE wird derzeit in jeder Komponente dupliziert (hausweit).
  * - householdId ist aktuell hart auf "default" gesetzt, da die
  *   Web-App noch keine echte Session-Auswertung fuer den
@@ -60,6 +61,7 @@ type ViewState =
  * und ersetzt nicht die Pruefung der originaeren Vertragsunterlagen.
  */
 export default function CoverageSummarySection({ householdId, policyId }: Props): ReactElement {
+  const { t, language } = useI18n();
   const [viewState, setViewState] = useState<ViewState>({ status: 'loading' });
 
   useEffect(() => {
@@ -82,7 +84,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       } catch {
         if (!cancelled) setViewState({
           status: 'ai-check-error',
-          message: 'AI-Status konnte nicht geprueft werden.',
+          message: t('ai.checkError'),
         });
         return;
       }
@@ -108,7 +110,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
           if (res.status === 401) { window.location.href = '/login'; return; }
           if (!cancelled) setViewState({
             status: 'summary-load-error',
-            message: 'Zusammenfassung konnte nicht geladen werden.',
+            message: t('ai.loadError'),
           });
           return;
         }
@@ -118,14 +120,14 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       } catch {
         if (!cancelled) setViewState({
           status: 'summary-load-error',
-          message: 'Netzwerkfehler beim Laden der Zusammenfassung.',
+          message: t('ai.loadErrorNetwork'),
         });
       }
     }
 
     load();
     return () => { cancelled = true; };
-  }, [householdId, policyId]);
+  }, [householdId, policyId, t]);
 
   async function handleGenerate() {
     setViewState({ status: 'generating' });
@@ -140,7 +142,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       if (!res.ok) {
         setViewState({
           status: 'generate-error',
-          message: 'Fehler beim Erstellen der Zusammenfassung.',
+          message: t('ai.generateError'),
         });
         return;
       }
@@ -163,7 +165,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     } catch {
       setViewState({
         status: 'generate-error',
-        message: 'Netzwerkfehler beim Erstellen der Zusammenfassung.',
+        message: t('ai.generateErrorNetwork'),
       });
     }
   }
@@ -184,7 +186,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
         if (res.status === 401) { window.location.href = '/login'; return; }
         setViewState({
           status: 'summary-load-error',
-          message: 'Zusammenfassung konnte nicht geladen werden.',
+          message: t('ai.loadError'),
         });
         return;
       }
@@ -194,12 +196,14 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     } catch {
       setViewState({
         status: 'summary-load-error',
-        message: 'Netzwerkfehler beim Laden der Zusammenfassung.',
+        message: t('ai.loadErrorNetwork'),
       });
     }
   }
 
   function renderDisclaimer(): ReactElement {
+    const provider =
+      viewState.status === 'loaded' ? (viewState.summary.providerKey || t('ai.unknown')) : t('ai.unknown');
     return (
       <p
         style={{
@@ -211,12 +215,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
           marginTop: '0.5rem',
         }}
       >
-        <strong>Vertragszusammenfassung</strong> – Diese Zusammenfassung wurde
-        maschinell durch einen KI-Assistenten ({viewState.status === 'loaded' ? viewState.summary.providerKey : '?'})
-        erstellt und dient ausschliesslich der schnellen Uebersicht.
-        Sie stellt keine Rechtsberatung dar und ersetzt nicht die Pruefung der
-        originaeren Vertragsunterlagen. Bei Unstimmigkeiten ist der
-        originale Versicherungsschein massgeblich.
+        <strong>{t('ai.disclaimerTitle')}</strong> – {t('ai.disclaimerBody', { provider })}
       </p>
     );
   }
@@ -225,7 +224,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     if (docs.length === 0) return null;
     return (
       <div style={{ marginTop: '0.75rem' }}>
-        <h4 style={{ margin: '0 0 0.25rem' }}>Verwendete Quellen</h4>
+        <h4 style={{ margin: '0 0 0.25rem' }}>{t('ai.sources')}</h4>
         <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
           {docs.map((doc) => (
             <li key={doc.id}>{doc.fileName}</li>
@@ -235,18 +234,22 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     );
   }
 
+  function formatDateTime(value: string): string {
+    return new Intl.DateTimeFormat(language === 'de' ? 'de-DE' : 'en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value));
+  }
+
   function renderMetadata(summary: CoverageSummary): ReactElement {
     return (
       <div style={{ marginTop: '0.5rem', fontSize: '0.85em', color: 'var(--versigo-text-muted)' }}>
-        Erstellt am {new Date(summary.createdAt).toLocaleDateString('de-DE', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })}
-        {' | '}Modell: {summary.model ?? 'unbekannt'}
-        {' | '}Provider: {summary.providerKey}
+        {t('ai.createdAt', { date: formatDateTime(summary.createdAt) })}
+        {' | '}{t('ai.model', { model: summary.model ?? t('ai.unknown') })}
+        {' | '}{t('ai.provider', { provider: summary.providerKey || t('ai.unknown') })}
       </div>
     );
   }
@@ -255,20 +258,20 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     case 'loading':
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
-          <Loading label="Lade Zusammenfassung..." />
+          <h2>{t('ai.title')}</h2>
+          <Loading label={t('ai.loading')} />
         </Card>
       );
 
     case 'ai-unavailable':
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
+          <h2>{t('ai.title')}</h2>
           <p style={{ color: 'var(--versigo-text-muted)', fontStyle: 'italic' }}>
-            KI-Funktionen sind nicht verfügbar.
+            {t('ai.unavailable')}
             {viewState.provider === 'none'
-              ? ' Bitte AI-Konfiguration in den Admin-Einstellungen aktivieren.'
-              : ' Der konfigurierte Provider antwortet nicht.'}
+              ? t('ai.unavailableConfig')
+              : t('ai.unavailableProvider')}
           </p>
         </Card>
       );
@@ -276,7 +279,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     case 'ai-check-error':
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
+          <h2>{t('ai.title')}</h2>
           <p style={{ color: 'var(--versigo-danger)' }}>{viewState.message}</p>
         </Card>
       );
@@ -284,10 +287,10 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     case 'no-summary':
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
-          <p className="text-muted">Noch keine Zusammenfassung vorhanden.</p>
+          <h2>{t('ai.title')}</h2>
+          <p className="text-muted">{t('ai.noSummary')}</p>
           <Button onClick={handleGenerate}>
-            Zusammenfassung erstellen
+            {t('ai.generate')}
           </Button>
         </Card>
       );
@@ -295,10 +298,10 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     case 'summary-load-error':
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
+          <h2>{t('ai.title')}</h2>
           <p style={{ color: 'var(--versigo-danger)' }}>{viewState.message}</p>
           <Button variant="secondary" onClick={() => { setViewState({ status: 'loading' }); loadPersistedSummary(); }}>
-            Erneut versuchen
+            {t('ai.retry')}
           </Button>
         </Card>
       );
@@ -307,7 +310,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       const { summary } = viewState;
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
+          <h2>{t('ai.title')}</h2>
           <div
             style={{
               whiteSpace: 'pre-wrap',
@@ -337,7 +340,7 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
 
           <div style={{ marginTop: 'var(--versigo-space-4)' }}>
             <Button variant="secondary" onClick={handleGenerate}>
-              Neu erstellen
+              {t('ai.regenerate')}
             </Button>
           </div>
         </Card>
@@ -347,18 +350,18 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     case 'generating':
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
-          <Loading label="Zusammenfassung wird erstellt..." />
+          <h2>{t('ai.title')}</h2>
+          <Loading label={t('ai.generating')} />
         </Card>
       );
 
     case 'generate-error':
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
+          <h2>{t('ai.title')}</h2>
           <p style={{ color: 'var(--versigo-danger)' }}>{viewState.message}</p>
           <Button variant="secondary" onClick={handleGenerate}>
-            Erneut versuchen
+            {t('ai.retry')}
           </Button>
         </Card>
       );
@@ -366,8 +369,8 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
     default:
       return (
         <Card>
-          <h2>KI-Leistungszusammenfassung</h2>
-          <p>Unbekannter Zustand.</p>
+          <h2>{t('ai.title')}</h2>
+          <p>{t('ai.unknownState')}</p>
         </Card>
       );
   }
