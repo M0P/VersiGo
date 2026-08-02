@@ -5,7 +5,9 @@ Work package **AP-22** (rename product Insura → VersiGo) is committed at hash 
 
 AGENTS.md was extended with two new rules (10: never redirect podman storage to another directory; 11: clean up every file created in every location) so that the scratch-storage incident from the AP-22 session cannot recur.
 
-NOTE on branch base for the next package: AP-22 is committed but **not yet merged into `main`** (the user pushes/merges manually). The next agent must base `feat/AP-21-multi-language-support` on a `main` that already contains the VersiGo rename (commit `db9f9e5`), i.e. after the user has merged AP-22, or explicitly branch from `feat/AP-22-new-name`. The whole repository now uses `VersiGo`/`versigo` naming; the next agent must not reintroduce `Insura` identifiers.
+NOTE on branch base for the next package (user decision: Option A): the user merges `feat/AP-22-new-name` into `main` manually (push/merge happens outside the coding agent). The next agent must verify that `main` contains the VersiGo rename commit `db9f9e5` before branching, then create `feat/AP-21-multi-language-support` from that updated `main`. If the rename is unexpectedly missing, stop and ask the user instead of branching from a stale base.
+
+NOTE on repository identity: the user is renaming the working directory (from `/…/insura` to `…/versigo`) and the GitHub repository (from `M0P/insura` to `M0P/versigo`) after AP-22. The next agent will likely work in a renamed workspace and must use the renamed paths/remote. The whole repository now uses `VersiGo`/`versigo` naming; the next agent must not reintroduce `Insura` identifiers, except the intentionally kept `insurance*` domain terms (e.g. `insurancePolicy`, `InsurancePolicy`, `insuranceType`).
 
 The next work package in the sequence is **AP-21 — multi-language support**.
 
