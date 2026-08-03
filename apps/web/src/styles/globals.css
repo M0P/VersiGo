@@ -883,6 +883,20 @@
     opacity: 1;
   }
 
+  /* AP-20 (UI-Completeness): Abmelden-Eintrag am unteren Rand der Sidebar.
+     `.nav-item` basiert auf Link-Styles – hier als Button-Styles ueberschrieben
+     und an das Seitenende gepinnt (Sidebar ist eine Flex-Spalte). */
+  .nav-item-logout {
+    margin-top: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    width: 100%;
+    text-align: left;
+    box-sizing: border-box;
+  }
+
   .nav-section-label {
     padding: var(--versigo-space-2) var(--versigo-space-3) var(--versigo-space-1);
     font-size: var(--versigo-font-size-xs);

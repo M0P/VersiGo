@@ -102,6 +102,15 @@ export const appConfigSchema = z
     // nur hinter einem vertrauenswuerdigen Reverse-Proxy auf true setzen.
     TRUST_PROXY: optionalBooleanFromEnv.optional(),
 
+    // AP-20: Secure-Flag des Session-Cookies. Default: true in Produktion,
+    // false sonst (wie bisher config.isProduction). Express-Session setzt
+    // bei secure:true ueber reines HTTP gar kein Cookie (dokumentiertes
+    // Verhalten); Deployments hinter einem TLS-terminierenden Reverse-Proxy
+    // (interne HTTP-Verbindung) oder kontrollierte interne Installationen
+    // ohne TLS koennen das Flag daher explizit setzen. In allen anderen
+    // Faellen den Standard beibehalten.
+    COOKIE_SECURE: optionalBooleanFromEnv.optional(),
+
     DATABASE_URL: z.string().min(1, 'DATABASE_URL ist erforderlich'),
 
     REDIS_URL: z.string().min(1, 'REDIS_URL ist erforderlich'),
@@ -169,6 +178,7 @@ export const appConfigSchema = z
     // falls keine Authentifizierungsmethode konfiguriert ist.
     LOCAL_AUTH_ENABLED: cfg.LOCAL_AUTH_ENABLED ?? cfg.NODE_ENV !== 'production',
     TRUST_PROXY: cfg.TRUST_PROXY ?? false,
+    COOKIE_SECURE: cfg.COOKIE_SECURE ?? cfg.NODE_ENV === 'production',
   }));
 
 export type AppConfig = z.infer<typeof appConfigSchema>;

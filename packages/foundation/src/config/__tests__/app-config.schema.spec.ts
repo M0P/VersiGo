@@ -140,6 +140,27 @@ describe('parseAppConfig', () => {
     expect(config.TRUST_PROXY).toBe(false);
   });
 
+  it('setzt COOKIE_SECURE in Produktion auf true, wenn nicht gesetzt', () => {
+    const config = parseAppConfig({ ...baseEnv, NODE_ENV: 'production' });
+    expect(config.COOKIE_SECURE).toBe(true);
+  });
+
+  it('setzt COOKIE_SECURE ausserhalb von Produktion auf false, wenn nicht gesetzt', () => {
+    const config = parseAppConfig({ ...baseEnv, NODE_ENV: 'development' });
+    expect(config.COOKIE_SECURE).toBe(false);
+  });
+
+  it('gibt einer explizit gesetzten COOKIE_SECURE-Variable Vorrang', () => {
+    const env = { ...baseEnv, NODE_ENV: 'production', COOKIE_SECURE: 'false' };
+    const config = parseAppConfig(env);
+    expect(config.COOKIE_SECURE).toBe(false);
+  });
+
+  it('behandelt leere COOKIE_SECURE-Strings wie nicht gesetzte Variablen', () => {
+    const config = parseAppConfig({ ...baseEnv, NODE_ENV: 'production', COOKIE_SECURE: '' });
+    expect(config.COOKIE_SECURE).toBe(true);
+  });
+
   it('setzt CORS_ORIGINS auf den Web-Default, wenn nicht gesetzt', () => {
     const config = parseAppConfig(baseEnv);
     expect(config.CORS_ORIGINS).toEqual(['http://localhost:3000']);

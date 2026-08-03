@@ -17,6 +17,7 @@ Siehe `.env.example` für alle Konfigurationsvariablen. Erforderliche Variablen:
 | `SESSION_SECRET` | Session-Secret (min. 32 Zeichen) | `openssl rand -hex 32` |
 | `SETTINGS_ENCRYPTION_KEY` | AES-256-GCM Schlüssel (64 Hex-Zeichen) | `openssl rand -hex 32` |
 | `TRUST_PROXY` | Express `trust proxy`: nur `true`, wenn die API hinter einem vertrauenswürdigen Reverse-Proxy läuft (sonst fallen `req.ip` und die per-IP-Rate-Limits hinter dem Proxy auf die Proxy-IP zurück) | `false` |
+| `COOKIE_SECURE` | Secure-Flag des Session-Cookies. Default: `true` in Produktion, sonst `false` (abgeleitet aus `NODE_ENV`). Nur explizit setzen, wenn die API kontrolliert über reines HTTP bedient wird (TLS-terminierender Reverse-Proxy oder kontrollierte interne Installation ohne TLS) | (leer lassen) |
 | `CORS_ORIGINS` | Erlaubte Browser-Origins für CORS (Komma-separiert). Die Web-App ruft die API cross-origin mit `credentials` auf; nur gelistete Origins dürfen Antworten lesen. Mehrere Origins mit Komma trennen. | `http://localhost:3000` |
 
 Optionale Variablen für OIDC, lokale Authentifizierung, AI, Paperless-ngx, S3 sind in `.env.example` dokumentiert.
@@ -40,9 +41,35 @@ LOCAL_ADMIN_PASSWORD=change-me
 - Abgelehnte Konten erhalten den Status `DISABLED`; die Unterscheidung zur Sperrung bleibt über das Audit-Log nachvollziehbar.
 
 ### Initialer Administrator (Bootstrap)
-- Beim ersten Start legt die Anwendung automatisch einen initialen Admin an, sofern `LOCAL_ADMIN_USERNAME` und `LOCAL_ADMIN_PASSWORD` gesetzt sind (Audit `BOOTSTRAP_ADMIN`).
+- Beim ersten Start legt die Anwendung einen initialen Admin an, sofern `LOCAL_AUTH_ENABLED=true` sowie `LOCAL_ADMIN_USERNAME` und `LOCAL_ADMIN_PASSWORD` gesetzt sind (Audit `BOOTSTRAP_ADMIN`).
 - Der Benutzername wird normalisiert (lowercase + trim); bei erneutem Start wird das Konto nicht überschrieben und das Passwort nicht geändert.
-- **Sicherheitshinweis:** Der Bootstrap ist ausschließlich für lokale Entwicklung/Test vorgesehen und wird in `NODE_ENV=production` nicht ausgeführt. In Produktion sind Konten über die Admin-Oberfläche anzulegen.
+- **Sicherheitshinweis (AP-20):** In `NODE_ENV=production` ist `LOCAL_AUTH_ENABLED` per Default deaktiviert – ein Admin wird dort **niemals automatisch** angelegt. Nur eine ausdrückliche Konfiguration (`LOCAL_AUTH_ENABLED=true` plus `LOCAL_ADMIN_USERNAME`/`LOCAL_ADMIN_PASSWORD`) erzeugt den initialen Administrator. Das Platzhalter-Passwort `CHANGE_ME_FOR_LOCAL_DEVELOPMENT` aus `.env.example` wird in Produktion abgelehnt. Der initiale Admin ist für die Freischaltung weiterer Konten über die Admin-Oberfläche (`/admin/users`) erforderlich.
+
+### Upgrade-Pfad: Default-Household-Mitgliedschaften (AP-20)
+- Der Bootstrap stellt das Beta-Referenz-Household `default` sowie die
+  Mitgliedschaft des initialen Admins sicher. Die **Reparatur** vergibt die
+  Mitgliedschaft ausschließlich an Konten mit
+  `role = ADMIN && status = ACTIVE` – ein bereits existierendes
+  Nicht-ADMIN-Konto, dessen Benutzername zufällig `LOCAL_ADMIN_USERNAME`
+  entspricht, erhält **keine** Mitgliedschaft (bewusst, kein Datenzugriff
+  ohne Rollenprüfung).
+- **Neu freigeschaltete Konten** (ab AP-20) werden beim Freischalten über
+  `/admin/users` automatisch in das Household `default` aufgenommen
+  (`approve()` → Membership-Upsert, Audit `USER_APPROVED`).
+- **Bestandskonten aus Vor-AP-20-Installationen** werden **nicht
+  automatisch** migriert: Ein bereits `ACTIVE` Nutzer, der vor AP-20
+  freigeschaltet wurde, hat keine Default-Household-Mitgliedschaft und kann
+  die household-gescopte UI (`/policies`, `/household/costs`,
+  `/household/shares`) daher nicht nutzen. Da es keine
+  Mitgliedschaftsverwaltung in der UI gibt (Mitgliedschaften entstehen über
+  Bootstrap/Approval), lautet der dokumentierte Weg für einen Upgrade:
+  1. Betroffene Benutzer in der Datenbank ermitteln:
+     `SELECT u.id, u.username FROM users u LEFT JOIN household_memberships m ON m."userId" = u.id AND m."householdId" = 'default' WHERE u.status = 'ACTIVE' AND m.id IS NULL AND u.username <> 'localadmin';`
+  2. Mitgliedschaft je Konto manuell anlegen (bewusste, dokumentierte
+     Betriebsoperation – nur in einer Wartungssituation ausführen):
+     `INSERT INTO household_memberships ("householdId", "userId") SELECT 'default', id FROM users WHERE username = '<user>';`
+  Diese einmalige Upgrade-Operation ist ein reiner Betriebsvorgang und
+  benötigt daher keinen UI-Einstiegspunkt (vgl. Control-Matrix §8).
 
 ### Betriebshinweise
 - Beide Authentifizierungsmethoden (OIDC und lokal) können gleichzeitig aktiv sein
@@ -150,6 +177,18 @@ docker compose up -d
 ```
 
 Migrationen laufen automatisch über den `migration`-Service.
+
+### Rollback
+
+- **Image-Ebene:** Auf das letzte funktionierende Image-Tag zurücksetzen
+  (siehe `docs/docker-image-guide.md`, Abschnitt 7), sofern die Compose-Datei
+  externe Tags nutzt.
+- **Datenbank-Ebene:** Es gibt **keine automatische Rückwärtsmigration**
+  (Downgrade-Migrationen sind nicht vorgesehen). Ist die Datenbank bereits
+  durch Migrationen vorgerückt und ein älteres Image erwartet eine ältere
+  Datenbankstruktur, **nicht** einfach starten – stattdessen das Backup
+  wiederherstellen (Abschnitt Backup/Restore in dieser Datei und
+  `docs/docker-image-guide.md`, Abschnitt 8).
 
 ## Admin-UI Bereiche
 - Allgemein

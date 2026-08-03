@@ -188,3 +188,63 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker compose down --volumes --remove-orphans
+
+  # Build-Metrik-Job (INFORMATIV, NICHT BLOCKIEREND):
+  # misst Build-Dauer und Image-Groessen der Produktionsimages. Ein Fehler
+  # in diesem Job faellt den Workflow NICHT (continue-on-error). Der
+  # maßgebliche Release-Gate ist der Smoke-Test oben.
+  build-metrics:
+    runs-on: ubuntu-latest
+    needs: [compose-test]
+    continue-on-error: true
+    env:
+      COMPOSE_FILE: docker-compose.yml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Copy environment file
+        run: cp .env.example .env
+
+      - name: Build production images (timed)
+        id: build
+        run: |
+          START=$(date +%s)
+          docker compose build api web worker
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+          echo "elapsed_seconds=$ELAPSED" >> "$GITHUB_OUTPUT"
+          echo "Build finished in $((ELAPSED / 60))m $((ELAPSED % 60))s"
+
+      - name: Measure image sizes
+        id: measure
+        run: |
+          docker images --format '{{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E 'versigo-(api|worker|web)' | sort -u | tee /tmp/versigo-images.txt
+          echo "images<<EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/versigo-images.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Report metrics (job summary)
+        run: |
+          {
+            echo "## Build-Metriken (informativ)"
+            echo ""
+            echo "| Metrik | Wert |"
+            echo "|--------|------|"
+            echo "| Build-Dauer (Produktionsimages) | $(( ${{ steps.build.outputs.elapsed_seconds }} / 60 ))m $(( ${{ steps.build.outputs.elapsed_seconds }} % 60 ))s |"
+            echo ""
+            echo "| Image | Groesse |"
+            echo "|-------|---------|"
+            while IFS=$'\t' read -r img size; do
+              echo "| \`$img\` | $size |"
+            done <<< "${{ steps.measure.outputs.images }}"
+            echo ""
+            echo "_Hinweis: Dieser Job ist nicht blockierend. Zielwerte AP-20: API/Worker < 1 GB, Web < 300 MB, Build ≤ 15 Min._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down --volumes --remove-orphans

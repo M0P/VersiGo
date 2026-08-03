@@ -47,8 +47,9 @@ services:
   migration:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: versigo:latest
+      dockerfile: apps/api/Dockerfile
+      target: runner
+    image: versigo-api:latest
     entrypoint: []
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL muss gesetzt sein}
@@ -72,8 +73,8 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: versigo:latest
+      dockerfile: apps/api/Dockerfile
+    image: versigo-api:latest
     restart: unless-stopped
     environment:
       APP_PORT: "3001"
@@ -88,6 +89,11 @@ services:
       # (sonst faellt req.ip hinter dem Proxy auf die Proxy-IP zurueck und die
       # per-IP-Rate-Limits sperren alle Clients global).
       TRUST_PROXY: "${TRUST_PROXY:-false}"
+      # AP-20: Secure-Flag des Session-Cookies. Default: true in Produktion
+      # (abgeleitet aus NODE_ENV). Nur explizit setzen, wenn die API kontrolliert
+      # ueber reines HTTP bedient wird (TLS-terminierender Reverse-Proxy oder
+      # kontrollierte interne Installation).
+      COOKIE_SECURE: "${COOKIE_SECURE:-}"
       # AP-16: Erlaubte Browser-Origins fuer CORS (Komma-separierte Liste).
       CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
       # Auth-Flags werden nur durchgereicht, wenn gesetzt; die Default-
@@ -108,7 +114,6 @@ services:
       PAPERLESS_ENABLED: "${PAPERLESS_ENABLED:-false}"
       PAPERLESS_URL: ${PAPERLESS_URL:-}
       PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-}
-    command: ["node", "apps/api/dist/apps/api/src/main.js"]
     ports:
       - "${APP_PORT:-3001}:3001"
     volumes:
@@ -133,8 +138,8 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: versigo:latest
+      dockerfile: apps/worker/Dockerfile
+    image: versigo-worker:latest
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-production}
@@ -157,7 +162,10 @@ services:
       WORKER_HEALTH_PORT: "${WORKER_HEALTH_PORT:-3100}"
       WORKER_HEARTBEAT_INTERVAL_MS: "${WORKER_HEARTBEAT_INTERVAL_MS:-15000}"
       WORKER_HEARTBEAT_TIMEOUT_MS: "${WORKER_HEARTBEAT_TIMEOUT_MS:-45000}"
-    command: ["node", "apps/worker/dist/apps/worker/src/main.js"]
+    # Kein Host-Port-Mapping: Der Worker-Liveness-Port (3100) wird bewusst
+    # NICHT auf den Host veroeffentlicht (nur Web 3000 + API 3001 sind
+    # oeffentliche Ports, siehe docs/07-security-privacy.md). Der Compose-
+    # Healthcheck und der Smoke-Test pruefen ihn im Container.
     volumes:
       - uploads-data:/data/uploads
     networks:
@@ -182,19 +190,11 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
-    image: versigo:latest
+    image: versigo-web:latest
     restart: unless-stopped
-    # Next.js wird direkt per Node gestartet. Ein pnpm-Aufruf wuerde bei
-    # jedem Containerstart `verify-deps-before-run` ausloesen; pnpm haelt
-    # den Zustand von node_modules fuer inkonsistent (die manuell im
-    # Runner-Image angelegten @versigo/*-Symlinks) und will neu installieren
-    # -> Abbruch ohne TTY (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY).
-    # pnpm ist zur Laufzeit nicht noetig, nur zum Build.
-    entrypoint: ["node", "/app/node_modules/.pnpm/node_modules/next/dist/bin/next", "start", "-p", "3000"]
-    working_dir: /app/apps/web
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: "3000"

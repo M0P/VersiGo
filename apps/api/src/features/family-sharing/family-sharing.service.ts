@@ -24,6 +24,29 @@ export class FamilySharingService {
   }
 
   /**
+   * Listet die anderen Mitglieder eines Households (id, username,
+   * displayName, role). Dient der Freigabe-UI als Ziel-Auswahl. Der
+   * aufrufende User selbst wird ausgeschlossen. Nur USER/ADMIN duerfen
+   * diesen Endpunkt rufen (RolesGuard), READ_ONLY-Mitglieder sehen die
+   * vollstaendige Mitgliederliste nie.
+   */
+  async listMembers(householdId: string, userId: string) {
+    await this.assertHouseholdAccess(householdId, userId);
+
+    const memberships = await this.db.householdMembership.findMany({
+      where: { householdId },
+      include: {
+        user: { select: { id: true, username: true, displayName: true, role: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return memberships
+      .filter((m) => m.userId !== userId)
+      .map((m) => m.user);
+  }
+
+  /**
    * Erstellt eine neue Freigabe.
    * sourceUserId wird automatisch aus dem aktuellen User gesetzt.
    * targetUserId muss im selben Household aktiv sein.

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException, Logger } from '@nestj
 import { DatabaseService } from '@versigo/foundation';
 import { GlobalRole, Prisma, UserStatus } from '@prisma/client';
 import { AuthenticatedUser } from './auth.service';
+import { DEFAULT_HOUSEHOLD_ID } from './local-admin.bootstrap';
 import { ListUsersQueryDto } from './user-admin.dto';
 import { normalizeIssuerUrl } from './oidc.strategy';
 
@@ -84,6 +85,12 @@ export class UserAdminService {
 
   /**
    * Schaltet ein Konto mit Status PENDING_APPROVAL frei (ACTIVE).
+   *
+   * AP-20: Der freigeschaltete User wird ausserdem in das Beta-Referenz-
+   * Household "default" aufgenommen (falls dieses existiert), damit die
+   * household-gescopten UI-Funktionen fuer das Konto tatsaechlich nutzbar
+   * sind. In reinen OIDC-Betriebsmodi ohne Bootstrap kann das Household
+   * fehlen – dann wird die Mitgliedschaft uebersprungen.
    */
   async approve(admin: AuthenticatedUser, userId: string): Promise<void> {
     await this.db.$transaction(async (tx) => {
@@ -94,6 +101,24 @@ export class UserAdminService {
       }
 
       await tx.user.update({ where: { id: userId }, data: { status: UserStatus.ACTIVE } });
+
+      const defaultHousehold = await tx.household.findUnique({
+        where: { id: DEFAULT_HOUSEHOLD_ID },
+        select: { id: true },
+      });
+      if (defaultHousehold) {
+        await tx.householdMembership.upsert({
+          where: {
+            householdId_userId: {
+              householdId: DEFAULT_HOUSEHOLD_ID,
+              userId,
+            },
+          },
+          create: { householdId: DEFAULT_HOUSEHOLD_ID, userId },
+          update: {},
+        });
+      }
+
       await this.audit(tx, admin, userId, 'USER_APPROVED', { status: 'ACTIVE' });
     });
   }

@@ -53,9 +53,44 @@ cleanup() {
     echo "Removing volumes..."
     $COMPOSE down -v --remove-orphans 2>/dev/null || true
   fi
-  # Temp worker-log capture (also on failure paths; default path is a no-op
-  # when the variable was never assigned).
-  rm -f "${WORKER_LOG:-/tmp/versigo-worker-smoke.log}" 2>/dev/null || true
+  # Alle Smoke-Test-Artefakte entfernen: Temp-Worker-Log, Session-Cookies
+  # und Response-JSONs. Cookies sind bis zu 8h gueltige Session-Secrets und
+  # gehoeren nicht persistent/weltlesbar in /tmp (AP-20 Review-Finding).
+  # Bewusst als VOLLSTAENDIGE, explizite Dateiliste (kein /tmp/versigo-*-
+  # Glob), damit parallele Smoke-Test-Laeufe oder fremde Dateien mit demselben
+  # Praefix nicht ungewollt geloescht werden. Jedes neue Artefakt dieses
+  # Skripts muss hier ergaenzt werden.
+  rm -f \
+    /tmp/versigo-login-response.json \
+    /tmp/versigo-smoke-cookies.txt \
+    /tmp/versigo-smoke-cookies-2.txt \
+    /tmp/versigo-smoke-sysconfig.json \
+    /tmp/versigo-smoke-sysconfig-put.json \
+    /tmp/versigo-smoke-sysconfig-del.json \
+    /tmp/versigo-smoke-profile.json \
+    /tmp/versigo-smoke-catalog.json \
+    /tmp/versigo-smoke-catalog-entry.json \
+    /tmp/versigo-smoke-plugins.json \
+    /tmp/versigo-smoke-plugin-health.json \
+    /tmp/versigo-smoke-audit.json \
+    /tmp/versigo-smoke-queues.json \
+    /tmp/versigo-smoke-integrations.json \
+    /tmp/versigo-smoke-privacy.json \
+    /tmp/versigo-smoke-delete.json \
+    /tmp/versigo-smoke-lang-get.json \
+    /tmp/versigo-smoke-lang-put.json \
+    /tmp/versigo-smoke-policy-create.json \
+    /tmp/versigo-smoke-policy-list.json \
+    /tmp/versigo-smoke-reg.json \
+    /tmp/versigo-smoke-ro-cookies.txt \
+    /tmp/versigo-worker-smoke.log \
+    /tmp/versigo-smoke-failfast.log \
+    /tmp/versigo-prod-cookies.txt \
+    /tmp/versigo-prod-headers.txt \
+    /tmp/versigo-prod-login-response.json \
+    /tmp/versigo-prod-policy-create.json \
+    /tmp/versigo-prod-policy-list.json \
+    2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -110,38 +145,94 @@ if [ -f .env ]; then
   done < .env
 fi
 
-# Wait for db and redis to be healthy
-echo "Waiting for database..."
-# Cold init of a fresh PostgreSQL volume can take a while – poll instead
-# of relying on a single pg_isready call.
-DB_READY=false
-for i in $(seq 1 40); do
-  if $COMPOSE exec -T db pg_isready -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" -t 5 >/dev/null 2>&1; then
-    DB_READY=true
-    break
-  fi
-  sleep 5
-done
-if [ "$DB_READY" != true ]; then
-  echo "ERROR: Database not ready within timeout."
-  $COMPOSE logs db
-  exit 1
-fi
+# ============================================================
+# Warteschleifen als Funktionen: Schritt 12 (Produktions-Erfolgspfad)
+# verwendet dieselben Pruefungen wie der Hauptpfad.
+# ============================================================
 
-echo "Waiting for Redis..."
-REDIS_READY=false
-for i in $(seq 1 20); do
-  if $COMPOSE exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
-    REDIS_READY=true
-    break
+wait_for_db() {
+  echo "Waiting for database..."
+  # Cold init of a fresh PostgreSQL volume can take a while – poll instead
+  # of relying on a single pg_isready call.
+  DB_READY=false
+  for i in $(seq 1 40); do
+    if $COMPOSE exec -T db pg_isready -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" -t 5 >/dev/null 2>&1; then
+      DB_READY=true
+      break
+    fi
+    sleep 5
+  done
+  if [ "$DB_READY" != true ]; then
+    echo "ERROR: Database not ready within timeout."
+    $COMPOSE logs db
+    exit 1
   fi
-  sleep 2
-done
-if [ "$REDIS_READY" != true ]; then
-  echo "ERROR: Redis not ready within timeout."
-  $COMPOSE logs redis
+}
+
+wait_for_redis() {
+  echo "Waiting for Redis..."
+  REDIS_READY=false
+  for i in $(seq 1 20); do
+    if $COMPOSE exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+      REDIS_READY=true
+      break
+    fi
+    sleep 2
+  done
+  if [ "$REDIS_READY" != true ]; then
+    echo "ERROR: Redis not ready within timeout."
+    $COMPOSE logs redis
+    exit 1
+  fi
+}
+
+wait_for_api_health() {
+  echo "Waiting for API health check..."
+  for i in $(seq 1 30); do
+    if curl -sf http://localhost:${APP_PORT:-3001}/health >/dev/null 2>&1; then
+      echo "API is healthy."
+      return 0
+    fi
+    sleep 2
+  done
+  echo "ERROR: API did not become healthy."
+  $COMPOSE logs api
   exit 1
-fi
+}
+
+wait_for_api_ready() {
+  echo "Waiting for API readiness check..."
+  for i in $(seq 1 15); do
+    if curl -sf http://localhost:${APP_PORT:-3001}/ready 2>/dev/null | grep -q '"status":"ready"'; then
+      echo "API is ready."
+      return 0
+    fi
+    sleep 2
+  done
+  echo "ERROR: API did not become ready (status degraded)."
+  curl -s http://localhost:${APP_PORT:-3001}/ready || true
+  $COMPOSE logs api
+  exit 1
+}
+
+wait_for_web() {
+  echo "Waiting for Web..."
+  for i in $(seq 1 30); do
+    WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${WEB_PORT:-3000}/ 2>/dev/null || echo "000")
+    if [ "$WEB_CODE" -ge 200 ] && [ "$WEB_CODE" -lt 400 ]; then
+      echo "Web is available (HTTP $WEB_CODE)."
+      return 0
+    fi
+    sleep 2
+  done
+  echo "ERROR: Web did not become available."
+  $COMPOSE logs web
+  exit 1
+}
+
+# Wait for db and redis to be healthy
+wait_for_db
+wait_for_redis
 
 # Run migration
 echo "Running migration..."
@@ -156,55 +247,17 @@ echo "Starting API and Worker..."
 $COMPOSE up -d api worker
 
 # Wait for API health endpoint
-echo "Waiting for API health check..."
-for i in $(seq 1 30); do
-  if curl -sf http://localhost:${APP_PORT:-3001}/health >/dev/null 2>&1; then
-    echo "API is healthy."
-    break
-  fi
-  if [ "$i" -eq 30 ]; then
-    echo "ERROR: API did not become healthy."
-    $COMPOSE logs api
-    exit 1
-  fi
-  sleep 2
-done
+wait_for_api_health
 
 # Wait for API readiness (database + redis check)
-echo "Waiting for API readiness check..."
-for i in $(seq 1 15); do
-  if curl -sf http://localhost:${APP_PORT:-3001}/ready 2>/dev/null | grep -q '"status":"ready"'; then
-    echo "API is ready."
-    break
-  fi
-  if [ "$i" -eq 15 ]; then
-    echo "ERROR: API did not become ready (status degraded)."
-    curl -s http://localhost:${APP_PORT:-3001}/ready || true
-    $COMPOSE logs api
-    exit 1
-  fi
-  sleep 2
-done
+wait_for_api_ready
 
 # Start web
 echo "Starting Web..."
 $COMPOSE up -d web
 
 # Wait for web
-echo "Waiting for Web..."
-for i in $(seq 1 30); do
-  WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${WEB_PORT:-3000}/ 2>/dev/null || echo "000")
-  if [ "$WEB_CODE" -ge 200 ] && [ "$WEB_CODE" -lt 400 ]; then
-    echo "Web is available (HTTP $WEB_CODE)."
-    break
-  fi
-  if [ "$i" -eq 30 ]; then
-    echo "ERROR: Web did not become available."
-    $COMPOSE logs web
-    exit 1
-  fi
-  sleep 2
-done
+wait_for_web
 
 # Smoke tests
 echo ""
@@ -776,6 +829,40 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   rm -f /tmp/versigo-smoke-ro-cookies.txt /tmp/versigo-smoke-reg.json
   echo "   READ_ONLY: Session-only verifiziert (GET nach PUT = de, users.locale blieb en), 403 auf Profil/Praeferenzen, Smoke-User entfernt"
   echo "   PASS"
+
+  # AP-20: Zentrale fachliche Aktion im Beta-Household. Diese Pruefung
+  # beweist die gesamte Kette: LocalAdminBootstrap legt das Household
+  # "default" plus Admin-Mitgliedschaft an, die HouseholdMembershipGuard
+  # laesst den Admin durch, und die Fach-API (Policy-Registry) funktioniert
+  # end-to-end ueber die exakt dieselben /households/default/...-Pfade, die
+  # auch die Web-UI verwendet.
+  echo "8p. Central business action: policy create + list via /households/default..."
+  SMOKE_POLICY_ID="smoke-policy-$(date +%s)"
+  POLICY_CREATE_STATUS=$(curl -s -o /tmp/versigo-smoke-policy-create.json -w "%{http_code}" \
+    -X POST http://localhost:${APP_PORT:-3001}/households/default/policies \
+    -H 'Content-Type: application/json' \
+    -b /tmp/versigo-smoke-cookies-2.txt \
+    -d "{\"type\":\"HAFTPFLICHT\",\"insurerName\":\"Smoke-Versicherung\",\"contractNumber\":\"SM-${SMOKE_POLICY_ID}\",\"startDate\":\"2026-08-01\"}")
+  if [ "$POLICY_CREATE_STATUS" != "201" ] && [ "$POLICY_CREATE_STATUS" != "200" ]; then
+    echo "FAILED: POST /households/default/policies returned HTTP $POLICY_CREATE_STATUS"
+    cat /tmp/versigo-smoke-policy-create.json
+    exit 1
+  fi
+  grep -qF '"contractNumber":"SM-'"${SMOKE_POLICY_ID}"'"' /tmp/versigo-smoke-policy-create.json || { echo "FAILED: Policy-Antwort ohne contractNumber"; cat /tmp/versigo-smoke-policy-create.json; exit 1; }
+  POLICY_LIST_STATUS=$(curl -s -o /tmp/versigo-smoke-policy-list.json -w "%{http_code}" \
+    -b /tmp/versigo-smoke-cookies-2.txt \
+    http://localhost:${APP_PORT:-3001}/households/default/policies)
+  if [ "$POLICY_LIST_STATUS" != "200" ]; then
+    echo "FAILED: GET /households/default/policies returned HTTP $POLICY_LIST_STATUS"
+    exit 1
+  fi
+  grep -qF "SM-${SMOKE_POLICY_ID}" /tmp/versigo-smoke-policy-list.json || { echo "FAILED: Liste enthaelt die erstellte Policy nicht"; exit 1; }
+  # Aufraeumen: Smoke-Policy entfernen (FK-Kaskade raeumt Kosten etc. ab).
+  $COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+    -c "DELETE FROM insurance_policies WHERE \"contractNumber\" = 'SM-${SMOKE_POLICY_ID}';" >/dev/null 2>&1 || true
+  rm -f /tmp/versigo-smoke-policy-create.json /tmp/versigo-smoke-policy-list.json
+  echo "   Policy erstellt (contractNumber SM-${SMOKE_POLICY_ID}) und in Liste wiedergefunden, Smoke-Daten entfernt"
+  echo "   PASS"
 else
   echo "5. Skipping local admin login check (LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD not configured)."
 fi
@@ -947,6 +1034,166 @@ $COMPOSE exec -T redis redis-cli ZREM "bull:ai-extraction:completed" "$SMOKE_JOB
 # lifecycle (the ai_extraction_jobs table is created by the AP-16
 # schema-drift migration, but the smoke job intentionally has no DB row).
 echo "   PASS"
+
+# AP-20 (P5): Auth-Fail-Fast in Produktion verifizieren. Der API-Container
+# wird mit NODE_ENV=production und OHNE Authentifizierungskonfiguration
+# gestartet und MUSS mit einem Fehler beenden. LOCAL_AUTH_ENABLED und
+# OIDC_ENABLED werden hier gezielt als LEER uebergeben: docker-compose.yml
+# interpoliert sie aus ${LOCAL_AUTH_ENABLED:-} und wuerde sonst die Werte
+# aus der lokalen .env (LOCAL_AUTH_ENABLED=true) in den Container
+# durchreichen, wodurch der Fail-Fast nie greift. Ein leerer Wert wird von
+# app-config.schema.ts (optionalBooleanFromEnv) wie "nicht gesetzt"
+# behandelt, sodass in Produktion der Fail-Fast zuschlaegt.
+echo "11. Auth fail-fast: API refuses to start in NODE_ENV=production without auth config..."
+set +e
+$COMPOSE run --rm --no-deps -e NODE_ENV=production -e LOCAL_AUTH_ENABLED= -e OIDC_ENABLED= api > /tmp/versigo-smoke-failfast.log 2>&1
+FAILFAST_EXIT=$?
+set -e
+if [ "$FAILFAST_EXIT" -eq 0 ]; then
+  echo "FAILED: API started in production WITHOUT any authentication method"
+  cat /tmp/versigo-smoke-failfast.log
+  rm -f /tmp/versigo-smoke-failfast.log
+  exit 1
+fi
+if ! grep -qE "No authentication method configured|KEINE AUTHENTIFIZIERUNGSMETHODE" /tmp/versigo-smoke-failfast.log; then
+  echo "FAILED: API did not exit with the expected auth-configuration error (exit $FAILFAST_EXIT)"
+  tail -30 /tmp/versigo-smoke-failfast.log
+  rm -f /tmp/versigo-smoke-failfast.log
+  exit 1
+fi
+rm -f /tmp/versigo-smoke-failfast.log
+echo "   API refused to start (exit $FAILFAST_EXIT, auth-configuration error logged)"
+echo "   PASS"
+
+# AP-20 (Review-3, Medium): Produktions-Erfolgspfad. Die Schritte 1-10
+# verifizieren die Development-Runtime (.env aus .env.example mit
+# NODE_ENV=development und Platzhalter-Passwort). Schritt 11 prueft nur den
+# Fail-Fast (kein Auth-Modus -> API verweigert den Start). Hier wird der
+# dokumentierte Produktionspfad (docs/docker-image-guide.md Abschnitt 5:
+# NODE_ENV=production + eigenes, starkes Passwort) auf einer frischen
+# Datenbank nachgestellt: API/Worker/Web starten im Produktionsmodus, der
+# Bootstrap legt Admin + Default-Household an, Login und eine zentrale
+# Fachaktion (Policy ueber /households/default) funktionieren end-to-end.
+echo "12. Production success path: NODE_ENV=production + strong password (fresh DB)..."
+# Stack aus Schritt 1-11 stoppen und Container entfernen, damit podman-compose
+# sie nicht mit den alten Dev-Env-Werten weiterverwendet (Container-Reuse).
+$COMPOSE down --remove-orphans 2>/dev/null || true
+
+# Produktions-Umgebung exportieren: Compose interpoliert ${NODE_ENV:-...} etc.
+# aus der Shell-Umgebung (Vorrang vor .env). OIDC wird bewusst deaktiviert,
+# damit der Pfad unabhaengig von der lokalen .env deterministisch ist
+# (LOCAL_AUTH_ENABLED=true erfuellt allein den Auth-Fail-Fast).
+PROD_ADMIN_USERNAME="prodadmin"
+PROD_ADMIN_PASSWORD="$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)"
+export NODE_ENV=production
+export LOCAL_AUTH_ENABLED=true
+export LOCAL_ADMIN_USERNAME="${PROD_ADMIN_USERNAME}"
+export LOCAL_ADMIN_PASSWORD="${PROD_ADMIN_PASSWORD}"
+export OIDC_ENABLED=false
+# AP-20: Express-Session setzt bei `secure: true` ueber reines HTTP gar kein
+# Session-Cookie (dokumentiertes Verhalten). Der Smoke-Test bedient die API
+# ueber HTTP und verifiziert die Produktionskette (Bootstrap, Login, Session,
+# Household-Aktion) end-to-end; dafuer wird das Secure-Flag hier bewusst
+# deaktiviert. In echten Deployments bleibt der Default (secure in Produktion)
+# bestehen – diese Zeile ist ausschliesslich Smoke-Test-Infrastruktur.
+export COOKIE_SECURE=false
+
+# Frische Datenbank: Schema leeren und Migration erneut ausfuehren.
+$COMPOSE up -d db redis
+wait_for_db
+wait_for_redis
+$COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+  -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1 || {
+  echo "FAILED: could not reset database schema for production pass"
+  exit 1
+}
+$COMPOSE run --rm migration 2>&1 || {
+  echo "ERROR: Production migration failed."
+  $COMPOSE logs migration 2>/dev/null || true
+  exit 1
+}
+
+echo "Starting API, Worker and Web in production mode..."
+$COMPOSE up -d api worker web
+wait_for_api_health
+wait_for_api_ready
+wait_for_web
+
+echo "12a. Production: local admin bootstrap + login (strong password)..."
+PROD_LOGIN_STATUS=$(curl -s -o /tmp/versigo-prod-login-response.json -D /tmp/versigo-prod-headers.txt -w "%{http_code}" \
+  -X POST http://localhost:${APP_PORT:-3001}/auth/local/login \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"${PROD_ADMIN_USERNAME}\",\"password\":\"${PROD_ADMIN_PASSWORD}\"}" \
+  -c /tmp/versigo-prod-cookies.txt)
+if [ "$PROD_LOGIN_STATUS" != "200" ]; then
+  echo "FAILED: production login returned HTTP $PROD_LOGIN_STATUS"
+  cat /tmp/versigo-prod-login-response.json
+  $COMPOSE logs api
+  exit 1
+fi
+grep -qF "\"username\":\"${PROD_ADMIN_USERNAME}\"" /tmp/versigo-prod-login-response.json || { echo "FAILED: production login response username mismatch"; exit 1; }
+grep -qF '"role":"ADMIN"' /tmp/versigo-prod-login-response.json || { echo "FAILED: production login response role is not ADMIN"; exit 1; }
+PROD_ADMIN_COUNT=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+  -tAc "SELECT count(*) FROM users WHERE username = '${PROD_ADMIN_USERNAME}' AND role = 'ADMIN' AND status = 'ACTIVE';" | tr -d '[:space:]')
+if [ "$PROD_ADMIN_COUNT" != "1" ]; then
+  echo "FAILED: expected exactly 1 production admin, found $PROD_ADMIN_COUNT"
+  exit 1
+fi
+echo "   Login: HTTP 200, genau 1 aktiver ADMIN (nicht der Platzhalter)"
+echo "   PASS"
+
+echo "12b. Production: default household + central business action..."
+# Der Produktionslauf setzt COOKIE_SECURE=false (Smoke-Infrastruktur ueber
+# HTTP; express-session setzt Secure-Cookies ueber HTTP nicht). Der Session-
+# Wert wird robust aus dem Cookie-Jar bzw. dem Set-Cookie-Header der
+# Login-Antwort extrahiert und explizit als Cookie-Header gesendet. Die Kette
+# (Bootstrap, Login, Session-Validierung, Household-Membership,
+# Policy-Fachaktion) bleibt damit vollstaendig verifiziert.
+PROD_SESSION_VALUE=""
+if [ -s /tmp/versigo-prod-cookies.txt ]; then
+  # set -e-Schutz: grep liefert Exit 1 (kein Treffer) und darf das Skript
+  # nicht abbrechen – Fallback greift weiter unten.
+  PROD_SESSION_VALUE=$(grep -F 'versigo.sid' /tmp/versigo-prod-cookies.txt 2>/dev/null | tail -1 | awk '{print $NF}' || true)
+fi
+if [ -z "$PROD_SESSION_VALUE" ]; then
+  # Fallback: Session-Wert direkt aus dem Set-Cookie-Header der Login-Antwort.
+  PROD_SESSION_VALUE=$(grep -i '^set-cookie:' /tmp/versigo-prod-headers.txt 2>/dev/null | grep -o 'versigo\.sid=[^;]*' | head -1 | sed 's/^versigo\.sid=//' || true)
+fi
+if [ -z "$PROD_SESSION_VALUE" ]; then
+  echo "FAILED: production session cookie not found (neither jar nor Set-Cookie header)"
+  echo "--- response headers ---"
+  cat /tmp/versigo-prod-headers.txt 2>/dev/null || true
+  echo "--- cookie jar ---"
+  cat /tmp/versigo-prod-cookies.txt 2>/dev/null || true
+  exit 1
+fi
+PROD_POLICY_ID="prod-policy-$(date +%s)"
+PROD_POLICY_STATUS=$(curl -s -o /tmp/versigo-prod-policy-create.json -w "%{http_code}" \
+  -X POST http://localhost:${APP_PORT:-3001}/households/default/policies \
+  -H 'Content-Type: application/json' \
+  -H "Cookie: versigo.sid=${PROD_SESSION_VALUE}" \
+  -d "{\"type\":\"HAFTPFLICHT\",\"insurerName\":\"Prod-Smoke\",\"contractNumber\":\"PR-${PROD_POLICY_ID}\",\"startDate\":\"2026-08-01\"}")
+if [ "$PROD_POLICY_STATUS" != "201" ] && [ "$PROD_POLICY_STATUS" != "200" ]; then
+  echo "FAILED: production POST /households/default/policies returned HTTP $PROD_POLICY_STATUS"
+  cat /tmp/versigo-prod-policy-create.json
+  exit 1
+fi
+grep -qF "\"contractNumber\":\"PR-${PROD_POLICY_ID}\"" /tmp/versigo-prod-policy-create.json || { echo "FAILED: production policy response mismatch"; cat /tmp/versigo-prod-policy-create.json; exit 1; }
+PROD_HOUSEHOLD_EXISTS=$($COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+  -tAc "SELECT count(*) FROM households WHERE id = 'default';" | tr -d '[:space:]')
+if [ "$PROD_HOUSEHOLD_EXISTS" != "1" ]; then
+  echo "FAILED: default household missing in production"
+  exit 1
+fi
+# Aufraeumen: Smoke-Daten aus der Produktions-DB entfernen.
+$COMPOSE exec -T db psql -U "${POSTGRES_USER:-versigo}" -d "${POSTGRES_DB:-versigo}" \
+  -c "DELETE FROM insurance_policies WHERE \"contractNumber\" = 'PR-${PROD_POLICY_ID}';" >/dev/null 2>&1 || true
+rm -f /tmp/versigo-prod-policy-create.json /tmp/versigo-prod-policy-list.json
+echo "   Policy create via /households/default: OK (Household vorhanden, Membership wirksam)"
+echo "   PASS"
+
+# Exportierte Produktions-Umgebung zuruecksetzen (Default: Werte aus .env).
+unset NODE_ENV LOCAL_AUTH_ENABLED LOCAL_ADMIN_USERNAME LOCAL_ADMIN_PASSWORD OIDC_ENABLED COOKIE_SECURE
 
 echo ""
 echo "=== All smoke tests passed ==="

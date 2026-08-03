@@ -37,7 +37,7 @@ services:
   test:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.test
       target: build
     image: versigo-test:latest
     environment:

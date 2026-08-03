@@ -26,6 +26,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/', label: 'nav.dashboard', icon: 'home' },
       { href: '/policies', label: 'nav.policies', icon: 'policies' },
       { href: '/household/costs', label: 'nav.costs', icon: 'costs' },
+      // AP-20: Freigaben-Funktion ist ueber die UI erreichbar
+      // (household-gescopte Freigaben anderer Familienmitglieder).
+      { href: '/household/shares', label: 'nav.shares', icon: 'sharing' },
     ],
   },
   {

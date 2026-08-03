@@ -9,6 +9,8 @@ import { useI18n } from '../../i18n';
 import { Icon } from './icons';
 import type { NavSection } from './nav-config';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+
 type AppShellProps = {
   children: ReactNode;
   navSections: NavSection[];
@@ -40,6 +42,37 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
   const user = userProp !== undefined ? userProp : hookUser;
 
   const closeSidebar = () => setSidebarOpen(false);
+
+  // AP-20 (UI-Completeness): Abmelden ist in jeder angemeldeten Ansicht
+  // direkt erreichbar – Icon-Schaltflaeche in der Mobil-Topbar und
+  // beschrifteter Eintrag am unteren Rand der Sidebar.
+  const handleLogout = async () => {
+    try {
+      await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
+    } catch {
+      // Netzwerkfehler beim Logout-Request darf die Abmeldung nicht
+      // blockieren; der Redirect fuehrt ohnehin auf die Login-Seite.
+    } finally {
+      window.location.href = '/login';
+    }
+  };
+
+  const logoutIcon = (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+    </svg>
+  );
 
   // AP-16: Die Admin-Navigation ist nur fuer ADMIN sichtbar. READ_ONLY und
   // USER sehen den Admin-Eintrag nicht (die Durchsetzung erfolgt serverseitig;
@@ -111,6 +144,16 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
           <span className="logo-accent">Ver</span>siGo
         </Link>
         <div className="app-topbar-actions">
+          {user && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={handleLogout}
+              aria-label={t('nav.logout')}
+              title={t('nav.logout')}
+            >
+              {logoutIcon}
+            </button>
+          )}
           <button
             className="btn btn-ghost btn-sm"
             onClick={toggleTheme}
@@ -166,6 +209,13 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
             })}
           </div>
         ))}
+
+        {user && (
+          <button className="nav-item nav-item-logout" onClick={handleLogout}>
+            <span className="nav-item-icon">{logoutIcon}</span>
+            {t('nav.logout')}
+          </button>
+        )}
       </aside>
 
       {/* Main content */}
