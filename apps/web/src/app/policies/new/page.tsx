@@ -23,8 +23,6 @@ const PAYMENT_FREQUENCIES = [
   'MONTHLY', 'QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL',
 ];
 
-const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF'];
-
 export default function NewPolicyPage(): ReactElement {
   const { t } = useI18n();
   const [form, setForm] = useState({
@@ -40,7 +38,6 @@ export default function NewPolicyPage(): ReactElement {
     noticePeriod: '',
     paymentFrequency: 'MONTHLY',
     premiumAmount: '',
-    premiumCurrency: 'EUR',
     deductibleAmount: '',
     coverageSummaryShort: '',
     source: 'MANUAL',
@@ -79,7 +76,6 @@ export default function NewPolicyPage(): ReactElement {
         noticePeriod: form.noticePeriod ? Number(form.noticePeriod) : undefined,
         paymentFrequency: form.paymentFrequency || undefined,
         premiumAmount: form.premiumAmount ? Number(form.premiumAmount) : undefined,
-        premiumCurrency: form.premiumCurrency,
         deductibleAmount: form.deductibleAmount ? Number(form.deductibleAmount) : undefined,
         coverageSummaryShort: form.coverageSummaryShort || undefined,
         source: form.source,
@@ -230,17 +226,6 @@ export default function NewPolicyPage(): ReactElement {
                 onChange={(e) => setForm({ ...form, premiumAmount: e.target.value })}
                 placeholder={t('policies.premiumAmount')}
               />
-            </FormField>
-
-            <FormField label={t('policies.premiumCurrency')}>
-              <Select
-                value={form.premiumCurrency}
-                onChange={(e) => setForm({ ...form, premiumCurrency: e.target.value })}
-              >
-                {CURRENCIES.map((curr) => (
-                  <option key={curr} value={curr}>{curr}</option>
-                ))}
-              </Select>
             </FormField>
 
             <FormField label={t('policies.deductibleAmount')} error={errors.deductibleAmount}>
