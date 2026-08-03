@@ -191,13 +191,14 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
     image: versigo-web:latest
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: "3000"
+      # API base URL for the browser - injected at container startup via entrypoint
+      # This allows fully dynamic port configuration without rebuilding the web image
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
     ports:
       - "${WEB_PORT:-3000}:3000"
     networks:

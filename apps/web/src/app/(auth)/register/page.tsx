@@ -9,25 +9,29 @@ import { Alert } from '../../../components/ui/alert';
 import { InlineSpinner } from '../../../components/ui/loading';
 import { localizeAuthError, useI18n } from '../../../i18n';
 
+import { getApiBaseUrl } from '@/lib/runtime-config';
+
 /**
  * AP-16: Lokale Registrierung. Legt ein Konto mit Status PENDING_APPROVAL an;
  * erst ein Administrator schaltet es frei (POST /admin/users/:id/approve).
  * Die Antwort enthaelt keine Account-Details, nur den Freischaltungsstatus.
  */
 export default function RegisterPage(): ReactElement {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+  const apiBaseUrl = getApiBaseUrl();
   const { t } = useI18n();
 
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   async function handleRegister(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
     setLoading(true);
 
     try {
@@ -43,11 +47,32 @@ export default function RegisterPage(): ReactElement {
         return;
       }
 
-      // AP-21: Die rohe (deutsche) API-Fehlermeldung wird NICHT angezeigt;
-      // der HTTP-Status wird auf einen lokalisierten Katalog-Schluessel
-      // abgebildet (en/de).
-      await res.json().catch(() => null);
-      setError(localizeAuthError(t, res.status, 'register'));
+      const data = await res.json().catch(() => null);
+      
+      // Handle structured validation errors (BugFix-02)
+      if (data?.errors && Array.isArray(data.errors)) {
+        const newFieldErrors: Record<string, string> = {};
+        data.errors.forEach((err: string) => {
+          // Try to map error messages to fields
+          if (err.toLowerCase().includes('username') || err.toLowerCase().includes('benutzername')) {
+            newFieldErrors.username = err;
+          } else if (err.toLowerCase().includes('displayname') || err.toLowerCase().includes('anzeigename')) {
+            newFieldErrors.displayName = err;
+          } else if (err.toLowerCase().includes('password') || err.toLowerCase().includes('passwort')) {
+            newFieldErrors.password = err;
+          } else {
+            // Generic error
+            if (!newFieldErrors.general) newFieldErrors.general = err;
+          }
+        });
+        setFieldErrors(newFieldErrors);
+        setError(data.message || t('auth.validationError'));
+      } else {
+        // AP-21: Die rohe (deutsche) API-Fehlermeldung wird NICHT angezeigt;
+        // der HTTP-Status wird auf einen lokalisierten Katalog-Schluessel
+        // abgebildet (en/de).
+        setError(localizeAuthError(t, res.status, 'register'));
+      }
     } catch {
       setError(t('auth.connectionError'));
     } finally {
@@ -100,6 +125,7 @@ export default function RegisterPage(): ReactElement {
               label={t('auth.username')}
               required
               hint={t('auth.usernameHint')}
+              error={fieldErrors.username}
             >
               <Input
                 id="register-username"
@@ -112,7 +138,7 @@ export default function RegisterPage(): ReactElement {
               />
             </FormField>
 
-            <FormField label={t('auth.displayName')} required hint={t('auth.displayNameHint')}>
+            <FormField label={t('auth.displayName')} required hint={t('auth.displayNameHint')} error={fieldErrors.displayName}>
               <Input
                 id="register-displayname"
                 type="text"
@@ -125,7 +151,7 @@ export default function RegisterPage(): ReactElement {
               />
             </FormField>
 
-            <FormField label={t('auth.password')} required hint={t('auth.passwordHint')}>
+            <FormField label={t('auth.password')} required hint={t('auth.passwordHint')} error={fieldErrors.password}>
               <Input
                 id="register-password"
                 type="password"
@@ -137,6 +163,12 @@ export default function RegisterPage(): ReactElement {
                 placeholder={t('auth.passwordPlaceholder')}
               />
             </FormField>
+
+            {fieldErrors.general && (
+              <div style={{ marginTop: 'var(--versigo-space-3)', padding: 'var(--versigo-space-2)', background: 'var(--versigo-danger-soft)', borderRadius: 'var(--versigo-radius)', color: 'var(--versigo-danger)', fontSize: 'var(--versigo-text-sm)' }}>
+                {fieldErrors.general}
+              </div>
+            )}
 
             <Button
               type="submit"

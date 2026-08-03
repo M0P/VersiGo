@@ -6,7 +6,9 @@ import { Button } from '../../../components/ui/button';
 import { Loading } from '../../../components/ui/loading';
 import { useI18n } from '../../../i18n';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+import { getApiBaseUrl } from '@/lib/runtime-config';
+
+const API_BASE = getApiBaseUrl();
 
 type SourceDocument = {
   id: string;

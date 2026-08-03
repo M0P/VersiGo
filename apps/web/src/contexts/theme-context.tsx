@@ -11,7 +11,9 @@ import {
 } from 'react';
 import { hexToHSL, hslToHex, normalizeHS } from '../lib/colour-utils';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+import { getApiBaseUrl } from '@/lib/runtime-config';
+
+const API_BASE = getApiBaseUrl();
 
 /**
  * Preset accent colours a user can pick from.

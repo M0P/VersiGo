@@ -72,6 +72,8 @@ export default async function RootLayout({
     <html lang={initialLanguage} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        {/* Runtime config - loaded before any client code runs */}
+        <script src="/runtime-config.js" />
       </head>
       <body>
         <Providers initialLanguage={initialLanguage}>{children}</Providers>

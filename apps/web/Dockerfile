@@ -20,8 +20,6 @@ RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
 
 # ---- Build Stage ----
 FROM base AS build
-ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
-ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package.json ./package.json
@@ -33,7 +31,7 @@ COPY apps/web ./apps/web
 
 RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
-    pnpm run build --filter @versigo/web
+    cd apps/web && pnpm run build
 
 # ---- Runner Stage ----
 FROM node:24-alpine AS runner
@@ -56,10 +54,15 @@ COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
 
+# Copy entrypoint script
+COPY apps/web/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 RUN chown -R appuser:appgroup /app
 
 USER appuser
 
 EXPOSE 3000
 
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "apps/web/server.js"]

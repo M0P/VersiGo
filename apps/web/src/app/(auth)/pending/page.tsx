@@ -14,8 +14,10 @@ import { useI18n } from '../../../i18n';
  * Die Statuspruefung fragt /auth/me ab – sobald das Konto aktiv ist,
  * wird zur Startseite weitergeleitet.
  */
+import { getApiBaseUrl } from '@/lib/runtime-config';
+
 export default function PendingPage(): ReactElement {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+  const apiBaseUrl = getApiBaseUrl();
   const { t } = useI18n();
 
   async function checkStatus(): Promise<void> {
