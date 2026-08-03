@@ -16,7 +16,7 @@ COPY apps/web/package.json apps/web/package.json
 
 RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
-    pnpm install --frozen-lockfile --filter @versigo/web... --prod=false
+    pnpm install --frozen-lockfile --prod=false
 
 # ---- Build Stage ----
 FROM base AS build

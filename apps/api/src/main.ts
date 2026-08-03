@@ -23,21 +23,34 @@ async function bootstrap(): Promise<void> {
       // BugFix-02: Strukturierte Validierungsfehler zurückgeben
       // Damit das Frontend feldspezifische Fehlermeldungen anzeigen kann
       exceptionFactory: (errors) => {
-        const messages = errors.flatMap((error) => {
+        const fieldErrors = errors.flatMap((error) => {
+          const field = error.property;
           if (error.constraints) {
-            return Object.values(error.constraints);
+            return Object.entries(error.constraints).map(([constraint, message]) => ({
+              field,
+              constraint,
+              message,
+            }));
           }
           if (error.children && error.children.length > 0) {
-            return error.children.flatMap((child) =>
-              child.constraints ? Object.values(child.constraints) : []
-            );
+            return error.children.flatMap((child) => {
+              const childField = child.property;
+              if (child.constraints) {
+                return Object.entries(child.constraints).map(([constraint, message]) => ({
+                  field: childField,
+                  constraint,
+                  message,
+                }));
+              }
+              return [];
+            });
           }
           return [];
         });
         return new HttpException(
           {
             message: 'Validierung fehlgeschlagen',
-            errors: messages,
+            errors: fieldErrors,
             statusCode: 400,
           },
           HttpStatus.BAD_REQUEST,
@@ -94,6 +107,11 @@ async function bootstrap(): Promise<void> {
         httpOnly: true,
         secure: config.get('COOKIE_SECURE'),
         sameSite: 'lax',
+        // BugFix-02: In development, set cookie domain to 'localhost' (without port)
+        // so the session cookie works across different localhost ports (e.g., web on 2478, API on 2479).
+        // This makes the cookie a domain cookie for 'localhost' instead of a host-only cookie
+        // that includes the port. In production, leave undefined to use the default host-only behavior.
+        domain: config.get('NODE_ENV') !== 'production' ? 'localhost' : undefined,
         maxAge: 1000 * 60 * 60 * 8,
       },
     }),

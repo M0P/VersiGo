@@ -8,7 +8,6 @@ import { Card } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Loading } from '../../../components/ui/loading';
 import { Alert } from '../../../components/ui/alert';
-import { EmptyState } from '../../../components/ui/empty-state';
 import { NAV_SECTIONS } from '../../../components/ui/nav-config';
 import { formatCurrency, formatDate, useI18n } from '../../../i18n';
 import CoverageSummarySection from './coverage-summary-section';
