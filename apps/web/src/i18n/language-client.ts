@@ -7,7 +7,9 @@
  * erhalten eine dauerhafte Konto-Einstellung (persistence: 'persistent').
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+import { getApiBaseUrl } from '@/lib/runtime-config';
+
+const API_BASE = getApiBaseUrl();
 
 export type LanguagePersistence = 'persistent' | 'session';
 

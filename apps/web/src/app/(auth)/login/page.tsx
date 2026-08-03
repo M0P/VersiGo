@@ -18,6 +18,7 @@ type AuthConfig = {
 type LoginError = {
   message: string;
   status: number;
+  fieldErrors?: Record<string, string>;
 };
 
 /**
@@ -41,14 +42,17 @@ function safeRedirectPath(value: string | null): string {
   return path;
 }
 
+import { getApiBaseUrl } from '@/lib/runtime-config';
+
 export default function LoginPage(): ReactElement {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+  const apiBaseUrl = getApiBaseUrl();
   const { t } = useI18n();
 
   const [config, setConfig] = useState<AuthConfig | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<LoginError | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [configError, setConfigError] = useState(false);
   // Ziel nach erfolgreichem Login: von der Middleware gesetzter redirectTo-
@@ -79,6 +83,7 @@ export default function LoginPage(): ReactElement {
   async function handleLocalLogin(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
     setLoading(true);
 
     try {
@@ -95,11 +100,28 @@ export default function LoginPage(): ReactElement {
         return;
       }
 
-      // AP-21: Die rohe (deutsche) API-Fehlermeldung wird NICHT angezeigt;
-      // der HTTP-Status wird auf einen lokalisierten Katalog-Schluessel
-      // abgebildet (en/de).
-      await res.json().catch(() => null);
-      setError({ message: localizeAuthError(t, res.status, 'login'), status: res.status });
+      const data = await res.json().catch(() => null);
+      
+      // Handle structured validation errors (BugFix-02)
+      if (data?.errors && Array.isArray(data.errors)) {
+        const newFieldErrors: Record<string, string> = {};
+        data.errors.forEach((err: string) => {
+          if (err.toLowerCase().includes('username') || err.toLowerCase().includes('benutzername')) {
+            newFieldErrors.username = err;
+          } else if (err.toLowerCase().includes('password') || err.toLowerCase().includes('passwort')) {
+            newFieldErrors.password = err;
+          } else {
+            if (!newFieldErrors.general) newFieldErrors.general = err;
+          }
+        });
+        setFieldErrors(newFieldErrors);
+        setError({ message: data.message || t('auth.validationError'), status: res.status, fieldErrors: newFieldErrors });
+      } else {
+        // AP-21: Die rohe (deutsche) API-Fehlermeldung wird NICHT angezeigt;
+        // der HTTP-Status wird auf einen lokalisierten Katalog-Schluessel
+        // abgebildet (en/de).
+        setError({ message: localizeAuthError(t, res.status, 'login'), status: res.status });
+      }
     } catch {
       setError({ message: t('auth.connectionError'), status: 0 });
     } finally {
@@ -168,7 +190,7 @@ export default function LoginPage(): ReactElement {
         {config.localEnabled && (
           <form onSubmit={handleLocalLogin} noValidate>
             <fieldset disabled={loading} style={{ border: 'none', padding: 0, margin: 0 }}>
-              <FormField label={t('auth.username')} required>
+              <FormField label={t('auth.username')} required error={fieldErrors.username}>
                 <Input
                   id="login-username"
                   type="text"
@@ -180,7 +202,7 @@ export default function LoginPage(): ReactElement {
                 />
               </FormField>
 
-              <FormField label={t('auth.password')} required>
+              <FormField label={t('auth.password')} required error={fieldErrors.password}>
                 <Input
                   id="login-password"
                   type="password"
@@ -191,6 +213,12 @@ export default function LoginPage(): ReactElement {
                   placeholder={t('auth.passwordPlaceholder')}
                 />
               </FormField>
+
+              {fieldErrors.general && (
+                <div style={{ marginTop: 'var(--versigo-space-3)', padding: 'var(--versigo-space-2)', background: 'var(--versigo-danger-soft)', borderRadius: 'var(--versigo-radius)', color: 'var(--versigo-danger)', fontSize: 'var(--versigo-text-sm)' }}>
+                  {fieldErrors.general}
+                </div>
+              )}
 
               <Button type="submit" disabled={loading || !username || !password} style={{ width: '100%' }}>
                 {loading ? <><InlineSpinner /> {t('auth.loggingIn')}</> : t('auth.login')}

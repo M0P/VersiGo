@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, type ReactElement, type FormEvent } from 'react';
-import { AppShell } from '../../../components/ui/app-shell';
-import { PageHeader } from '../../../components/ui/page-header';
-import { Card } from '../../../components/ui/card';
-import { Button } from '../../../components/ui/button';
-import { Input, Select, FormField } from '../../../components/ui/form-field';
-import { InlineSpinner } from '../../../components/ui/loading';
-import { NAV_SECTIONS } from '../../../components/ui/nav-config';
-import { useI18n } from '../../../i18n';
+import { useEffect, useState, type ReactElement, type FormEvent } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { AppShell } from '@/components/ui/app-shell';
+import { PageHeader } from '@/components/ui/page-header';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input, Select, FormField } from '@/components/ui/form-field';
+import { InlineSpinner } from '@/components/ui/loading';
+import { Alert } from '@/components/ui/alert';
+import { NAV_SECTIONS } from '@/components/ui/nav-config';
+import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 
@@ -25,7 +27,10 @@ const PAYMENT_FREQUENCIES = [
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF'];
 
-export default function NewPolicyPage(): ReactElement {
+export default function EditPolicyPage(): ReactElement {
+  const params = useParams();
+  const router = useRouter();
+  const policyId = params.id as string;
   const { t } = useI18n();
   const [form, setForm] = useState({
     type: 'HAFTPFLICHT',
@@ -34,7 +39,7 @@ export default function NewPolicyPage(): ReactElement {
     contractNumber: '',
     tariffName: '',
     status: 'ACTIVE',
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: '',
     endDate: '',
     renewalDate: '',
     noticePeriod: '',
@@ -45,8 +50,42 @@ export default function NewPolicyPage(): ReactElement {
     coverageSummaryShort: '',
     source: 'MANUAL',
   });
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch(`${API_BASE}/households/default/policies/${policyId}`, { credentials: 'include' })
+      .then((res) => {
+        if (res.status === 401) { window.location.href = '/login'; return Promise.resolve(null); }
+        if (!res.ok) throw new Error(t('policies.notFound'));
+        return res.json();
+      })
+      .then((data) => {
+        if (data) {
+          setForm({
+            type: data.type,
+            insurerName: data.insurerName,
+            insurerPortalUrl: data.insurerPortalUrl ?? '',
+            contractNumber: data.contractNumber,
+            tariffName: data.tariffName ?? '',
+            status: data.status,
+            startDate: data.startDate ? data.startDate.split('T')[0] : '',
+            endDate: data.endDate ? data.endDate.split('T')[0] : '',
+            renewalDate: data.renewalDate ? data.renewalDate.split('T')[0] : '',
+            noticePeriod: data.noticePeriod ?? '',
+            paymentFrequency: data.paymentFrequency ?? 'MONTHLY',
+            premiumAmount: data.premiumAmount ?? '',
+            premiumCurrency: data.premiumCurrency ?? 'EUR',
+            deductibleAmount: data.deductibleAmount ?? '',
+            coverageSummaryShort: data.coverageSummaryShort ?? '',
+            source: data.source ?? 'MANUAL',
+          });
+        }
+      })
+      .catch(() => setErrors({ load: t('policies.notFoundAlert') }))
+      .finally(() => setLoading(false));
+  }, [policyId, t]);
 
   function validateForm(): boolean {
     const newErrors: Record<string, string> = {};
@@ -84,8 +123,8 @@ export default function NewPolicyPage(): ReactElement {
         coverageSummaryShort: form.coverageSummaryShort || undefined,
         source: form.source,
       };
-      const res = await fetch(`${API_BASE}/households/default/policies`, {
-        method: 'POST',
+      const res = await fetch(`${API_BASE}/households/default/policies/${policyId}`, {
+        method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -95,7 +134,7 @@ export default function NewPolicyPage(): ReactElement {
         const data = await res.json().catch(() => null);
         throw new Error(data?.message ?? t('policies.createError'));
       }
-      window.location.href = '/policies';
+      router.push(`/policies/${policyId}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : t('policies.createError');
       setErrors({ submit: message });
@@ -104,9 +143,28 @@ export default function NewPolicyPage(): ReactElement {
     }
   }
 
+  if (loading) {
+    return (
+      <AppShell navSections={NAV_SECTIONS}>
+        <PageHeader title={t('policies.detailTitle')} />
+        <div style={{ textAlign: 'center', padding: 'var(--versigo-space-8)' }}>
+          <span className="loading-spinner" style={{ width: 32, height: 32 }} />
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell navSections={NAV_SECTIONS}>
-      <PageHeader title={t('policies.newTitle')} description={t('policies.newDescription')} />
+      <PageHeader
+        title={t('policies.newTitle')}
+        description={t('policies.newDescription')}
+        actions={
+          <a href={`/policies/${policyId}`}>
+            <Button variant="secondary" size="sm">{t('policies.backToOverview')}</Button>
+          </a>
+        }
+      />
 
       <Card style={{ maxWidth: 720 }}>
         <form onSubmit={handleSubmit}>
@@ -274,16 +332,19 @@ export default function NewPolicyPage(): ReactElement {
             </FormField>
           </div>
 
-          {errors.submit && (
-            <div style={{ marginTop: 'var(--versigo-space-4)', padding: 'var(--versigo-space-3)', background: 'var(--versigo-danger-soft)', borderRadius: 'var(--versigo-radius)', color: 'var(--versigo-danger)' }}>
-              {errors.submit}
+          {(errors.load || errors.submit) && (
+            <div style={{ marginTop: 'var(--versigo-space-4)' }}>
+              <Alert variant="danger">{errors.load || errors.submit}</Alert>
             </div>
           )}
 
-          <div style={{ marginTop: 'var(--versigo-space-6)' }}>
+          <div style={{ marginTop: 'var(--versigo-space-6)', display: 'flex', gap: 'var(--versigo-space-3)' }}>
             <Button type="submit" disabled={submitting}>
-              {submitting ? <><InlineSpinner /> {t('policies.creating')}</> : t('policies.create')}
+              {submitting ? <><InlineSpinner /> {t('common.saving')}</> : t('common.save')}
             </Button>
+            <a href={`/policies/${policyId}`}>
+              <Button type="button" variant="secondary">{t('common.cancel')}</Button>
+            </a>
           </div>
         </form>
       </Card>

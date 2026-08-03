@@ -39,6 +39,8 @@ export const NAV_SECTIONS: NavSection[] = [
       // und sind (serverseitig durchgesetzt) nur fuer ADMIN sichtbar.
       { href: '/settings', label: 'nav.myProfile', icon: 'settings' },
       { href: '/admin', label: 'nav.admin', icon: 'admin' },
+      // BugFix-02: Admin-Nutzerverwaltung
+      { href: '/admin/users', label: 'nav.adminUsers', icon: 'users' },
     ],
   },
 ];

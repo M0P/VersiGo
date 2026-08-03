@@ -13,7 +13,9 @@ import { NAV_SECTIONS } from '../../../components/ui/nav-config';
 import { useCurrentUser } from '../../../hooks/use-current-user';
 import { useI18n } from '../../../i18n';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+import { getApiBaseUrl } from '@/lib/runtime-config';
+
+const API_BASE = getApiBaseUrl();
 
 type Member = {
   id: string;

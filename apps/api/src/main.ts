@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, HttpException, HttpStatus } from '@nestjs/common';
 import * as session from 'express-session';
 import * as cookieParser from 'cookie-parser';
 import { AppConfigService, preloadRestartSettingsIntoEnv } from '@versigo/foundation';
@@ -20,6 +20,29 @@ async function bootstrap(): Promise<void> {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      // BugFix-02: Strukturierte Validierungsfehler zurückgeben
+      // Damit das Frontend feldspezifische Fehlermeldungen anzeigen kann
+      exceptionFactory: (errors) => {
+        const messages = errors.flatMap((error) => {
+          if (error.constraints) {
+            return Object.values(error.constraints);
+          }
+          if (error.children && error.children.length > 0) {
+            return error.children.flatMap((child) =>
+              child.constraints ? Object.values(child.constraints) : []
+            );
+          }
+          return [];
+        });
+        return new HttpException(
+          {
+            message: 'Validierung fehlgeschlagen',
+            errors: messages,
+            statusCode: 400,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      },
     }),
   );
 
@@ -35,8 +58,28 @@ async function bootstrap(): Promise<void> {
   // CORS ist daher auf die konfigurierten Web-Origins beschraenkt
   // (CORS_ORIGINS, Komma-separiert) und erlaubt Cookies (credentials: true).
   // Ohne diesen Header blockiert der Browser das Lesen aller API-Antworten.
+  //
+  // AP-17/BugFix-02: In Entwicklung (NODE_ENV !== 'production') erlauben wir
+  // zusaetzlich jeden localhost-Origin (beliebiger Port), damit nicht-standardmaessige
+  // Ports (z. B. 2478/2479 in Testumgebungen) ohne manuelle CORS_ORIGINS-Anpassung
+  // funktionieren. In Produktion gilt strikt die konfigurierte CORS_ORIGINS-Liste.
+  const corsOrigins = config.get('CORS_ORIGINS');
+  const isDevelopment = config.get('NODE_ENV') !== 'production';
   app.enableCors({
-    origin: config.get('CORS_ORIGINS'),
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin) {
+        // Same-origin or non-browser requests (e.g. curl, server-to-server)
+        return callback(null, true);
+      }
+      if (corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      if (isDevelopment && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+        // Erlaube jeden localhost-Port in Entwicklung
+        return callback(null, true);
+      }
+      callback(new Error(`CORS: Origin ${origin} not allowed`), false);
+    },
     credentials: true,
   });
 
