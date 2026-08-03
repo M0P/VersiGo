@@ -49,7 +49,7 @@ async function bootstrap(): Promise<void> {
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        secure: config.isProduction,
+        secure: config.get('COOKIE_SECURE'),
         sameSite: 'lax',
         maxAge: 1000 * 60 * 60 * 8,
       },

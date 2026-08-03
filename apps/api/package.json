@@ -29,8 +29,10 @@
     "ioredis": "^5.11.1",
     "openid-client": "^6.8.0",
     "passport": "^0.7.0",
+    "prisma": "^6.19.3",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.7",

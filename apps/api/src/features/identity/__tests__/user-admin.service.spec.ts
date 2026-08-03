@@ -21,6 +21,12 @@ function createMockDb() {
       count: vi.fn(),
       update: vi.fn(),
     },
+    household: {
+      findUnique: vi.fn(),
+    },
+    householdMembership: {
+      upsert: vi.fn().mockResolvedValue({ id: 'membership-1' }),
+    },
     auditEvent: {
       create: vi.fn().mockResolvedValue({ id: 'audit-1' }),
     },
@@ -98,8 +104,9 @@ describe('UserAdminService', () => {
   });
 
   describe('approve', () => {
-    it('schaltet PENDING_APPROVAL-Konten frei und auditiert', async () => {
+    it('schaltet PENDING_APPROVAL-Konten frei, nimmt sie ins default-Household auf und auditiert', async () => {
       mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.PENDING_APPROVAL });
+      mockDb.household.findUnique.mockResolvedValue({ id: 'default' });
 
       await service.approve(adminUser, 'user-1');
 
@@ -107,12 +114,32 @@ describe('UserAdminService', () => {
         where: { id: 'user-1' },
         data: { status: UserStatus.ACTIVE },
       });
+      // AP-20: Mitgliedschaft im Beta-Referenz-Household ergaenzen
+      expect(mockDb.householdMembership.upsert).toHaveBeenCalledWith({
+        where: {
+          householdId_userId: { householdId: 'default', userId: 'user-1' },
+        },
+        create: { householdId: 'default', userId: 'user-1' },
+        update: {},
+      });
       expect(mockDb.auditEvent.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           actorUserId: 'admin-1',
           action: 'USER_APPROVED',
           entityId: 'user-1',
         }),
+      });
+    });
+
+    it('ueberspringt die Household-Mitgliedschaft, wenn das default-Household fehlt', async () => {
+      mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.PENDING_APPROVAL });
+      mockDb.household.findUnique.mockResolvedValue(null);
+
+      await service.approve(adminUser, 'user-1');
+
+      expect(mockDb.householdMembership.upsert).not.toHaveBeenCalled();
+      expect(mockDb.auditEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ action: 'USER_APPROVED' }),
       });
     });
 

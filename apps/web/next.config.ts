@@ -28,6 +28,7 @@ function resolveAllowedDevOrigins(): string[] {
 }
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   ...(process.env.NODE_ENV === 'production'
     ? {}
     : { allowedDevOrigins: resolveAllowedDevOrigins() }),

@@ -6,12 +6,12 @@ import { AuthService } from '../../identity/auth.service';
 
 function createMockDb() {
   const db: Record<string, unknown> & {
-    householdMembership: { findUnique: ReturnType<typeof vi.fn> };
+    householdMembership: { findUnique: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
     insurancePolicy: { findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
     objectShare: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
     auditEvent: { create: ReturnType<typeof vi.fn> };
   } = {
-    householdMembership: { findUnique: vi.fn() },
+    householdMembership: { findUnique: vi.fn(), findMany: vi.fn() },
     insurancePolicy: { findFirst: vi.fn(), findUnique: vi.fn() },
     objectShare: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() },
     auditEvent: { create: vi.fn() },
@@ -250,6 +250,42 @@ describe('FamilySharingService', () => {
           where: { householdId, sourceUserId: userId },
         }),
       );
+    });
+  });
+
+  describe('listMembers', () => {
+    it('liefert die anderen Household-Mitglieder ohne den Aufrufer', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.householdMembership.findMany.mockResolvedValue([
+        {
+          userId,
+          user: { id: userId, username: 'user-1', displayName: 'User 1', role: GlobalRole.USER },
+        },
+        {
+          userId: targetUserId,
+          user: { id: targetUserId, username: 'user-2', displayName: 'User 2', role: GlobalRole.USER },
+        },
+      ]);
+
+      const result = await service.listMembers(householdId, userId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        id: targetUserId,
+        username: 'user-2',
+        displayName: 'User 2',
+        role: GlobalRole.USER,
+      });
+      expect(mockDb.householdMembership.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { householdId } }),
+      );
+    });
+
+    it('lehnt Nicht-Mitglieder ab', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue(null);
+
+      await expect(service.listMembers(householdId, userId)).rejects.toThrow(ForbiddenException);
+      expect(mockDb.householdMembership.findMany).not.toHaveBeenCalled();
     });
   });
 

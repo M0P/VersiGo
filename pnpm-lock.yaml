@@ -35,9 +35,6 @@ importers:
 
   apps/api:
     dependencies:
-      '@versigo/foundation':
-        specifier: workspace:*
-        version: link:../../packages/foundation
       '@nestjs/axios':
         specifier: ^4.0.1
         version: 4.0.1(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(axios@1.18.1(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1))(rxjs@7.8.2)
@@ -59,6 +56,9 @@ importers:
       '@prisma/client':
         specifier: ^6.0.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@versigo/foundation':
+        specifier: workspace:*
+        version: link:../../packages/foundation
       axios:
         specifier: ^1.18.1
         version: 1.18.1(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
@@ -89,12 +89,18 @@ importers:
       passport:
         specifier: ^0.7.0
         version: 0.7.0
+      prisma:
+        specifier: ^6.19.3
+        version: 6.19.3(typescript@5.9.3)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
     devDependencies:
       '@nestjs/cli':
         specifier: ^11.0.7
@@ -142,9 +148,6 @@ importers:
 
   apps/worker:
     dependencies:
-      '@versigo/foundation':
-        specifier: workspace:*
-        version: link:../../packages/foundation
       '@nestjs/bullmq':
         specifier: ^11.0.0
         version: 11.0.4(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.1.28)(bullmq@5.81.2(supports-color@8.1.1))
@@ -154,18 +157,27 @@ importers:
       '@nestjs/core':
         specifier: ^11.0.0
         version: 11.1.28(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/platform-express@11.1.28)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@versigo/foundation':
+        specifier: workspace:*
+        version: link:../../packages/foundation
       axios:
         specifier: ^1.18.1
         version: 1.18.1(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       bullmq:
         specifier: ^5.34.0
         version: 5.81.2(supports-color@8.1.1)
+      prisma:
+        specifier: ^6.19.3
+        version: 6.19.3(typescript@5.9.3)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
     devDependencies:
       '@nestjs/cli':
         specifier: ^11.0.7
@@ -1764,6 +1776,7 @@ packages:
   cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
+    deprecated: v4 is no longer maintained, upgrade to v5
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}

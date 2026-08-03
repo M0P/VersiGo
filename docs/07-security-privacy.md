@@ -19,6 +19,7 @@
 - Alle Dienste kommunizieren über ein internes Bridge-Netzwerk `versigo-internal`.
 - Nur öffentliche Ports: Web (3000), API (3001).
 - Datenbank (5432), Redis (6379) und MinIO (9000, 9001) sind standardmäßig nicht nach außen exponiert.
+- Der Worker-Liveness-Port (Standard `WORKER_HEALTH_PORT` 3100) ist **nicht** an den Host gebunden – er ist nur innerhalb des Compose-Netzes erreichbar (Grundlage des Compose-Healthchecks und der Smoke-Prüfung im Container).
 - Entwicklungsoverride (`docker-compose.override.yml`) kann interne Ports für lokale Tools öffnen.
 
 ### Container-Privilegien
@@ -33,7 +34,8 @@
 ### Reverse Proxy / TLS
 - Der Compose-Stack stellt kein TLS bereit.
 - TLS-Termination erfolgt durch einen vorgelagerten Reverse Proxy (z. B. Caddy, Traefik, nginx).
-- Cookie `Secure`-Flag wird nur in `NODE_ENV=production` gesetzt.
+- Cookie `Secure`-Flag wird standardmäßig nur in `NODE_ENV=production` gesetzt (Konfiguration `COOKIE_SECURE`, Default abgeleitet aus `NODE_ENV`).
+- `COOKIE_SECURE` nur explizit setzen, wenn die API kontrolliert über reines HTTP bedient wird (z. B. hinter einem TLS-terminierenden Reverse-Proxy oder in einer kontrollierten internen Installation ohne TLS).
 - Für lokale Entwicklung ist HTTP ausreichend.
 
 ## Zugriffsschutz
@@ -61,8 +63,8 @@
 - `POST /auth/register` ist per-IP rate-limitiert (eigener Redis-Zähler, getrennt vom Login-Zähler), damit die Admin-Freischalt-Warteschlange nicht durch Massen-Registrierungen überflutet werden kann
 
 ### Initialer Administrator (Bootstrap)
-- `LOCAL_ADMIN_USERNAME`/`LOCAL_ADMIN_PASSWORD` legen beim ersten Start einen initialen Admin an (Audit `BOOTSTRAP_ADMIN`)
-- Nur in Entwicklungs-/Testumgebungen; in `NODE_ENV=production` wird kein Bootstrap ausgeführt
+- `LOCAL_AUTH_ENABLED=true` plus `LOCAL_ADMIN_USERNAME`/`LOCAL_ADMIN_PASSWORD` legen beim ersten Start einen initialen Admin an (Audit `BOOTSTRAP_ADMIN`)
+- In `NODE_ENV=production` ist `LOCAL_AUTH_ENABLED` per Default deaktiviert: Ein Admin wird dort **niemals automatisch** angelegt, sondern nur bei ausdrücklicher Konfiguration (AP-20); das `.env.example`-Platzhalter-Passwort wird in Produktion abgelehnt
 - Keine automatischen Default-Zugangsdaten; Passwort wird nie überschrieben oder geändert
 
 ### Passwort-Handling (lokale Anmeldung)

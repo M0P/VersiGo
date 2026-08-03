@@ -114,6 +114,7 @@ setzbar; die Admin-API lehnt diese Schlüssel ab (`ForbiddenException`):
 | `APP_PORT`, `WEB_PORT` | Infrastruktur | Port-Bindings |
 | `CORS_ORIGINS` | Infrastruktur | Netzwerk/Trust-Grenze |
 | `TRUST_PROXY` | Infrastruktur | Reverse-Proxy-Vertrauen |
+| `COOKIE_SECURE` | Infrastruktur | Session-Cookie Secure-Flag (Default: true in Produktion) |
 | `DATABASE_URL`, `REDIS_URL` | Infrastruktur | Verbindungsstrings |
 | `DOCUMENTS_STORAGE_PATH` | Infrastruktur | Dateisystempfad |
 | `SETTINGS_ENCRYPTION_KEY` | Infrastruktur | **Root-Secret** (AES-256-GCM) |

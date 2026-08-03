@@ -321,6 +321,20 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     permission: 'ADMIN',
   },
   {
+    key: 'COOKIE_SECURE',
+    envVar: 'COOKIE_SECURE',
+    category: 'bootstrap',
+    type: 'boolean',
+    group: 'Infrastruktur',
+    description:
+      'Secure-Flag des Session-Cookies (Default: true in Produktion, false sonst, abgeleitet ' +
+      'aus NODE_ENV). Nur bei Deployments hinter TLS-terminierendem Reverse-Proxy oder ' +
+      'kontrollierten internen Installationen ohne TLS explizit setzen. Nur Environment/Compose.',
+    defaultValue: true,
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
+  {
     key: 'DATABASE_URL',
     envVar: 'DATABASE_URL',
     category: 'bootstrap',

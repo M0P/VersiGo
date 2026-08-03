@@ -34,6 +34,7 @@ export default function SettingsPage(): ReactElement {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadProfile = () => {
     setLoadingProfile(true);
@@ -124,6 +125,34 @@ export default function SettingsPage(): ReactElement {
 
   const profileLoading = loadingProfile || userLoading;
 
+  // AP-20 (UI-Completeness): Konto-Loeschen ist ueber die Einstellungsseite
+  // erreichbar (DELETE /privacy/account). Nur USER/ADMIN duerfen es – die
+  // READ_ONLY-Ansicht oben hat diesen Abschnitt nicht. Der Server schuetzt
+  // den letzten aktiven Administrator (409).
+  const handleDeleteAccount = async () => {
+    if (!window.confirm(t('settings.deleteAccountConfirm'))) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/privacy/account`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.status === 409) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message ?? t('settings.deleteAccountLastAdmin'));
+      }
+      if (!res.ok) throw new Error(t('settings.deleteAccountError'));
+      // Konto ist geloescht; zurueck zur Anmeldung (Session existiert nicht
+      // mehr – ein Folgerequest wuerde ohnehin 401 liefern).
+      window.location.href = '/login';
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('common.unknownError'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <AppShell navSections={NAV_SECTIONS} user={user}>
       <PageHeader title={t('settings.title')} description={t('settings.description')} />
@@ -184,6 +213,26 @@ export default function SettingsPage(): ReactElement {
           <LanguageSelector />
 
           <AppearanceSettings />
+
+          {/* AP-20 (UI-Completeness): Gefahrenzone – Konto dauerhaft loeschen.
+              Bewusst getrennte Karte am Seitenende, damit ein versehentlicher
+              Klick unwahrscheinlich bleibt (zusaeztlich window.confirm). */}
+          <Card
+            style={{
+              marginTop: 'var(--versigo-space-6)',
+              borderColor: 'var(--versigo-danger)',
+            }}
+          >
+            <CardHeader>
+              <SectionHeader title={t('settings.deleteAccountTitle')} />
+            </CardHeader>
+            <p style={{ marginBottom: 'var(--versigo-space-4)' }}>
+              {t('settings.deleteAccountBody')}
+            </p>
+            <Button variant="danger" onClick={handleDeleteAccount} disabled={deleting}>
+              {deleting ? t('settings.deletingAccount') : t('settings.deleteAccountButton')}
+            </Button>
+          </Card>
         </>
       )}
     </AppShell>
