@@ -25,8 +25,6 @@ const PAYMENT_FREQUENCIES = [
   'MONTHLY', 'QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL',
 ];
 
-const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF'];
-
 export default function EditPolicyPage(): ReactElement {
   const params = useParams();
   const router = useRouter();
@@ -45,7 +43,6 @@ export default function EditPolicyPage(): ReactElement {
     noticePeriod: '',
     paymentFrequency: 'MONTHLY',
     premiumAmount: '',
-    premiumCurrency: 'EUR',
     deductibleAmount: '',
     coverageSummaryShort: '',
     source: 'MANUAL',
@@ -76,7 +73,6 @@ export default function EditPolicyPage(): ReactElement {
             noticePeriod: data.noticePeriod ?? '',
             paymentFrequency: data.paymentFrequency ?? 'MONTHLY',
             premiumAmount: data.premiumAmount ?? '',
-            premiumCurrency: data.premiumCurrency ?? 'EUR',
             deductibleAmount: data.deductibleAmount ?? '',
             coverageSummaryShort: data.coverageSummaryShort ?? '',
             source: data.source ?? 'MANUAL',
@@ -118,7 +114,6 @@ export default function EditPolicyPage(): ReactElement {
         noticePeriod: form.noticePeriod ? Number(form.noticePeriod) : undefined,
         paymentFrequency: form.paymentFrequency || undefined,
         premiumAmount: form.premiumAmount ? Number(form.premiumAmount) : undefined,
-        premiumCurrency: form.premiumCurrency,
         deductibleAmount: form.deductibleAmount ? Number(form.deductibleAmount) : undefined,
         coverageSummaryShort: form.coverageSummaryShort || undefined,
         source: form.source,
@@ -290,17 +285,6 @@ export default function EditPolicyPage(): ReactElement {
               />
             </FormField>
 
-            <FormField label={t('policies.premiumCurrency')}>
-              <Select
-                value={form.premiumCurrency}
-                onChange={(e) => setForm({ ...form, premiumCurrency: e.target.value })}
-              >
-                {CURRENCIES.map((curr) => (
-                  <option key={curr} value={curr}>{curr}</option>
-                ))}
-              </Select>
-            </FormField>
-
             <FormField label={t('policies.deductibleAmount')} error={errors.deductibleAmount}>
               <Input
                 type="number"
@@ -325,9 +309,9 @@ export default function EditPolicyPage(): ReactElement {
                 value={form.source}
                 onChange={(e) => setForm({ ...form, source: e.target.value })}
               >
-                <option value="MANUAL">{t('policies.types.MANUAL') ?? 'Manual'}</option>
-                <option value="AI_EXTRACTED">{t('policies.types.AI_EXTRACTED') ?? 'AI Extracted'}</option>
-                <option value="IMPORTED">{t('policies.types.IMPORTED') ?? 'Imported'}</option>
+                <option value="MANUAL">{t('policies.sources.MANUAL') ?? 'Manual entry'}</option>
+                <option value="AI_EXTRACTED">{t('policies.sources.AI_EXTRACTED') ?? 'AI extraction'}</option>
+                <option value="IMPORTED">{t('policies.sources.IMPORTED') ?? 'Import'}</option>
               </Select>
             </FormField>
           </div>

@@ -53,7 +53,11 @@ COPY --from=build /app/packages/foundation ./packages/foundation
 
 RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
-    pnpm deploy --filter @versigo/api --prod --legacy /app/out
+    pnpm deploy --filter @versigo/api --prod --legacy /app/out && \
+    # TypeScript ist bei prisma nur ein optionaler Peer (wird nur fuer
+    # prisma.config.ts benoetigt, das wir nicht verwenden) und nicht Teil
+    # der Laufzeit-Dependencies. Entfernen spart ~23 MB im Runner-Image.
+    rm -rf /app/out/node_modules/.pnpm/typescript@* /app/out/node_modules/typescript
 
 # ---- Runner Stage ----
 FROM node:24-alpine AS runner
@@ -67,23 +71,28 @@ ENV NODE_ENV=production \
 
 # Produktions-Dependencies (nur Laufzeit, inkl. Prisma-CLI fuer
 # `npx prisma migrate deploy` in docker/start.sh)
-COPY --from=prod-deps /app/out/node_modules ./node_modules
-COPY --from=prod-deps /app/out/package.json ./package.json
+# --chown statt nachtraeglichem `chown -R`: das erspart eine riesige
+# Metadaten-Layer-Schicht im Image (chown -R ueber node_modules erzeugt
+# einen Layer in der Groesse des Inhalts).
+COPY --chown=appuser:appgroup --from=prod-deps /app/out/node_modules ./node_modules
+COPY --chown=appuser:appgroup --from=prod-deps /app/out/package.json ./package.json
 
 # Prisma schema
-COPY --from=build /app/prisma ./prisma
+COPY --chown=appuser:appgroup --from=build /app/prisma ./prisma
 
 # Gebauter Anwendungscode (kein Quellcode)
-COPY --from=build /app/apps/api/dist ./apps/api/dist
-COPY --from=build /app/apps/api/package.json ./apps/api/package.json
+COPY --chown=appuser:appgroup --from=build /app/apps/api/dist ./apps/api/dist
+COPY --chown=appuser:appgroup --from=build /app/apps/api/package.json ./apps/api/package.json
 
-# Generate Prisma Client at image build time (ensures complete client with engine binary)
-RUN node ./node_modules/prisma/build/index.js generate --schema=/app/prisma/schema.prisma
+# Generate Prisma Client at image build time (ensures complete client with engine binary).
+# Die generierten Client-Dateien landen im .pnpm-Store und werden anschliessend
+# gezielt auf den appuser gechownt (kein vollstaendiges `chown -R /app`).
+RUN node ./node_modules/prisma/build/index.js generate --schema=/app/prisma/schema.prisma && \
+    chown -R appuser:appgroup /app/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma /app/node_modules/.prisma 2>/dev/null || true
 
-COPY docker/start.sh ./start.sh
+COPY --chown=appuser:appgroup docker/start.sh ./start.sh
 
-RUN chmod 755 ./start.sh && \
-    chown -R appuser:appgroup /app
+RUN chmod 755 ./start.sh
 
 USER appuser
 

@@ -3,7 +3,7 @@
 import { useState, type ReactElement, type FormEvent } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input, Select, FormField } from '@/components/ui/form-field';
+import { Input, FormField } from '@/components/ui/form-field';
 import { Alert } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlineSpinner } from '@/components/ui/loading';

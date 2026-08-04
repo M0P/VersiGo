@@ -50,7 +50,22 @@ export default function RegisterPage(): ReactElement {
       const data = await res.json().catch(() => null);
       
       // Handle structured validation errors (BugFix-02)
-      if (data?.errors && Array.isArray(data.errors)) {
+      // New format: { message: 'Validierung fehlgeschlagen', errors: [{ field, constraint, message }], statusCode: 400 }
+      if (data?.errors && Array.isArray(data.errors) && data.errors[0]?.field) {
+        const newFieldErrors: Record<string, string> = {};
+        data.errors.forEach((err: { field: string; message: string }) => {
+          // Map API field names to form field names
+          const fieldName = err.field === 'username' ? 'username' : 
+                           err.field === 'displayName' ? 'displayName' : 
+                           err.field === 'password' ? 'password' : 'general';
+          if (!newFieldErrors[fieldName]) {
+            newFieldErrors[fieldName] = err.message;
+          }
+        });
+        setFieldErrors(newFieldErrors);
+        setError(data.message || t('auth.validationError'));
+      } else if (data?.errors && Array.isArray(data.errors)) {
+        // Legacy format: array of strings
         const newFieldErrors: Record<string, string> = {};
         data.errors.forEach((err: string) => {
           // Try to map error messages to fields

@@ -16,7 +16,7 @@ COPY apps/web/package.json apps/web/package.json
 
 RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
-    pnpm install --frozen-lockfile --filter @versigo/web... --prod=false
+    pnpm install --frozen-lockfile --prod=false
 
 # ---- Build Stage ----
 FROM base AS build
@@ -50,15 +50,15 @@ ENV HOSTNAME=0.0.0.0
 # Copy standalone output (includes node_modules, .next, public)
 # Next.js standalone output in a monorepo has a nested structure:
 # standalone/apps/web/server.js + standalone/node_modules/.pnpm/...
-COPY --from=build /app/apps/web/.next/standalone ./
-COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=build /app/apps/web/public ./apps/web/public
+# --chown statt nachtraeglichem `chown -R /app`: das erspart einen
+# Metadaten-Layer in der Groesse des Inhalts im Runner-Image.
+COPY --chown=appuser:appgroup --from=build /app/apps/web/.next/standalone ./
+COPY --chown=appuser:appgroup --from=build /app/apps/web/.next/static ./apps/web/.next/static
+COPY --chown=appuser:appgroup --from=build /app/apps/web/public ./apps/web/public
 
 # Copy entrypoint script
-COPY apps/web/docker-entrypoint.sh /docker-entrypoint.sh
+COPY --chown=appuser:appgroup apps/web/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
-
-RUN chown -R appuser:appgroup /app
 
 USER appuser
 

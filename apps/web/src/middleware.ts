@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/register', '/pending', '/forbidden', '/callback', '/_next', '/favicon.ico'];
+const PUBLIC_PATHS = ['/login', '/register', '/pending', '/forbidden', '/callback', '/_next', '/favicon.ico', '/runtime-config.js'];
 
 // Edge-Middleware: verweigert nicht authentifizierte UI-Aufrufe (Session-Schutz
 // gemaess docs/07-security-privacy.md). Prueft nur auf Vorhandensein des

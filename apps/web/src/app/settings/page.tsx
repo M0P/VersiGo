@@ -37,6 +37,8 @@ export default function SettingsPage(): ReactElement {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exported, setExported] = useState(false);
 
   const loadProfile = () => {
     setLoadingProfile(true);
@@ -127,6 +129,37 @@ export default function SettingsPage(): ReactElement {
 
   const profileLoading = loadingProfile || userLoading;
 
+  // AP-20 (UI-Completeness): DSGVO-Export der eigenen personenbezogenen
+  // Daten (GET /privacy/export, AP-19 API). Das JSON wird als Datei
+  // heruntergeladen – der Server liefert bewusst kein File-Stream, sondern
+  // strukturierte Daten (PrivacyExport).
+  const handleExport = async () => {
+    setExporting(true);
+    setExported(false);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/privacy/export`, { credentials: 'include' });
+      if (res.status === 401) { window.location.href = '/login'; return; }
+      if (res.status === 403) { window.location.href = '/forbidden'; return; }
+      if (!res.ok) throw new Error(t('settings.exportError'));
+      const data: unknown = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `versigo-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setExported(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('common.unknownError'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // AP-20 (UI-Completeness): Konto-Loeschen ist ueber die Einstellungsseite
   // erreichbar (DELETE /privacy/account). Nur USER/ADMIN duerfen es – die
   // READ_ONLY-Ansicht oben hat diesen Abschnitt nicht. Der Server schuetzt
@@ -215,6 +248,27 @@ export default function SettingsPage(): ReactElement {
           <LanguageSelector />
 
           <AppearanceSettings />
+
+          {/* AP-20 (UI-Completeness): DSGVO-Export (GET /privacy/export).
+              Nur USER/ADMIN – die READ_ONLY-Ansicht oben hat diesen
+              Abschnitt nicht. Der Server liefert ausschliesslich Daten des
+              eigenen Kontos. */}
+          <Card style={{ marginTop: 'var(--versigo-space-6)' }}>
+            <CardHeader>
+              <SectionHeader title={t('settings.exportTitle')} />
+            </CardHeader>
+            <p style={{ marginBottom: 'var(--versigo-space-4)' }}>
+              {t('settings.exportBody')}
+            </p>
+            {exported && (
+              <div style={{ marginBottom: 'var(--versigo-space-4)' }}>
+                <Alert variant="success">{t('settings.exportSuccess')}</Alert>
+              </div>
+            )}
+            <Button variant="secondary" onClick={handleExport} disabled={exporting}>
+              {exporting ? t('settings.exporting') : t('settings.exportButton')}
+            </Button>
+          </Card>
 
           {/* AP-20 (UI-Completeness): Gefahrenzone – Konto dauerhaft loeschen.
               Bewusst getrennte Karte am Seitenende, damit ein versehentlicher
