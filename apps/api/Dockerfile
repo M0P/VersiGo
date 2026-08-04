@@ -20,13 +20,27 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/foundation/package.json packages/foundation/package.json
 
-RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
+# Eigener Store-Cache je Service: Die CI baut api/web/worker parallel und
+# ein geteilter Store (gleiche Cache-Mount-ID) fuehrt zu racemässig
+# unvollstaendigen Installs (TS2307: Cannot find module ...).
+RUN --mount=type=cache,id=versigo-pnpm-store-api,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --frozen-lockfile --filter @versigo/api... --prod=false
 
 # ---- Build Stage ----
 FROM base AS build
+# `pnpm install --filter @versigo/api...` legt die Dependencies in die
+# node_modules der jeweiligen Workspace-Pakete ab (apps/api/node_modules,
+# packages/foundation/node_modules) und verlinkt sie in den Store
+# (node_modules/.pnpm). Nur die Wurzel-node_modules zu kopieren wuerde die
+# Paket-node_modules weglassen; der Build hinge dann allein vom NODE_PATH-
+# Hoisting (.pnpm/node_modules) ab, das nicht garantiert ist. Daher werden
+# die Paket-node_modules explizit mitkopiert (selbstenthaeltender Build).
+# Invariante: beide Verzeichnisse werden vom deps-Install immer materialisiert
+# (api und foundation haben Dependencies); die COPYs sind unguarded.
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /app/packages/foundation/node_modules ./packages/foundation/node_modules
 COPY --from=deps /app/package.json ./package.json
 COPY --from=deps /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=deps /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
@@ -51,7 +65,7 @@ COPY apps/api/package.json apps/api/package.json
 # Gebautes Foundation-Paket (dist) fuer das Packen beim Deploy
 COPY --from=build /app/packages/foundation ./packages/foundation
 
-RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
+RUN --mount=type=cache,id=versigo-pnpm-store-api,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm deploy --filter @versigo/api --prod --legacy /app/out && \
     # TypeScript ist bei prisma nur ein optionaler Peer (wird nur fuer
