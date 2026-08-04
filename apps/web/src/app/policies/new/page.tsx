@@ -252,9 +252,9 @@ export default function NewPolicyPage(): ReactElement {
                 value={form.source}
                 onChange={(e) => setForm({ ...form, source: e.target.value })}
               >
-                <option value="MANUAL">{t('policies.types.MANUAL') ?? 'Manual'}</option>
-                <option value="AI_EXTRACTED">{t('policies.types.AI_EXTRACTED') ?? 'AI Extracted'}</option>
-                <option value="IMPORTED">{t('policies.types.IMPORTED') ?? 'Imported'}</option>
+                <option value="MANUAL">{t('policies.sources.MANUAL') ?? 'Manual entry'}</option>
+                <option value="AI_EXTRACTED">{t('policies.sources.AI_EXTRACTED') ?? 'AI extraction'}</option>
+                <option value="IMPORTED">{t('policies.sources.IMPORTED') ?? 'Import'}</option>
               </Select>
             </FormField>
           </div>

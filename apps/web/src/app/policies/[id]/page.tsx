@@ -187,7 +187,7 @@ export default function PolicyDetailPage(): ReactElement {
               {policy.source && (
                 <>
                   <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('policies.source')}</dt>
-                  <dd style={{ margin: 0 }}>{policy.source}</dd>
+                  <dd style={{ margin: 0 }}>{t(`policies.sources.${policy.source}`) ?? policy.source}</dd>
                 </>
               )}
             </dl>

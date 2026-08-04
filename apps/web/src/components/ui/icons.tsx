@@ -11,7 +11,9 @@ export type IconName =
   | 'sharing'
   | 'settings'
   | 'admin'
-  | 'users';
+  | 'users'
+  | 'audit'
+  | 'monitoring';
 
 const ICON_PATHS: Record<IconName, string> = {
   home: 'M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5',
@@ -27,6 +29,12 @@ const ICON_PATHS: Record<IconName, string> = {
     'M12 2l9 4v6c0 5-3.8 9.4-9 10-5.2-.6-9-5-9-10V6l9-4Zm-3 9a3 3 0 1 1 6 0 3 3 0 0 1-6 0Zm-1.5 6a4.5 4.5 0 0 1 9 0',
   users:
     'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 1 0 0 7.75',
+  // Audit-Log: Dokument/Liste mit Zeile (Ereignisprotokoll)
+  audit:
+    'M8 2h8v3H8V2ZM4 5h16v17H4V5Zm4 4v2m8-2v2m-8 5h8M4 9h2m12 0h2',
+  // Monitoring: Puls-/EKG-Linie (Betriebsstatus)
+  monitoring:
+    'M2 12h4l3-7 4 14 3-7h6',
 };
 
 type IconProps = {

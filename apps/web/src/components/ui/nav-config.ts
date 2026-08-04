@@ -41,6 +41,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/admin', label: 'nav.admin', icon: 'admin' },
       // BugFix-02: Admin-Nutzerverwaltung
       { href: '/admin/users', label: 'nav.adminUsers', icon: 'users' },
+      // BugFix-04: Audit-Log + Monitoring (vorher nur API, jetzt UI)
+      { href: '/admin/audit', label: 'nav.audit', icon: 'audit' },
+      { href: '/admin/monitoring', label: 'nav.monitoring', icon: 'monitoring' },
     ],
   },
 ];
