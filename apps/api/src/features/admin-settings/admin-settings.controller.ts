@@ -12,7 +12,6 @@ import {
 } from '@nestjs/common';
 import { GlobalRole } from '@prisma/client';
 import { SettingsStoreService } from './settings-store.service';
-import { FeatureFlagsService } from './feature-flags.service';
 import {
   AppConfigService,
   DatabaseService,
@@ -29,10 +28,6 @@ import {
   UpdateGlobalSettingDto,
   CreateHouseholdSettingDto,
   UpdateHouseholdSettingDto,
-  CreateGlobalFeatureFlagDto,
-  UpdateGlobalFeatureFlagDto,
-  CreateHouseholdFeatureFlagDto,
-  UpdateHouseholdFeatureFlagDto,
   ConnectivityTestDto,
   ConnectivityTestResultDto,
 } from './dto/admin-settings.dto';
@@ -49,7 +44,6 @@ function assertIsGlobalAdmin(user: AuthenticatedUser): void {
 export class AdminSettingsController {
   constructor(
     private readonly settingsStore: SettingsStoreService,
-    private readonly featureFlags: FeatureFlagsService,
     private readonly config: AppConfigService,
     private readonly db: DatabaseService,
   ) {}
@@ -116,53 +110,6 @@ export class AdminSettingsController {
   ) {
     assertIsGlobalAdmin(user);
     return this.settingsStore.deleteGlobalSetting(key);
-  }
-
-  // =====================
-  // Global Feature Flags
-  // =====================
-
-  @Get('admin/feature-flags')
-  async listGlobalFlags(@CurrentUser() user: AuthenticatedUser) {
-    assertIsGlobalAdmin(user);
-    return this.featureFlags.listGlobalFlags();
-  }
-
-  @Get('admin/feature-flags/:key')
-  async getGlobalFlag(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('key') key: string,
-  ) {
-    assertIsGlobalAdmin(user);
-    return this.featureFlags.getGlobalFlag(key);
-  }
-
-  @Post('admin/feature-flags')
-  async createGlobalFlag(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: CreateGlobalFeatureFlagDto,
-  ) {
-    assertIsGlobalAdmin(user);
-    return this.featureFlags.createGlobalFlag(dto.key, dto.enabled);
-  }
-
-  @Patch('admin/feature-flags/:key')
-  async updateGlobalFlag(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('key') key: string,
-    @Body() dto: UpdateGlobalFeatureFlagDto,
-  ) {
-    assertIsGlobalAdmin(user);
-    return this.featureFlags.updateGlobalFlag(key, dto.enabled);
-  }
-
-  @Delete('admin/feature-flags/:key')
-  async deleteGlobalFlag(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('key') key: string,
-  ) {
-    assertIsGlobalAdmin(user);
-    return this.featureFlags.deleteGlobalFlag(key);
   }
 
   // =====================
@@ -429,64 +376,6 @@ export class AdminSettingsController {
     @Param('key') key: string,
   ) {
     return this.settingsStore.deleteHouseholdSetting(householdId, key);
-  }
-
-  // =====================
-  // Household Feature Flags
-  // =====================
-
-  @Get('households/:householdId/admin/feature-flags')
-  @UseGuards(HouseholdMembershipGuard)
-  @Roles(GlobalRole.ADMIN)
-  async listHouseholdFlags(
-    @Param('householdId') householdId: string,
-  ) {
-    return this.featureFlags.listHouseholdFlags(householdId);
-  }
-
-  @Get('households/:householdId/admin/feature-flags/:key')
-  @UseGuards(HouseholdMembershipGuard)
-  @Roles(GlobalRole.ADMIN)
-  async getHouseholdFlag(
-    @Param('householdId') householdId: string,
-    @Param('key') key: string,
-  ) {
-    return this.featureFlags.getHouseholdFlag(householdId, key);
-  }
-
-  @Post('households/:householdId/admin/feature-flags')
-  @UseGuards(HouseholdMembershipGuard)
-  @Roles(GlobalRole.ADMIN)
-  async createHouseholdFlag(
-    @Param('householdId') householdId: string,
-    @Body() dto: CreateHouseholdFeatureFlagDto,
-  ) {
-    return this.featureFlags.createHouseholdFlag(
-      householdId,
-      dto.key,
-      dto.enabled,
-    );
-  }
-
-  @Patch('households/:householdId/admin/feature-flags/:key')
-  @UseGuards(HouseholdMembershipGuard)
-  @Roles(GlobalRole.ADMIN)
-  async updateHouseholdFlag(
-    @Param('householdId') householdId: string,
-    @Param('key') key: string,
-    @Body() dto: UpdateHouseholdFeatureFlagDto,
-  ) {
-    return this.featureFlags.updateHouseholdFlag(householdId, key, dto.enabled);
-  }
-
-  @Delete('households/:householdId/admin/feature-flags/:key')
-  @UseGuards(HouseholdMembershipGuard)
-  @Roles(GlobalRole.ADMIN)
-  async deleteHouseholdFlag(
-    @Param('householdId') householdId: string,
-    @Param('key') key: string,
-  ) {
-    return this.featureFlags.deleteHouseholdFlag(householdId, key);
   }
 
   // =====================

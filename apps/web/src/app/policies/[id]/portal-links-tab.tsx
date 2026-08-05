@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactElement, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ReactElement, type FormEvent } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, FormField } from '@/components/ui/form-field';
@@ -10,6 +10,7 @@ import { InlineSpinner } from '@/components/ui/loading';
 import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import { normalizePortalUrl } from '@/lib/portal-url';
 
 const API_BASE = getApiBaseUrl();
 
@@ -38,29 +39,74 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const loadLinks = async () => {
+  // Gemeinsame Ladelogik fuer Mount-Effekt und Handler-Reloads. Ein
+  // Monoton-zaehler (`requestSeq`) invalidiert in-flight Requests bei jedem
+  // neuen Ladevorgang sowie bei Unmount/policyId-Wechsel: Nur die neueste
+  // Anfrage darf Zustand schreiben – auch nach Submits/Deletes, die nach
+  // einem policyId-Wechsel noch eintreffen (BugFix-05, Befund 8: kein
+  // Fremddaten-Leak von Versicherung A unter B).
+  const requestSeq = useRef(0);
+
+  const reloadLinks = async () => {
+    const seq = ++requestSeq.current;
+    // BugFix-05 (Befund 8): State zuruecksetzen, damit beim policyId-Wechsel
+    // keine Daten der vorherigen Versicherung angezeigt werden.
+    setLinks([]);
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`${API_BASE}/households/default/policies/${policyId}`, { credentials: 'include' });
+      const res = await fetch(`${API_BASE}/households/default/policies/${policyId}`, {
+        credentials: 'include',
+      });
+      if (seq !== requestSeq.current) return;
+      if (res.status === 401) { window.location.href = '/login'; return; }
       if (res.ok) {
         const data = await res.json();
-        setLinks(data.portalLinks || []);
+        if (seq === requestSeq.current) setLinks(data.portalLinks || []);
+      } else if (seq === requestSeq.current) {
+        setError(t('policies.noLinksBody'));
       }
     } catch {
-      setError(t('policies.noLinksBody'));
+      if (seq === requestSeq.current) setError(t('policies.noLinksBody'));
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   };
 
+  // BugFix-05 (Befund 4): Beim Mount und bei jedem policyId-Wechsel neu laden –
+  // sonst bleibt der Spinner haengen bzw. es erscheinen Daten der vorherigen
+  // Versicherung. Der Cleanup invalidiert in-flight Requests des vorherigen
+  // policyId bzw. nach Unmount (keine Zustands-Updates danach).
+  // BugFix-05 (Befund 8): Beim policyId-Wechsel wird auch das Formular
+  // zurueckgesetzt – ein offenes Formular mit Daten der Versicherung A darf
+  // nicht unter B stehen bleiben (ein spaeterer Submit-Fehler wuerde sonst
+  // unter B gerendert bzw. die Felder von A weiterhin anzeigen).
+  useEffect(() => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm({ providerKey: '', portalUrl: '', usernameHint: '', accessHint: '' });
+    setFormError(null);
+    void reloadLinks();
+    // policyId steuert die Datenquelle; t ist bewusst nicht in den Dependencies
+    // (Sprachwechsel soll die Liste nicht neu laden).
+    return () => { requestSeq.current += 1; };
+  }, [policyId]);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    // BugFix-05 (Befund 8): Seq-Token wie beim Reload/Delete – ein Submit-
+    // Fehler einer aelteren Anfrage darf nach policyId-Wechsel keine
+    // Fehlermeldung im (bereits zurueckgesetzten) Formular der neuen
+    // Versicherung rendern. Der Erfolgspfad laeuft ueber reloadLinks(),
+    // das selbst einen neuen Seq-Stand setzt.
+    const seq = requestSeq.current;
     setFormError(null);
     setSubmitting(true);
     try {
       const payload = {
         providerKey: form.providerKey,
-        portalUrl: form.portalUrl || undefined,
+        // BugFix-05 (Befund 2): Schema ergaenzen, bevor gesendet wird.
+        portalUrl: form.portalUrl ? normalizePortalUrl(form.portalUrl) : undefined,
         usernameHint: form.usernameHint || undefined,
         accessHint: form.accessHint || undefined,
       };
@@ -84,12 +130,22 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
         const data = await res.json().catch(() => null);
         throw new Error(data?.message ?? t('common.unknownError'));
       }
-      setForm({ providerKey: '', portalUrl: '', usernameHint: '', accessHint: '' });
-      setEditingId(null);
-      setShowForm(false);
-      loadLinks();
+      // BugFix-05 (Befund 8, Review-Runde 5): Auch die Formular-Reset-Writes
+      // sind seq-gesichert – ein spaeter Erfolg eines Submits von A darf nach
+      // policyId-Wechsel nicht B's offenes Formular schliessen/leeren.
+      if (seq === requestSeq.current) {
+        setForm({ providerKey: '', portalUrl: '', usernameHint: '', accessHint: '' });
+        setEditingId(null);
+        setShowForm(false);
+        // Erfolgs-Reload nur, wenn kein policyId-Wechsel zwischenzeitlich
+        // stattfand – sonst wuerde die veraltete Closure Portal-Links von A
+        // unter B laden. Der neue policyId-Effekt laedt B bereits selbst.
+        reloadLinks();
+      }
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : t('common.unknownError'));
+      if (seq === requestSeq.current) {
+        setFormError(err instanceof Error ? err.message : t('common.unknownError'));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -108,15 +164,22 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
 
   const handleDelete = async (id: string) => {
     if (!window.confirm(t('policies.confirmDeletePortalLink'))) return;
+    // BugFix-05 (Befund 8): Seq-Token wie beim Reload – ein Fehler einer
+    // aelteren Anfrage darf nach policyId-Wechsel keine Fehlermeldung unter
+    // der neuen Versicherung rendern.
+    const seq = ++requestSeq.current;
     try {
       const res = await fetch(`${API_BASE}/households/default/policies/${policyId}/portal-links/${id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
       if (!res.ok) throw new Error(t('common.unknownError'));
-      loadLinks();
+      // BugFix-05 (Befund 8, Review-Runde 4): Auch der Erfolgs-Reload ist
+      // seq-gesichert – nach einem policyId-Wechsel darf die veraltete Closure
+      // keine Portal-Links von A unter B laden.
+      if (seq === requestSeq.current) reloadLinks();
     } catch {
-      setError(t('common.unknownError'));
+      if (seq === requestSeq.current) setError(t('common.unknownError'));
     }
   };
 

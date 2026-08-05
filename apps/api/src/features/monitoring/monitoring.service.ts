@@ -198,7 +198,7 @@ export class MonitoringService {
           portalGroups.map((group) => [group.syncStatus, group._count._all]),
         ),
       },
-      storage: { enabled: this.capabilities.isEnabled('storage') },
+      storage: { enabled: await this.capabilities.isEnabled('storage') },
       portalConnectors: connectorPlugins.map((plugin, index) => {
         const health = connectorHealth[index];
         return {

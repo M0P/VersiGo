@@ -43,6 +43,17 @@ export class CostTrackingController {
     return this.service.findAll(householdId, user, policyId);
   }
 
+  // BugFix-05 (Befund 3): Kostenuebersicht mit paidToDate + perFrequency.
+  @Get('overview')
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
+  async getOverview(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.getOverview(householdId, user, policyId);
+  }
+
   @Get('annual')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async getAnnualCost(

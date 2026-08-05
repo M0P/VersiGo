@@ -5,8 +5,8 @@ import { NotFoundException } from '@nestjs/common';
 
 /**
  * Integrationstests fuer Household-Isolation der Admin-Settings.
- * Prueft, dass ein Household nicht auf Settings oder Flags eines
- * anderen Households zugreifen kann.
+ * Prueft, dass ein Household nicht auf Settings eines anderen
+ * Households zugreifen kann.
  *
  * Diese Tests arbeiten mit einem gemockten DatabaseService, der die
  * Isolation auf Datenbankebene (WHERE-Klausel mit householdId) simuliert.
@@ -23,10 +23,6 @@ function createIsolatedMockDb() {
   const allSettings: Map<string, typeof mockHousehold1Settings> = new Map();
   allSettings.set('household-1', [...mockHousehold1Settings]);
   allSettings.set('household-2', [...mockHousehold2Settings]);
-
-  const allFlags: Map<string, any[]> = new Map();
-  allFlags.set('household-1', [{ id: 'hf-1', householdId: 'household-1', key: 'h1-flag', enabled: true, createdAt: new Date(), updatedAt: new Date() }]);
-  allFlags.set('household-2', []);
 
   return {
     householdIntegrationSetting: {
@@ -65,45 +61,7 @@ function createIsolatedMockDb() {
         },
       ),
     },
-    householdFeatureFlag: {
-      findMany: vi.fn().mockImplementation(({ where }: { where: { householdId: string } }) => {
-        return Promise.resolve(allFlags.get(where.householdId) ?? []);
-      }),
-      findUnique: vi.fn().mockImplementation(
-        ({ where }: { where: { householdId_key: { householdId: string; key: string } } }) => {
-          const flags = allFlags.get(where.householdId_key.householdId) ?? [];
-          return Promise.resolve(
-            flags.find((f) => f.key === where.householdId_key.key) ?? null,
-          );
-        },
-      ),
-      create: vi.fn().mockImplementation(({ data }: { data: { householdId: string; key: string; enabled?: boolean } }) => {
-        const flags = allFlags.get(data.householdId) ?? [];
-        const newFlag = {
-          id: `hf-${Date.now()}`,
-          ...data,
-          enabled: data.enabled ?? false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        flags.push(newFlag);
-        return Promise.resolve(newFlag);
-      }),
-      delete: vi.fn().mockImplementation(
-        ({ where }: { where: { householdId_key: { householdId: string; key: string } } }) => {
-          const flags = allFlags.get(where.householdId_key.householdId) ?? [];
-          const idx = flags.findIndex((f) => f.key === where.householdId_key.key);
-          if (idx === -1) return Promise.resolve(null);
-          flags.splice(idx, 1);
-          return Promise.resolve({});
-        },
-      ),
-    },
     globalIntegrationSetting: {
-      findMany: vi.fn().mockResolvedValue([]),
-      findUnique: vi.fn().mockResolvedValue(null),
-    },
-    globalFeatureFlag: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue(null),
     },
@@ -141,18 +99,6 @@ describe('Household Isolation – Admin Settings', () => {
     await expect(
       service.getHouseholdSetting('household-2', 'h1-key'),
     ).rejects.toThrow(NotFoundException);
-  });
-
-  it('Household-1 sieht nur eigene Flags, nicht die von Household-2', async () => {
-    const { FeatureFlagsService } = await import('../feature-flags.service');
-    const mockDb = createIsolatedMockDb();
-    const service = new FeatureFlagsService(mockDb as any);
-
-    const h1Flags = await service.listHouseholdFlags('household-1');
-    expect(h1Flags).toHaveLength(1);
-
-    const h2Flags = await service.listHouseholdFlags('household-2');
-    expect(h2Flags).toHaveLength(0);
   });
 
   it('deleteHouseholdSetting in Household-2 loescht nicht in Household-1', async () => {

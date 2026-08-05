@@ -48,13 +48,20 @@ export interface SettingDefinition {
   max?: number;
   /** Optionaler Validierungshinweis fuer die UI. */
   validationHint?: string;
+  /**
+   * Secret-Kategorie-Schluessel, der trotzdem beim Boot in `process.env`
+   * vorab geladen werden muss (Konstruktionszeit-Konsumenten, z. B. die
+   * OIDC-Strategie). Nur fuer Kategorie `secret`; restart-Kategorie wird
+   * immer vorab geladen.
+   */
+  bootActivation?: boolean;
   /** Ob eine sichere Connectivity-Pruefung existiert (nur fuer die jeweilige Integration). */
   connectivityTestable: boolean;
   /** Rechteanforderung (einheitlich: nur globale ADMINS). */
   permission: SettingsPermission;
 }
 
-export const SETTINGS_CATALOG_VERSION = 1;
+export const SETTINGS_CATALOG_VERSION = 2;
 
 /**
  * Vollstaendiger Konfigurationskatalog. Sortiert nach Gruppe, dann Key.
@@ -261,6 +268,22 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     permission: 'ADMIN',
   },
 
+  // ====================== Familien-Freigaben ======================
+  {
+    key: 'FAMILY_SHARING_ENABLED',
+    envVar: 'FAMILY_SHARING_ENABLED',
+    category: 'runtime',
+    type: 'boolean',
+    group: 'Familien-Freigaben',
+    description:
+      'Schaltet die Familien-Freigaben (Einladungen und Haushaltsmitgliedschaften anderer ' +
+      'Konten) ein oder aus. Aenderungen wirken sofort, ohne Neustart. Bei Deaktivierung ' +
+      'liefern die Freigabe-Endpunkte 403 und der Navigationspunkt wird ausgeblendet.',
+    defaultValue: true,
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
+
   // ====================== Bootstrap / Infrastruktur (nur Environment/Compose) ======================
   {
     key: 'NODE_ENV',
@@ -400,52 +423,61 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
   {
     key: 'OIDC_ENABLED',
     envVar: 'OIDC_ENABLED',
-    category: 'bootstrap',
+    category: 'restart',
     type: 'boolean',
     group: 'Authentifizierung',
     description:
-      'Schaltet die OIDC-Anmeldung ein. Wird beim Boot ausgewertet und ist bewusst nicht ' +
-      'ueber die UI aenderbar (Fail-Fast bei keiner Auth-Methode).',
+      'Schaltet die OIDC-Anmeldung ein. Wird beim naechsten Start aktiv (die OIDC-Strategie ' +
+      'initialisiert sich erst beim Boot); der Fail-Fast greift nur, wenn daneben keine lokale ' +
+      'Anmeldung aktiv ist.',
+    defaultValue: false,
     connectivityTestable: false,
     permission: 'ADMIN',
   },
   {
     key: 'OIDC_ISSUER_URL',
     envVar: 'OIDC_ISSUER_URL',
-    category: 'bootstrap',
+    category: 'restart',
     type: 'string',
     group: 'Authentifizierung',
-    description: 'OIDC-Issuer-URL. Nur Environment/Compose.',
+    description:
+      'OIDC-Issuer-URL (z. B. https://idp.example.com). Wird beim naechsten Start aktiv.',
+    validationHint: 'Vollstaendige URL inklusive Schema, ohne nachgestellten Slash.',
     connectivityTestable: false,
     permission: 'ADMIN',
   },
   {
     key: 'OIDC_CLIENT_ID',
     envVar: 'OIDC_CLIENT_ID',
-    category: 'bootstrap',
+    category: 'restart',
     type: 'string',
     group: 'Authentifizierung',
-    description: 'OIDC-Client-ID. Nur Environment/Compose.',
+    description: 'OIDC-Client-ID. Wird beim naechsten Start aktiv.',
     connectivityTestable: false,
     permission: 'ADMIN',
   },
   {
     key: 'OIDC_CLIENT_SECRET',
     envVar: 'OIDC_CLIENT_SECRET',
-    category: 'bootstrap',
+    category: 'secret',
     type: 'string',
     group: 'Authentifizierung',
-    description: 'OIDC-Client-Secret. Nur Environment/Compose, niemals anzeigen.',
+    description:
+      'OIDC-Client-Secret. Wird verschluesselt gespeichert, niemals im Klartext angezeigt ' +
+      'oder protokolliert. Wird beim naechsten Start aktiv.',
+    bootActivation: true,
     connectivityTestable: false,
     permission: 'ADMIN',
   },
   {
     key: 'OIDC_CALLBACK_URL',
     envVar: 'OIDC_CALLBACK_URL',
-    category: 'bootstrap',
+    category: 'restart',
     type: 'string',
     group: 'Authentifizierung',
-    description: 'OIDC-Callback-URL. Nur Environment/Compose.',
+    description:
+      'OIDC-Callback-URL (z. B. https://app.example.com/auth/callback). Wird beim naechsten ' +
+      'Start aktiv.',
     connectivityTestable: false,
     permission: 'ADMIN',
   },
@@ -623,6 +655,19 @@ export function getRestartRequiredKeys(): readonly string[] {
   return SETTINGS_CATALOG.filter((definition) => definition.category === 'restart').map(
     (definition) => definition.key,
   );
+}
+
+/**
+ * Alle Schluessel, die beim Boot in `process.env` vorab geladen werden
+ * muessen: restart-Kategorie (aktiv nach Neustart) plus Secrets mit
+ * `bootActivation` (Konstruktionszeit-Konsumenten, z. B. OIDC_*).
+ */
+export function getBootPreloadKeys(): readonly string[] {
+  return SETTINGS_CATALOG.filter(
+    (definition) =>
+      definition.category === 'restart' ||
+      (definition.category === 'secret' && definition.bootActivation === true),
+  ).map((definition) => definition.key);
 }
 
 /** Ein Katalog-Schluessel gilt als geheim (Secret). */

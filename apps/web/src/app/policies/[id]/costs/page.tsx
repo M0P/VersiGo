@@ -20,9 +20,16 @@ const FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL'];
 
 type AnnualCost = {
   policyId: string;
-  year: number;
+  asOf: string;
   annualGross: number;
   annualNet: number | null;
+  perFrequency: {
+    MONTHLY: number;
+    QUARTERLY: number;
+    SEMI_ANNUAL: number;
+    ANNUAL: number;
+  };
+  paidToDate: number;
   calculationBasis: {
     entryId: string;
     frequency: string;
@@ -64,7 +71,9 @@ export default function PolicyCostsPage(): ReactElement {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API_BASE}/households/default/policies/${policyId}/costs/annual`, { credentials: 'include' }),
+      // BugFix-05 (Befund 3): /costs/overview ersetzt /costs/annual – liefert
+      // zusaetzlich paidToDate und perFrequency-Betraege.
+      fetch(`${API_BASE}/households/default/policies/${policyId}/costs/overview`, { credentials: 'include' }),
       fetch(`${API_BASE}/households/default/policies/${policyId}/costs`, { credentials: 'include' }),
     ])
       .then(([annualRes, entriesRes]) => {
@@ -136,14 +145,37 @@ export default function PolicyCostsPage(): ReactElement {
       <Card>
         <h2>{t('costs.annualOverview')}</h2>
         {annual ? (
-          <dl className="detail-list">
-            <dt>{t('costs.annualGross')}</dt><dd>{formatCurrency(annual.annualGross, language)}</dd>
-            {annual.annualNet != null && <><dt>{t('costs.annualNet')}</dt><dd>{formatCurrency(annual.annualNet, language)}</dd></>}
-            <dt>{t('costs.frequency')}</dt>
-            <dd>{t(`costs.frequencies.${annual.calculationBasis.frequency}`) ?? annual.calculationBasis.frequency}</dd>
-            <dt>{t('costs.calculationBasis')}</dt>
-            <dd>{t('costs.since', { date: formatDate(annual.calculationBasis.validFrom, language) })}</dd>
-          </dl>
+          <>
+            <dl className="detail-list">
+              <dt>{t('costs.annualGross')}</dt><dd>{formatCurrency(annual.annualGross, language)}</dd>
+              {annual.annualNet != null && <><dt>{t('costs.annualNet')}</dt><dd>{formatCurrency(annual.annualNet, language)}</dd></>}
+              <dt>{t('costs.frequency')}</dt>
+              <dd>{t(`costs.frequencies.${annual.calculationBasis.frequency}`) ?? annual.calculationBasis.frequency}</dd>
+              <dt>{t('costs.calculationBasis')}</dt>
+              <dd>{t('costs.since', { date: formatDate(annual.calculationBasis.validFrom, language) })}</dd>
+            </dl>
+
+            {/* BugFix-05 (Befund 3): bisher gezahlt + Periodenbetraege. */}
+            <dl className="detail-list">
+              <dt>{t('costs.paidToDate')}</dt>
+              <dd>
+                {formatCurrency(annual.paidToDate, language)}
+                <span className="text-xs text-muted"> ({t('costs.asOf', { date: formatDate(annual.asOf, language) })})</span>
+              </dd>
+            </dl>
+            <dl className="detail-list">
+              <dt>{t('costs.perPeriod')}</dt>
+              <dd>
+                <span>{t('costs.perMonth')}: {formatCurrency(annual.perFrequency.MONTHLY, language)}</span>
+                {' · '}
+                <span>{t('costs.perQuarter')}: {formatCurrency(annual.perFrequency.QUARTERLY, language)}</span>
+                {' · '}
+                <span>{t('costs.perHalfYear')}: {formatCurrency(annual.perFrequency.SEMI_ANNUAL, language)}</span>
+                {' · '}
+                <span>{t('costs.perYear')}: {formatCurrency(annual.perFrequency.ANNUAL, language)}</span>
+              </dd>
+            </dl>
+          </>
         ) : (
           <p>{t('costs.noCostEntries')}</p>
         )}

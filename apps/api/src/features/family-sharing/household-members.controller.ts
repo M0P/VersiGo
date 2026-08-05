@@ -4,6 +4,7 @@ import { FamilySharingService } from './family-sharing.service';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
 import { Roles } from '../identity/roles.decorator';
+import { FamilySharingGuard } from './family-sharing.guard';
 import type { AuthenticatedUser } from '../identity/auth.service';
 
 /**
@@ -14,9 +15,11 @@ import type { AuthenticatedUser } from '../identity/auth.service';
  * (HouseholdMembershipGuard) mit Rolle USER oder ADMIN (RolesGuard).
  * READ_ONLY-Mitglieder koennen die vollstaendige Mitgliederliste nicht
  * sehen; sie sehen ausschliesslich Freigaben, an denen sie beteiligt sind.
+ * FamilySharingGuard sperrt die Liste, solange die Familien-Freigaben
+ * deaktiviert sind (BugFix-05).
  */
 @Controller('households/:householdId/members')
-@UseGuards(HouseholdMembershipGuard)
+@UseGuards(HouseholdMembershipGuard, FamilySharingGuard)
 export class HouseholdMembersController {
   constructor(private readonly familySharingService: FamilySharingService) {}
 

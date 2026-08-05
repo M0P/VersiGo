@@ -14,7 +14,10 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/web/package.json apps/web/package.json
 
-RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
+# Eigener Store-Cache je Service: Die CI baut api/web/worker parallel und
+# ein geteilter Store (gleiche Cache-Mount-ID) fuehrt zu racemässig
+# unvollstaendigen Installs.
+RUN --mount=type=cache,id=versigo-pnpm-store-web,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm install --frozen-lockfile --prod=false
 
@@ -29,7 +32,7 @@ COPY --from=deps /app/turbo.json ./turbo.json
 
 COPY apps/web ./apps/web
 
-RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
+RUN --mount=type=cache,id=versigo-pnpm-store-web,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     cd apps/web && pnpm run build
 

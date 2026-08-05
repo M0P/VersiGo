@@ -30,7 +30,7 @@ function createService(overrides: Record<string, any> = {}) {
   const aiAssist = overrides.aiAssist ?? { healthCheck: vi.fn() };
   const paperless = overrides.paperless ?? { healthCheck: vi.fn() };
   const settings = overrides.settings ?? { getEffectiveBoolean: vi.fn() };
-  const capabilities = overrides.capabilities ?? { isEnabled: vi.fn().mockReturnValue(false) };
+  const capabilities = overrides.capabilities ?? { isEnabled: vi.fn().mockResolvedValue(false) };
   const portalConnectors = overrides.portalConnectors ?? {
     listPlugins: vi.fn().mockReturnValue([]),
     getPluginHealth: vi.fn(),
@@ -147,7 +147,7 @@ describe('MonitoringService', () => {
     aiAssist.healthCheck.mockResolvedValue({ connected: true, provider: 'ollama' });
     paperless.healthCheck.mockResolvedValue(true);
     settings.getEffectiveBoolean.mockResolvedValue(true);
-    capabilities.isEnabled.mockReturnValue(true);
+    capabilities.isEnabled.mockResolvedValue(true);
 
     const result = await service.integrations();
 

@@ -98,17 +98,17 @@ describe('OidcStrategy', () => {
   describe('onModuleInit', () => {
     it('laesst den Client unkonfiguriert, wenn OIDC deaktiviert ist', async () => {
       const { strategy, capabilities } = createStrategy();
-      capabilities.isEnabled.mockReturnValue(false);
+      capabilities.isEnabled.mockResolvedValue(false);
 
       await strategy.onModuleInit();
 
       expect(mockedDiscovery).not.toHaveBeenCalled();
-      expect(strategy.isEnabled()).toBe(false);
+      await expect(strategy.isEnabled()).resolves.toBe(false);
     });
 
     it('konfiguriert den Client per discovery() wenn OIDC aktiv ist', async () => {
       const { strategy, config, capabilities } = createStrategy();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       config.get.mockImplementation((key: string) => {
         switch (key) {
           case 'OIDC_ISSUER_URL':
@@ -135,12 +135,12 @@ describe('OidcStrategy', () => {
           client_secret: 'secret',
         }),
       );
-      expect(strategy.isEnabled()).toBe(true);
+      await expect(strategy.isEnabled()).resolves.toBe(true);
     });
 
     it('faehrt fail-closed weiter, wenn discovery fehlschlaegt', async () => {
       const { strategy, config, capabilities } = createStrategy();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       config.get.mockImplementation((key: string) => {
         switch (key) {
           case 'OIDC_ISSUER_URL':
@@ -157,7 +157,49 @@ describe('OidcStrategy', () => {
 
       await strategy.onModuleInit();
 
-      expect(strategy.isEnabled()).toBe(false);
+      await expect(strategy.isEnabled()).resolves.toBe(false);
+    });
+
+    it('faellt auf den Umgebungs-Snapshot zurueck, wenn die Capability-Aufloesung fehlschlaegt (DB down)', async () => {
+      const { strategy, config, capabilities } = createStrategy();
+      capabilities.isEnabled.mockRejectedValue(new Error('connect ECONNREFUSED'));
+      // DB down + OIDC_ENABLED im Env deaktiviert -> kein discovery, Boot ok.
+      config.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'OIDC_ENABLED':
+            return false;
+          default:
+            return undefined;
+        }
+      });
+
+      await expect(strategy.onModuleInit()).resolves.toBeUndefined();
+
+      expect(mockedDiscovery).not.toHaveBeenCalled();
+    });
+
+    it('faellt auf den Umgebungs-Snapshot zurueck und konfiguriert den Client, wenn OIDC im Env aktiv ist (DB down)', async () => {
+      const { strategy, config, capabilities } = createStrategy();
+      capabilities.isEnabled.mockRejectedValue(new Error('connect ECONNREFUSED'));
+      config.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'OIDC_ENABLED':
+            return true;
+          case 'OIDC_ISSUER_URL':
+            return 'https://idp.example.com';
+          case 'OIDC_CALLBACK_URL':
+            return 'https://app.example.com/auth/callback';
+          case 'OIDC_CLIENT_ID':
+            return 'versigo';
+          default:
+            return undefined;
+        }
+      });
+      mockedDiscovery.mockResolvedValue({} as never);
+
+      await expect(strategy.onModuleInit()).resolves.toBeUndefined();
+
+      expect(mockedDiscovery).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -7,7 +7,14 @@ import { WorkerHeartbeatService } from '../../worker-health';
 
 function buildCapabilities(): CapabilityFlagsService {
   return {
-    snapshot: vi.fn().mockReturnValue({ oidc: false, ai: false, paperless: false, storage: false }),
+    snapshot: vi.fn().mockResolvedValue({
+      oidc: false,
+      local: false,
+      ai: false,
+      paperless: false,
+      storage: false,
+      familySharing: true,
+    }),
   } as unknown as CapabilityFlagsService;
 }
 
@@ -76,6 +83,28 @@ describe('HealthController', () => {
     const result = await controller.ready();
     expect(result.status).toBe('degraded');
     expect(result.redis).toBe('down');
+  });
+
+  it('liefert status degraded statt 500, wenn der Capability-Snapshot fehlschlaegt (DB down)', async () => {
+    // BugFix-05: snapshot() greift ueber den SettingsResolverService auf die
+    // DB zu und kann bei DB-Ausfall ablehnen. /ready muss dann fail-soft mit
+    // status 'degraded' + leerem Capabilities-Objekt antworten statt zu 500.
+    const db = { isHealthy: vi.fn().mockResolvedValue(false) } as unknown as DatabaseService;
+    const redisHealth = { isHealthy: vi.fn().mockResolvedValue(true) } as unknown as RedisHealthService;
+    const capabilities = {
+      snapshot: vi.fn().mockRejectedValue(new Error('database connection refused')),
+    } as unknown as CapabilityFlagsService;
+    const controller = new HealthController(
+      db,
+      redisHealth,
+      capabilities,
+      buildWorkerHeartbeat(),
+    );
+
+    const result = await controller.ready();
+    expect(result.status).toBe('degraded');
+    expect(result.database).toBe('down');
+    expect(result.capabilities).toEqual({});
   });
 
   it('meldet den Worker-Zustand transparent, ohne das Gesamt-status zu kippen', async () => {

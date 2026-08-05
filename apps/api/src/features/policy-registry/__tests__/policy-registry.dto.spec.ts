@@ -96,6 +96,67 @@ describe('PortalCredentialsDto / Portal-Link DTOs (AP-18)', () => {
     expect(errors).toHaveLength(0);
   });
 
+  it('normalisiert portalUrl: https://-Praefix wenn Schema fehlt, http(s) unveraendert', async () => {
+    // BugFix-05 (Befund 2): Der @PortalUrlTransform ergaenzt das Schema vor
+    // der @IsUrl-Validierung; der transformierte Wert muss auf der Instanz
+    // ankommen (class-transformer laeuft vor class-validator).
+    const withoutSchema = plainToInstance(CreatePortalAccountLinkDto, {
+      providerKey: 'huk-coburg',
+      portalUrl: 'www.portal.de/login',
+    });
+    expect(withoutSchema.portalUrl).toBe('https://www.portal.de/login');
+    const errorsWithoutSchema = await validate(withoutSchema);
+    expect(errorsWithoutSchema).toHaveLength(0);
+
+    const withHttp = plainToInstance(CreatePortalAccountLinkDto, {
+      providerKey: 'huk-coburg',
+      portalUrl: 'http://portal.example.com',
+    });
+    expect(withHttp.portalUrl).toBe('http://portal.example.com');
+    expect(await validate(withHttp)).toHaveLength(0);
+
+    const withHttps = plainToInstance(CreatePortalAccountLinkDto, {
+      providerKey: 'huk-coburg',
+      portalUrl: 'https://portal.example.com/login',
+    });
+    expect(withHttps.portalUrl).toBe('https://portal.example.com/login');
+    expect(await validate(withHttps)).toHaveLength(0);
+  });
+
+  it('lehnt javascript:/data:-Eingaenge auch nach der Normalisierung ab', async () => {
+    // BugFix-05 (Befund 2): Ohne Schema wird https:// vorangestellt, wodurch
+    // `javascript:…`/`data:…` nie durchrutschen; mit `://` bleiben sie
+    // unveraendert und scheitern an der protocols-Whitelist von @IsUrl.
+    for (const raw of [
+      'javascript:alert(1)',
+      'javascript://alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'data://alert(1)',
+    ]) {
+      const errors = await errorsFor(CreatePortalAccountLinkDto, {
+        providerKey: 'huk-coburg',
+        portalUrl: raw,
+      });
+      expect(errors.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('lehnt ueberlange portalUrl ab (MaxLength 2048)', async () => {
+    // BugFix-05 (Befund 2): Explizites 2048-Zeichen-Limit auf beiden DTOs.
+    const long = plainToInstance(CreatePortalAccountLinkDto, {
+      providerKey: 'huk-coburg',
+      portalUrl: `https://portal.example.com/${'a'.repeat(2100)}`,
+    });
+    const errors = await validate(long);
+    expect(messages(errors)).toContain('portalUrl must be shorter than or equal to 2048 characters');
+
+    const longUpdate = plainToInstance(UpdatePortalAccountLinkDto, {
+      portalUrl: `https://portal.example.com/${'a'.repeat(2100)}`,
+    });
+    const errorsUpdate = await validate(longUpdate);
+    expect(messages(errorsUpdate)).toContain('portalUrl must be shorter than or equal to 2048 characters');
+  });
+
   it('Update: lehnt Nicht-http(s)-portalUrl ab, erlaubt aber null (Loesch-Semantik)', async () => {
     // `ftp://example.com` ist eine wohlgeformte URL, die ohne die
     // protocols-Option von @IsUrl akzeptiert wuerde – der Test pinnt damit

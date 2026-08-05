@@ -57,40 +57,6 @@ export class UpdateHouseholdSettingDto {
   isSecret?: boolean;
 }
 
-// --- Global Feature Flags ---
-
-export class CreateGlobalFeatureFlagDto {
-  @IsString()
-  @MinLength(1)
-  key!: string;
-
-  @IsOptional()
-  @IsBoolean()
-  enabled?: boolean;
-}
-
-export class UpdateGlobalFeatureFlagDto {
-  @IsBoolean()
-  enabled!: boolean;
-}
-
-// --- Household Feature Flags ---
-
-export class CreateHouseholdFeatureFlagDto {
-  @IsString()
-  @MinLength(1)
-  key!: string;
-
-  @IsOptional()
-  @IsBoolean()
-  enabled?: boolean;
-}
-
-export class UpdateHouseholdFeatureFlagDto {
-  @IsBoolean()
-  enabled!: boolean;
-}
-
 // --- Connectivity Test ---
 
 export class ConnectivityTestDto {

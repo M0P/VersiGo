@@ -24,7 +24,6 @@ model Household {
   memberships             HouseholdMembership[]
   objectShares            ObjectShare[]
   integrationSettings     HouseholdIntegrationSetting[]
-  featureFlags            HouseholdFeatureFlag[]
   policies                InsurancePolicy[]
 
   @@map("households")
@@ -215,31 +214,6 @@ model HouseholdIntegrationSetting {
   @@unique([householdId, key])
   @@index([householdId])
   @@map("household_integration_settings")
-}
-
-model GlobalFeatureFlag {
-  id          String   @id @default(uuid())
-  key         String   @unique
-  enabled     Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("global_feature_flags")
-}
-
-model HouseholdFeatureFlag {
-  id          String   @id @default(uuid())
-  householdId String
-  key         String
-  enabled     Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-
-  @@unique([householdId, key])
-  @@index([householdId])
-  @@map("household_feature_flags")
 }
 
 // --- AP-13: User Preferences (Design-System-Farbwahl) -------------------------

@@ -67,31 +67,6 @@ function createMockSettingsStore() {
   };
 }
 
-function createMockFeatureFlags() {
-  return {
-    listGlobalFlags: vi.fn().mockResolvedValue([]),
-    getGlobalFlag: vi.fn().mockImplementation((key: string) =>
-      Promise.resolve({ key, enabled: false, id: 'id', createdAt: new Date(), updatedAt: new Date() }),
-    ),
-    createGlobalFlag: vi.fn().mockImplementation(
-      (key: string, enabled: boolean | undefined) =>
-        Promise.resolve({ key, enabled: enabled ?? false, id: 'id', createdAt: new Date(), updatedAt: new Date() }),
-    ),
-    updateGlobalFlag: vi.fn().mockImplementation(
-      (key: string, enabled: boolean) =>
-        Promise.resolve({ key, enabled, id: 'id', createdAt: new Date(), updatedAt: new Date() }),
-    ),
-    deleteGlobalFlag: vi.fn().mockResolvedValue({ success: true }),
-    isGlobalEnabled: vi.fn().mockResolvedValue(false),
-    listHouseholdFlags: vi.fn().mockResolvedValue([]),
-    getHouseholdFlag: vi.fn().mockResolvedValue({}),
-    createHouseholdFlag: vi.fn().mockResolvedValue({}),
-    updateHouseholdFlag: vi.fn().mockResolvedValue({}),
-    deleteHouseholdFlag: vi.fn().mockResolvedValue({ success: true }),
-    isHouseholdEnabled: vi.fn().mockResolvedValue(false),
-  };
-}
-
 function createMockConfig() {
   return {
     get: vi.fn().mockImplementation((key: string) => {
@@ -119,10 +94,9 @@ describe('AdminSettingsController', () => {
   describe('Global Admin Guard (assertIsGlobalAdmin)', () => {
     it('erlaubt Zugriff fuer ADMIN auf globale Admin-Endpoints', async () => {
       const settingsStore = createMockSettingsStore();
-      const featureFlags = createMockFeatureFlags();
       const config = createMockConfig();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, featureFlags as any, config, db);
+      const controller = new AdminSettingsController(settingsStore as any, config, db);
 
       const result = await controller.listGlobalSettings(adminUser);
       expect(result).toEqual([]);
@@ -130,10 +104,9 @@ describe('AdminSettingsController', () => {
 
     it('verweigert Zugriff fuer USER auf globale Admin-Endpoints', async () => {
       const settingsStore = createMockSettingsStore();
-      const featureFlags = createMockFeatureFlags();
       const config = createMockConfig();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, featureFlags as any, config, db);
+      const controller = new AdminSettingsController(settingsStore as any, config, db);
 
       await expect(controller.listGlobalSettings(userUser)).rejects.toThrow(
         ForbiddenException,
@@ -142,33 +115,13 @@ describe('AdminSettingsController', () => {
 
     it('verweigert Zugriff fuer READ_ONLY auf globale Admin-Endpoints', async () => {
       const settingsStore = createMockSettingsStore();
-      const featureFlags = createMockFeatureFlags();
       const config = createMockConfig();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, featureFlags as any, config, db);
+      const controller = new AdminSettingsController(settingsStore as any, config, db);
 
       await expect(controller.listGlobalSettings(readOnlyUser)).rejects.toThrow(
         ForbiddenException,
       );
-    });
-
-    it('erlaubt ADMIN-Rolle auf globale Admin-Endpoints', async () => {
-      const adminUser2: AuthenticatedUser = {
-        id: 'user-4',
-        username: 'admin2',
-        displayName: 'Admin 2',
-        role: GlobalRole.ADMIN,
-        status: 'ACTIVE' as any,
-        memberships: [{ householdId: 'household-2' }],
-      };
-      const settingsStore = createMockSettingsStore();
-      const featureFlags = createMockFeatureFlags();
-      const config = createMockConfig();
-      const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, featureFlags as any, config, db);
-
-      const result = await controller.listGlobalFlags(adminUser2);
-      expect(result).toEqual([]);
     });
   });
 
@@ -176,7 +129,7 @@ describe('AdminSettingsController', () => {
     it('createGlobalSetting ruft SettingsStore mit Katalog-Schluessel und erzwungenem isSecret auf', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await controller.createGlobalSetting(adminUser, { key: 'AI_ENABLED', valuePlain: 'true', isSecret: false });
       expect(settingsStore.createGlobalSetting).toHaveBeenCalledWith('AI_ENABLED', 'true', false);
@@ -185,7 +138,7 @@ describe('AdminSettingsController', () => {
     it('createGlobalSetting erzwingt isSecret=true fuer Katalog-Secrets', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await controller.createGlobalSetting(adminUser, { key: 'AI_OPENAI_COMPAT_API_KEY', valuePlain: 'sk-123', isSecret: false });
       expect(settingsStore.createGlobalSetting).toHaveBeenCalledWith('AI_OPENAI_COMPAT_API_KEY', 'sk-123', true);
@@ -194,7 +147,7 @@ describe('AdminSettingsController', () => {
     it('createGlobalSetting lehnt unbekannte Schluessel ab (Allowlist)', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await expect(
         controller.createGlobalSetting(adminUser, { key: 'new-key', valuePlain: 'value', isSecret: false }),
@@ -204,7 +157,7 @@ describe('AdminSettingsController', () => {
 
     it('createGlobalSetting lehnt Bootstrap-Schluessel ab', async () => {
       const db = createMockDb();
-      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockConfig(), db);
 
       await expect(
         controller.createGlobalSetting(adminUser, { key: 'DATABASE_URL', valuePlain: 'postgres://x', isSecret: false }),
@@ -214,7 +167,7 @@ describe('AdminSettingsController', () => {
     it('createGlobalSetting lehnt ungueltige Werte ab', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await expect(
         controller.createGlobalSetting(adminUser, { key: 'AI_ENABLED', valuePlain: 'not-a-boolean', isSecret: false }),
@@ -228,7 +181,7 @@ describe('AdminSettingsController', () => {
     it('createGlobalSetting lehnt Anlage ohne Wert ab (keine tote Zeile)', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await expect(
         controller.createGlobalSetting(adminUser, { key: 'AI_ENABLED' }),
@@ -244,7 +197,7 @@ describe('AdminSettingsController', () => {
     it('getGlobalSetting ruft SettingsStore auf', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await controller.getGlobalSetting(adminUser, 'test-key');
       expect(settingsStore.getGlobalSetting).toHaveBeenCalledWith('test-key');
@@ -253,7 +206,7 @@ describe('AdminSettingsController', () => {
     it('updateGlobalSetting ruft SettingsStore mit validiertem Wert und Katalog-isSecret auf', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await controller.updateGlobalSetting(adminUser, 'AI_ENABLED', { valuePlain: 'false', isSecret: true });
       expect(settingsStore.updateGlobalSetting).toHaveBeenCalledWith('AI_ENABLED', 'false', false);
@@ -262,7 +215,7 @@ describe('AdminSettingsController', () => {
     it('updateGlobalSetting lehnt unbekannte Schluessel ab (Allowlist)', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await expect(
         controller.updateGlobalSetting(adminUser, 'test-key', { valuePlain: 'new-value' }),
@@ -273,37 +226,17 @@ describe('AdminSettingsController', () => {
     it('deleteGlobalSetting ruft SettingsStore auf', async () => {
       const settingsStore = createMockSettingsStore();
       const db = createMockDb();
-      const controller = new AdminSettingsController(settingsStore as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(settingsStore as any, createMockConfig(), db);
 
       await controller.deleteGlobalSetting(adminUser, 'test-key');
       expect(settingsStore.deleteGlobalSetting).toHaveBeenCalledWith('test-key');
     });
   });
 
-  describe('Global Feature Flags CRUD', () => {
-    it('createGlobalFlag ruft FeatureFlagsService auf', async () => {
-      const featureFlags = createMockFeatureFlags();
-      const db = createMockDb();
-      const controller = new AdminSettingsController(createMockSettingsStore() as any, featureFlags as any, createMockConfig(), db);
-
-      await controller.createGlobalFlag(adminUser, { key: 'flag-a', enabled: true });
-      expect(featureFlags.createGlobalFlag).toHaveBeenCalledWith('flag-a', true);
-    });
-
-    it('updateGlobalFlag ruft FeatureFlagsService auf', async () => {
-      const featureFlags = createMockFeatureFlags();
-      const db = createMockDb();
-      const controller = new AdminSettingsController(createMockSettingsStore() as any, featureFlags as any, createMockConfig(), db);
-
-      await controller.updateGlobalFlag(adminUser, 'flag-a', { enabled: false });
-      expect(featureFlags.updateGlobalFlag).toHaveBeenCalledWith('flag-a', false);
-    });
-  });
-
   describe('Config Validation', () => {
     it('validateConfig gibt Checks zurueck', async () => {
       const db = createMockDb();
-      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockConfig(), db);
 
       const result = await controller.validateConfig(adminUser);
       expect(result).toHaveProperty('valid');
@@ -316,7 +249,7 @@ describe('AdminSettingsController', () => {
   describe('Connectivity Test', () => {
     it('testConnectivity mit database ruft isHealthy auf', async () => {
       const db = createMockDb();
-      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockConfig(), db);
 
       const result = await controller.testConnectivity(adminUser, { integrationKey: 'database' });
       expect(db.isHealthy).toHaveBeenCalled();
@@ -325,7 +258,7 @@ describe('AdminSettingsController', () => {
 
     it('testConnectivity mit unbekanntem Key ohne Endpoint gibt Fehler', async () => {
       const db = createMockDb();
-      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockConfig(), db);
 
       const result = await controller.testConnectivity(adminUser, { integrationKey: 'custom' });
       expect(result.success).toBe(false);
@@ -334,7 +267,7 @@ describe('AdminSettingsController', () => {
 
     it('testConnectivity mit Endpoint fragt den Dienst ab', async () => {
       const db = createMockDb();
-      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockConfig(), db);
       const fetchMock = vi
         .fn()
         .mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
@@ -359,7 +292,7 @@ describe('AdminSettingsController', () => {
         new Error('Adresse liegt in einem gesperrten Bereich'),
       );
       const db = createMockDb();
-      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockFeatureFlags() as any, createMockConfig(), db);
+      const controller = new AdminSettingsController(createMockSettingsStore() as any, createMockConfig(), db);
       const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
 

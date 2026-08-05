@@ -160,6 +160,15 @@ export const appConfigSchema = z
     PAPERLESS_URL: z.string().optional(),
     PAPERLESS_API_TOKEN: z.string().optional(),
 
+    // BugFix-05: Familien-Freigaben (Household-Sharing) sind standardmaessig
+    // aktiviert (Bestandsverhalten); Admins koennen sie in der Feature-
+    // Verwaltung deaktivieren (Default true, daher kein zwingender
+    // Umgebungs-Default in .env.example noetig).
+    // Hinweis: `booleanFromEnv` lehnt leere Strings ab (Docker Compose setzt
+    // ungesetzte Variablen als ""). Die Variable darf daher NICHT leer in
+    // Compose/.env gefuehrt werden – bei spaeterer Erweiterung optionalBooleanFromEnv.
+    FAMILY_SHARING_ENABLED: booleanFromEnv.default(true),
+
     SETTINGS_ENCRYPTION_KEY: z
       .string()
       .regex(/^[0-9a-fA-F]{64}$/, 'SETTINGS_ENCRYPTION_KEY muss ein 32-Byte-Hex-String (64 Zeichen) sein'),

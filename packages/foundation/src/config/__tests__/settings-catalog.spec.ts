@@ -57,10 +57,13 @@ describe('settings-catalog', () => {
     expect(uiKeys).toContain('AI_ENABLED');
     expect(uiKeys).toContain('PAPERLESS_URL');
     expect(uiKeys).toContain('STORAGE_ENABLED');
+    // BugFix-05: OIDC ist seit der Umstellung UI-konfigurierbar
+    // (restart-Kategorie; das Client-Secret als Secret).
+    expect(uiKeys).toContain('OIDC_ENABLED');
+    expect(uiKeys).toContain('OIDC_CLIENT_SECRET');
     expect(uiKeys).not.toContain('DATABASE_URL');
     expect(uiKeys).not.toContain('SETTINGS_ENCRYPTION_KEY');
     expect(uiKeys).not.toContain('SESSION_SECRET');
-    expect(uiKeys).not.toContain('OIDC_CLIENT_SECRET');
   });
 
   it('listet Neustart-Schluessel separat auf', () => {
@@ -68,6 +71,8 @@ describe('settings-catalog', () => {
     expect(restartKeys).toContain('STORAGE_ENABLED');
     expect(restartKeys).toContain('LOCAL_AUTH_MAX_ATTEMPTS');
     expect(restartKeys).toContain('LOCAL_AUTH_RATE_LIMIT_WINDOW_MS');
+    // BugFix-05: OIDC-Feature-Schalter wird beim naechsten Start aktiv.
+    expect(restartKeys).toContain('OIDC_ENABLED');
   });
 
   it('bietet fuer jeden UI-konfigurierbaren Schluessel eine Beschreibung', () => {
@@ -87,11 +92,14 @@ describe('settings-catalog', () => {
         'REDIS_URL',
         'SETTINGS_ENCRYPTION_KEY',
         'SESSION_SECRET',
-        'OIDC_CLIENT_SECRET',
         'LOCAL_ADMIN_PASSWORD',
         'S3_SECRET_KEY',
       ]),
     );
+    // BugFix-05: OIDC ist nicht mehr bootstrap (Client-Secret ist ein
+    // UI-setzbares Secret, kein Infrastruktur-Secret).
+    expect(bootstrap.map((d) => d.key)).not.toContain('OIDC_CLIENT_SECRET');
+    expect(bootstrap.map((d) => d.key)).not.toContain('OIDC_ENABLED');
   });
 
   it('liefert unbekannte Schluessel als undefined', () => {
