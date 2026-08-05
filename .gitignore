@@ -7,6 +7,8 @@ out
 .env
 .env.local
 .env.*.local
+# Manuelle Test-Umgebung (BugFix-05): lokale Dev-Zugangsdaten/Ports, nicht committen.
+.env.test-manual
 !.env.example
 .DS_Store
 *.log

@@ -1,17 +1,3 @@
-# NEXT-CODING-AGENT-PROMPT.md
-
-## Next Work Package: BugFix-06 (Release-Verifikation der Docker-Optimierungen BugFix-04 + BugFix-05)
-
-**File:** `prompts/BugFix-06-release-verification-docker.md` (source of truth — implement ONLY this work package).
-
----
-
-## Instructions for Next Agent
-
-You are starting a **new coding-agent session**. Your task is to implement **only** the work package defined below. Follow the same review loop (invoke @code-reviewer, save each result verbatim under `docs/reviews/BugFix-06-review-<n>.md`, fix Critical/High/Medium findings, iterate until 0 Critical / 0 High / 0 Medium and at most 8 Minor findings, with the canonical Docker Compose test suite green). Clean up all Docker/Podman artifacts you create at the end of the work package (see AGENTS.md rules 9–11). Do **not** start any later work package, and do **not** touch BugFix-05 (Feature-Konfiguration UI, Portal-URL-Normalisierung, Kosten je Versicherung, Spinner, Signout, Tab-Reload, Family-Sharing) — that package is committed (findings 1–9) and out of scope here.
-
----
-
 # BugFix-06: Release-Verifikation der Docker-Optimierungen (BugFix-04 + BugFix-05)
 
 ## Kontext

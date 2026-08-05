@@ -35,6 +35,7 @@ type AppShellProps = {
  */
 export function AppShell({ children, navSections, wide = false, user: userProp }: AppShellProps): ReactElement {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [familySharingEnabled, setFamilySharingEnabled] = useState(true);
   const pathname = usePathname();
   const { toggleTheme, theme } = useTheme();
   const { t } = useI18n();
@@ -44,6 +45,33 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
   const user = userProp !== undefined ? userProp : hookUser;
 
   const closeSidebar = () => setSidebarOpen(false);
+
+  // BugFix-05 (Befund 6): Familien-Freigaben sind ein Feature-Schalter
+  // (FAMILY_SHARING_ENABLED, Default true). Ist der Schalter deaktiviert,
+  // blendet die UI den Nav-Eintrag /household/shares aus. Die Capability
+  // wird ueber den oeffentlichen /ready-Endpunkt geliefert (Resolver-
+  // basiert, UI > ENV > DEFAULT). Der anfaengliche Default true verhindert
+  // Flackern, solange der Request laeuft; bei Fehlern bleibt der Eintrag
+  // sichtbar (Bestandsverhalten). Der Refetch bei jedem Routenwechsel macht
+  // eine Umschaltung des Features waehrend der laufenden Session sichtbar
+  // (ohne Voll-Reload); die serverseitige Durchsetzung liefert dabei 403.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/ready`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { capabilities?: Record<string, boolean> } | null) => {
+        if (cancelled) return;
+        if (data?.capabilities && typeof data.capabilities.familySharing === 'boolean') {
+          setFamilySharingEnabled(data.capabilities.familySharing);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFamilySharingEnabled(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   // AP-20 (UI-Completeness): Abmelden ist in jeder angemeldeten Ansicht
   // direkt erreichbar – Icon-Schaltflaeche in der Mobil-Topbar und
@@ -81,13 +109,17 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
   // dies ist nur eine UX-Massnahme). Solange der User noch nicht geladen ist
   // (oder keine gueltige Session besteht), wird der Eintrag ebenfalls
   // ausgeblendet, um kein Flackern eines unberechtigten Links zu zeigen.
+  // BugFix-05 (Befund 6): Bei deaktivierten Familien-Freigaben wird der
+  // Eintrag /household/shares zusaetzlich ausgeblendet.
   const isAdmin = user?.role === 'ADMIN';
   const visibleSections: NavSection[] = navSections
     .map((section) => ({
       ...section,
-      items: isAdmin
-        ? section.items
-        : section.items.filter((item) => item.href !== '/admin' && !item.href.startsWith('/admin/')),
+      items: section.items
+        .filter((item) => familySharingEnabled || item.href !== '/household/shares')
+        .filter((item) =>
+          isAdmin ? true : item.href !== '/admin' && !item.href.startsWith('/admin/'),
+        ),
     }))
     .filter((section) => section.items.length > 0);
 
@@ -189,28 +221,30 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
           <span className="logo-accent">Ver</span>siGo
         </Link>
 
-        {visibleSections.map((section) => (
-          <div key={section.label}>
-            <div className="nav-section-label">{t(section.label)}</div>
-            {section.items.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`nav-item ${isActive ? 'active' : ''}`}
-                  aria-current={isActive ? 'page' : undefined}
-                  onClick={closeSidebar}
-                >
-                  <span className="nav-item-icon">
-                    <Icon name={item.icon} size={18} />
-                  </span>
-                  {t(item.label)}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+        <nav className="app-sidebar-nav">
+          {visibleSections.map((section) => (
+            <div key={section.label}>
+              <div className="nav-section-label">{t(section.label)}</div>
+              {section.items.map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`nav-item ${isActive ? 'active' : ''}`}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={closeSidebar}
+                  >
+                    <span className="nav-item-icon">
+                      <Icon name={item.icon} size={18} />
+                    </span>
+                    {t(item.label)}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
 
         {user && (
           <button className="nav-item nav-item-logout" onClick={handleLogout}>

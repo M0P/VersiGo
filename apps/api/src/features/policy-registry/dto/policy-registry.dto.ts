@@ -12,7 +12,29 @@ import {
   IsUrl,
 } from 'class-validator';
 import { InsurancePolicyType, PolicyStatus, PaymentFrequency, PolicySource, SyncStatus } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+
+/**
+ * BugFix-05 (Befund 2): Portal-URL-Normalisierung als Defense-in-Depth.
+ * Fehlt das Schema (`www.portal.de`), wird `https://` vorangestellt; `http://`
+ * bleibt unveraendert. Die eigentliche Sicherheitsvalidierung (nur http/https,
+ * explizites 2048-Zeichen-Laengenlimit) uebernimmt weiterhin `@IsUrl` bzw.
+ * `@MaxLength` direkt dahinter – ein `javascript:`/`data:`-Eingang kann hier
+ * nie entstehen, weil nur dann ein Schema ergaenzt wird, wenn KEIN Schema
+ * vorhanden ist.
+ */
+function normalizePortalUrl(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  const hasSchema = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed);
+  return hasSchema ? trimmed : `https://${trimmed}`;
+}
+
+/** Transform-Decorator-Fabrik fuer die beiden Portal-URL-Felder. */
+function PortalUrlTransform(): PropertyDecorator {
+  return Transform(({ value }) => normalizePortalUrl(value));
+}
 
 export class CreatePolicyDto {
   @IsEnum(InsurancePolicyType)
@@ -205,8 +227,12 @@ export class CreatePortalAccountLinkDto {
   providerKey!: string;
 
   @IsOptional()
+  // BugFix-05 (Befund 2): Schema-Ergaenzung (https://) + Sicherheitsvalidierung.
+  @PortalUrlTransform()
   // AP-18: Nur http(s)-URLs – verhindert javascript:/data: im Deeplink-Target.
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  // Maximales URL-Laengenlimit (Konsistenz mit dem 2048er-Default von @IsUrl).
+  @MaxLength(2048)
   portalUrl?: string;
 
   @IsOptional()
@@ -244,8 +270,12 @@ export class UpdatePortalAccountLinkDto {
   providerKey?: string;
 
   @IsOptional()
+  // BugFix-05 (Befund 2): Schema-Ergaenzung (https://) + Sicherheitsvalidierung.
+  @PortalUrlTransform()
   // AP-18: Nur http(s)-URLs – verhindert javascript:/data: im Deeplink-Target.
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  // Maximales URL-Laengenlimit (Konsistenz mit dem 2048er-Default von @IsUrl).
+  @MaxLength(2048)
   portalUrl?: string;
 
   @IsOptional()

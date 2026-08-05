@@ -32,7 +32,7 @@ describe('preloadRestartSettingsIntoEnv', () => {
   it('wendet katalogisierte restart-Settings aus der DB auf die Umgebung an', async () => {
     const restartKeys = getRestartRequiredKeys();
     const env = baseEnv();
-    // restart-Katalog: LOCAL_AUTH_MAX_ATTEMPTS (Zahl 1-100),
+    // Erste restart-Katalog-Schluessel: LOCAL_AUTH_MAX_ATTEMPTS (Zahl 1-100),
     // LOCAL_AUTH_RATE_LIMIT_WINDOW_MS (Zahl 1000-86400000), STORAGE_ENABLED (Boolean).
     findMany.mockResolvedValue([
       { key: restartKeys[0], valueEncrypted: null, valuePlain: '42' },

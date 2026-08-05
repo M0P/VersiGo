@@ -14,10 +14,11 @@ import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
 import { Roles } from '../identity/roles.decorator';
 import { CreateShareDto, UpdateShareDto } from './dto/family-sharing.dto';
+import { FamilySharingGuard } from './family-sharing.guard';
 import type { AuthenticatedUser } from '../identity/auth.service';
 
 @Controller('households/:householdId/shares')
-@UseGuards(HouseholdMembershipGuard)
+@UseGuards(HouseholdMembershipGuard, FamilySharingGuard)
 export class FamilySharingController {
   constructor(private readonly service: FamilySharingService) {}
 

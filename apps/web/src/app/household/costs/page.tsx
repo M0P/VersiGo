@@ -14,10 +14,22 @@ import { getApiBaseUrl } from '@/lib/runtime-config';
 
 const API_BASE = getApiBaseUrl();
 
+type SummaryPolicy = {
+  id: string;
+  name: string;
+  type: string;
+  frequency: 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | null;
+  annualGross: number | null;
+  perFrequency: { MONTHLY: number; QUARTERLY: number; SEMI_ANNUAL: number; ANNUAL: number } | null;
+  paidToDate: number;
+};
+
 type Summary = {
   totalAnnualGross: number;
   perType: Record<string, number>;
   policyCount: number;
+  // BugFix-05 (Befund 7): Einzelne Versicherungen mit Kosten.
+  policies: SummaryPolicy[];
 };
 
 export default function HouseholdCostsPage(): ReactElement {
@@ -83,6 +95,52 @@ export default function HouseholdCostsPage(): ReactElement {
           </p>
         </Card>
       </div>
+
+      {/* BugFix-05 (Befund 7): Kosten je Versicherung einzeln. */}
+      <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
+        <SectionHeader title={t('costs.perPolicy')} />
+        {summary.policies.length === 0 ? (
+          <p className="text-muted">{t('costs.noData')}</p>
+        ) : (
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>{t('costs.policy')}</th>
+                  <th>{t('costs.type')}</th>
+                  <th>{t('costs.annualCosts')}</th>
+                  <th>{t('costs.perPeriod')}</th>
+                  <th>{t('costs.paidToDate')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.policies.map((policy) => (
+                  <tr key={policy.id}>
+                    <td data-label={t('costs.policy')}>
+                      <a className="link" href={`/policies/${policy.id}`}>{policy.name}</a>
+                    </td>
+                    <td data-label={t('costs.type')}>{t(`policies.types.${policy.type}`) ?? policy.type}</td>
+                    <td data-label={t('costs.annualCosts')}>
+                      {policy.annualGross !== null ? formatCurrency(policy.annualGross, language) : '—'}
+                    </td>
+                    <td data-label={t('costs.perPeriod')}>
+                      {policy.frequency && policy.perFrequency ? (
+                        <>
+                          {t(`costs.frequencies.${policy.frequency}`)}:{' '}
+                          {formatCurrency(policy.perFrequency[policy.frequency], language)}
+                        </>
+                      ) : '—'}
+                    </td>
+                    <td data-label={t('costs.paidToDate')}>
+                      {policy.paidToDate > 0 ? formatCurrency(policy.paidToDate, language) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <Card>
         <SectionHeader title={t('costs.byType')} />

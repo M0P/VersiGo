@@ -42,7 +42,8 @@ export class AuthController {
   @Public()
   @Get('login')
   async login(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
-    if (!this.oidc.isEnabled()) {
+    // BugFix-05: oidc.isEnabled() ist seit der Resolver-Umstellung async.
+    if (!(await this.oidc.isEnabled())) {
       res.status(501).json({
         message:
           'OIDC ist nicht konfiguriert. Setze OIDC_ENABLED=true und konfiguriere Issuer/Client/Callback.',
@@ -58,15 +59,23 @@ export class AuthController {
 
   @Public()
   @Get('config')
-  getAuthConfig(): { oidcEnabled: boolean; localEnabled: boolean; registrationEnabled: boolean } {
+  async getAuthConfig(): Promise<{
+    oidcEnabled: boolean;
+    localEnabled: boolean;
+    registrationEnabled: boolean;
+  }> {
+    const [oidcEnabled, localEnabled] = await Promise.all([
+      this.oidc.isEnabled(),
+      this.capabilities.isEnabled('local'),
+    ]);
     return {
       // AP-16/Review-4: oidcEnabled darf nicht nur das Capability-Flag melden,
       // sondern muss anzeigen, ob die Strategie tatsaechlich einsatzbereit ist
       // (Discovery erfolgreich, Client gesetzt). Sonst wuerde die Login-Seite
       // den OIDC-Button anbieten, obwohl /auth/login 501 liefert.
-      oidcEnabled: this.oidc.isEnabled(),
-      localEnabled: this.capabilities.isEnabled('local'),
-      registrationEnabled: this.capabilities.isEnabled('local'),
+      oidcEnabled,
+      localEnabled,
+      registrationEnabled: localEnabled,
     };
   }
 
@@ -77,7 +86,7 @@ export class AuthController {
     @Req() req: SessionRequest,
     @Body() body: RegisterLocalAccountDto,
   ): Promise<{ status: 'PENDING_APPROVAL' }> {
-    if (!this.capabilities.isEnabled('local')) {
+    if (!(await this.capabilities.isEnabled('local'))) {
       // 501 (nicht 409): Registrierung ist NICHT aktiviert. Der Status
       // unterscheidet sich bewusst von einem Namens-Konflikt (409,
       // "Benutzername bereits vergeben") und spiegelt das 501-Verhalten des
@@ -135,7 +144,7 @@ export class AuthController {
     @Res() res: Response,
     @Body() body: LocalLoginDto,
   ): Promise<void> {
-    if (!this.capabilities.isEnabled('local')) {
+    if (!(await this.capabilities.isEnabled('local'))) {
       res.status(501).json({
         message:
           'Lokale Anmeldung ist nicht konfiguriert. Setze LOCAL_AUTH_ENABLED=true.',
@@ -199,7 +208,7 @@ export class AuthController {
   @Public()
   @Get('callback')
   async callback(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
-    if (!this.oidc.isEnabled()) {
+    if (!(await this.oidc.isEnabled())) {
       res.redirect('/auth/login?error=oidc-not-configured');
       return;
     }

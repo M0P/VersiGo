@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactElement, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ReactElement, type FormEvent } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, FormField } from '@/components/ui/form-field';
@@ -37,20 +37,56 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
   const [file, setFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const loadDocuments = async () => {
+  // Gemeinsame Ladelogik fuer Mount-Effekt und Handler-Reloads. Ein
+  // Monoton-zaehler (`requestSeq`) invalidiert in-flight Requests bei jedem
+  // neuen Ladevorgang sowie bei Unmount/policyId-Wechsel: Nur die neueste
+  // Anfrage darf Zustand schreiben – auch nach Submits/Deletes, die nach
+  // einem policyId-Wechsel noch eintreffen (BugFix-05, Befund 8: kein
+  // Fremddaten-Leak von Versicherung A unter B).
+  const requestSeq = useRef(0);
+
+  const reloadDocuments = async () => {
+    const seq = ++requestSeq.current;
+    // BugFix-05 (Befund 8): State zuruecksetzen, damit beim policyId-Wechsel
+    // keine Dokumente der vorherigen Versicherung angezeigt werden.
+    setDocuments([]);
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${API_BASE}/households/default/policies/${policyId}/documents`, { credentials: 'include' });
+      if (seq !== requestSeq.current) return;
+      if (res.status === 401) { window.location.href = '/login'; return; }
       if (res.ok) {
         const data = await res.json();
-        setDocuments(data);
+        if (seq === requestSeq.current) setDocuments(data);
+      } else if (seq === requestSeq.current) {
+        setError(t('policies.noDocumentsBody'));
       }
     } catch {
-      setError(t('policies.noDocumentsBody'));
+      if (seq === requestSeq.current) setError(t('policies.noDocumentsBody'));
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   };
+
+  // BugFix-05 (Befund 4): Beim Mount und bei jedem policyId-Wechsel neu laden –
+  // sonst bleibt der Spinner haengen (leere Liste) bzw. es erscheinen Dokumente
+  // der vorherigen Versicherung. Der Cleanup invalidiert in-flight Requests des
+  // vorherigen policyId bzw. nach Unmount (keine Zustands-Updates danach).
+  // BugFix-05 (Befund 8): Beim policyId-Wechsel wird auch das Formular
+  // zurueckgesetzt – ein offenes Formular mit Daten der Versicherung A darf
+  // nicht unter B stehen bleiben (ein spaeterer Upload-Fehler wuerde sonst
+  // unter B gerendert bzw. die Felder von A weiterhin anzeigen).
+  useEffect(() => {
+    setShowForm(false);
+    setFile(null);
+    setForm({ category: '', documentDate: '' });
+    setFormError(null);
+    void reloadDocuments();
+    // policyId steuert die Datenquelle; t ist bewusst nicht in den Dependencies
+    // (Sprachwechsel soll die Liste nicht neu laden).
+    return () => { requestSeq.current += 1; };
+  }, [policyId]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -58,6 +94,12 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
       setFormError(t('policies.documentFile') + ' ' + t('common.required'));
       return;
     }
+    // BugFix-05 (Befund 8): Seq-Token wie beim Reload/Delete – ein Upload-
+    // Fehler einer aelteren Anfrage darf nach policyId-Wechsel keine
+    // Fehlermeldung im (bereits zurueckgesetzten) Formular der neuen
+    // Versicherung rendern. Der Erfolgspfad laeuft ueber reloadDocuments(),
+    // das selbst einen neuen Seq-Stand setzt.
+    const seq = requestSeq.current;
     setFormError(null);
     setUploading(true);
     try {
@@ -75,12 +117,22 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
         const data = await res.json().catch(() => null);
         throw new Error(data?.message ?? t('common.unknownError'));
       }
-      setFile(null);
-      setForm({ category: '', documentDate: '' });
-      setShowForm(false);
-      loadDocuments();
+      // BugFix-05 (Befund 8, Review-Runde 5): Auch die Formular-Reset-Writes
+      // sind seq-gesichert – ein spaeter Erfolg eines Uploads von A darf nach
+      // policyId-Wechsel nicht B's offenes Formular schliessen/leeren.
+      if (seq === requestSeq.current) {
+        setFile(null);
+        setForm({ category: '', documentDate: '' });
+        setShowForm(false);
+        // Erfolgs-Reload nur, wenn kein policyId-Wechsel zwischenzeitlich
+        // stattfand – sonst wuerde die veraltete Closure Dokumente von A unter
+        // B laden. Der neue policyId-Effekt laedt B bereits selbst.
+        reloadDocuments();
+      }
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : t('common.unknownError'));
+      if (seq === requestSeq.current) {
+        setFormError(err instanceof Error ? err.message : t('common.unknownError'));
+      }
     } finally {
       setUploading(false);
     }
@@ -88,15 +140,22 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
 
   const handleDelete = async (id: string) => {
     if (!window.confirm(t('policies.confirmDeleteDocument'))) return;
+    // BugFix-05 (Befund 8): Seq-Token wie beim Reload – ein Fehler einer
+    // aelteren Anfrage darf nach policyId-Wechsel keine Fehlermeldung unter
+    // der neuen Versicherung rendern.
+    const seq = ++requestSeq.current;
     try {
       const res = await fetch(`${API_BASE}/households/default/policies/${policyId}/documents/${id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
       if (!res.ok) throw new Error(t('common.unknownError'));
-      loadDocuments();
+      // BugFix-05 (Befund 8, Review-Runde 4): Auch der Erfolgs-Reload ist
+      // seq-gesichert – nach einem policyId-Wechsel darf die veraltete Closure
+      // keine Dokumente von A unter B laden.
+      if (seq === requestSeq.current) reloadDocuments();
     } catch {
-      setError(t('common.unknownError'));
+      if (seq === requestSeq.current) setError(t('common.unknownError'));
     }
   };
 

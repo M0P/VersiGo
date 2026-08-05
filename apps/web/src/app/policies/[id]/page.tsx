@@ -14,6 +14,7 @@ import CoverageSummarySection from './coverage-summary-section';
 import CoveredPersonsTab from './covered-persons-tab';
 import DocumentsTab from './documents-tab';
 import PortalLinksTab from './portal-links-tab';
+import CostsOverviewCard from './costs-overview-card';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 
@@ -71,15 +72,25 @@ export default function PolicyDetailPage(): ReactElement {
   const [activeTab, setActiveTab] = useState<TabKey>('masterData');
 
   useEffect(() => {
+    // BugFix-05 (Befund 8): Beim policyId-Wechsel zuruecksetzen und in-flight
+    // Requests der vorherigen Versicherung verwerfen – weder der Header noch
+    // die Masterdaten von A duerfen transient unter /policies/B erscheinen.
+    // Der cancelled-Flag (Cleanup) verhindert, dass eine langsame A-Antwort
+    // die bereits geladene B-Ansicht ueberschreibt.
+    let cancelled = false;
+    setPolicy(null);
+    setLoading(true);
     fetch(`${API_BASE}/households/default/policies/${policyId}`, { credentials: 'include' })
       .then((res) => {
+        if (cancelled) return Promise.resolve(null);
         if (res.status === 401) { window.location.href = '/login'; return Promise.resolve(null); }
         if (!res.ok) throw new Error(t('policies.notFound'));
         return res.json();
       })
-      .then((data) => { if (data) setPolicy(data); })
-      .catch(() => setPolicy(null))
-      .finally(() => setLoading(false));
+      .then((data) => { if (!cancelled && data) setPolicy(data); })
+      .catch(() => { if (!cancelled) setPolicy(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [policyId, t]);
 
   if (loading) {
@@ -207,22 +218,8 @@ export default function PolicyDetailPage(): ReactElement {
         return <CoverageSummarySection householdId="default" policyId={policyId} />;
 
       case 'costs':
-        return (
-          <a href={`/policies/${policyId}/costs`}>
-            <Card>
-              <div style={{ textAlign: 'center', padding: 'var(--versigo-space-8)' }}>
-                <span style={{ fontSize: '3rem' }}>💰</span>
-                <h3 style={{ marginTop: 'var(--versigo-space-4)' }}>{t('policies.tabs.costs')}</h3>
-                <p className="text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>
-                  {t('costs.policyTitle')}
-                </p>
-                <Button variant="primary" style={{ marginTop: 'var(--versigo-space-4)' }}>
-                  {t('costs.policyTitle')}
-                </Button>
-              </div>
-            </Card>
-          </a>
-        );
+        // BugFix-05 (Befund 3): Eingebettete Kostenuebersicht statt Link-Card.
+        return <CostsOverviewCard policyId={policyId} />;
 
       default:
         return null;

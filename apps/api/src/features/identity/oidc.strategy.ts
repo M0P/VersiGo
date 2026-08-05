@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
-import { AppConfigService, CapabilityFlagsService } from '@versigo/foundation';
+import { AppConfigService, CapabilityFlagsService, type AppConfig } from '@versigo/foundation';
 import { AuthService, AuthenticatedUser } from './auth.service';
 
 import {
@@ -55,7 +55,24 @@ export class OidcStrategy implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    if (!this.capabilities.isEnabled('oidc')) {
+    // BugFix-05: Capability-Aufloesung ist seit der Resolver-Umstellung
+    // asynchron; OIDC ist restart-Kategorie, der DB-Wert wurde vom
+    // Boot-Preload bereits in process.env uebernommen. Ist die Datenbank
+    // beim Boot nicht erreichbar (Prisma-Verbindung lazy), faellt die
+    // Entscheidung auf den Umgebungs-Snapshot zurueck (Verhalten vor
+    // BugFix-05), damit der Boot nicht abgebrochen wird.
+    let oidcEnabled: boolean;
+    try {
+      oidcEnabled = await this.capabilities.isEnabled('oidc');
+    } catch (error) {
+      this.logger.warn(
+        'OIDC-Capability-Aufloesung fehlgeschlagen (DB nicht erreichbar?) – ' +
+          'Fallback auf Umgebungs-Konfiguration: ' +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+      oidcEnabled = Boolean(this.config.get('OIDC_ENABLED' as keyof AppConfig));
+    }
+    if (!oidcEnabled) {
       this.logger.log('OIDC deaktiviert (OIDC_ENABLED=false)');
       return;
     }
@@ -90,8 +107,9 @@ export class OidcStrategy implements OnModuleInit {
     }
   }
 
-  isEnabled(): boolean {
-    return this.capabilities.isEnabled('oidc') && this.client !== null;
+  async isEnabled(): Promise<boolean> {
+    // BugFix-05: async (Resolver-basierte Capability-Aufloesung).
+    return (await this.capabilities.isEnabled('oidc')) && this.client !== null;
   }
 
   /**

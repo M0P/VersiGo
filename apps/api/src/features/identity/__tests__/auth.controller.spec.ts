@@ -62,7 +62,7 @@ const mockUser: AuthenticatedUser = {
 
 function createMockOidc(): OidcStrategyLike {
   return {
-    isEnabled: vi.fn().mockReturnValue(true),
+    isEnabled: vi.fn().mockResolvedValue(true),
     getAuthorizationUrl: vi.fn().mockReturnValue({
       url: 'https://provider.example.com/auth',
       codeVerifier: 'verifier',
@@ -178,7 +178,7 @@ describe('AuthController', () => {
   describe('GET /auth/login (OIDC redirect)', () => {
     it('leitet zur OIDC-Provider-URL weiter und speichert codeVerifier/state in der Session', async () => {
       const oidc = createMockOidc();
-      oidc.isEnabled.mockReturnValue(true);
+      oidc.isEnabled.mockResolvedValue(true);
       const controller = createController({ oidc });
       const regenerate = vi.fn();
       const req = {
@@ -200,7 +200,7 @@ describe('AuthController', () => {
 
     it('gibt 501 wenn OIDC deaktiviert ist (bleibt unabhaengig von lokaler Auth)', async () => {
       const oidc = createMockOidc();
-      oidc.isEnabled.mockReturnValue(false);
+      oidc.isEnabled.mockResolvedValue(false);
       const controller = createController({ oidc });
       const req = { session: { regenerate: vi.fn() } } as unknown as RequestLike;
       const res = {
@@ -219,36 +219,36 @@ describe('AuthController', () => {
   });
 
   describe('GET /auth/config', () => {
-    it('gibt verfuegbare Authentifizierungsmethoden zurueck', () => {
+    it('gibt verfuegbare Authentifizierungsmethoden zurueck', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockImplementation((key: string) => key === 'local');
+      capabilities.isEnabled.mockImplementation(async (key: string) => key === 'local');
       const oidc = createMockOidc();
-      oidc.isEnabled.mockReturnValue(false);
+      oidc.isEnabled.mockResolvedValue(false);
       const controller = createController({ capabilities, oidc });
 
-      const result = controller.getAuthConfig();
+      const result = await controller.getAuthConfig();
       expect(result).toEqual({ oidcEnabled: false, localEnabled: true, registrationEnabled: true });
     });
 
-    it('zeigt beide Methoden wenn aktiviert', () => {
+    it('zeigt beide Methoden wenn aktiviert', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const oidc = createMockOidc();
-      oidc.isEnabled.mockReturnValue(true);
+      oidc.isEnabled.mockResolvedValue(true);
       const controller = createController({ capabilities, oidc });
 
-      const result = controller.getAuthConfig();
+      const result = await controller.getAuthConfig();
       expect(result).toEqual({ oidcEnabled: true, localEnabled: true, registrationEnabled: true });
     });
 
-    it('meldet OIDC als deaktiviert, wenn die Strategie trotz Capability nicht bereit ist (Discovery fehlgeschlagen)', () => {
+    it('meldet OIDC als deaktiviert, wenn die Strategie trotz Capability nicht bereit ist (Discovery fehlgeschlagen)', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockImplementation((key: string) => key === 'oidc');
+      capabilities.isEnabled.mockImplementation(async (key: string) => key === 'oidc');
       const oidc = createMockOidc();
-      oidc.isEnabled.mockReturnValue(false);
+      oidc.isEnabled.mockResolvedValue(false);
       const controller = createController({ capabilities, oidc });
 
-      const result = controller.getAuthConfig();
+      const result = await controller.getAuthConfig();
       expect(result).toEqual({ oidcEnabled: false, localEnabled: false, registrationEnabled: false });
     });
   });
@@ -262,7 +262,7 @@ describe('AuthController', () => {
 
     it('registriert einen lokalen Account und meldet PENDING_APPROVAL', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
       const rateLimiter = createMockRateLimiter();
       const controller = createController({ capabilities, authService, rateLimiter });
@@ -288,7 +288,7 @@ describe('AuthController', () => {
 
     it('gibt 501 wenn lokale Registrierung nicht konfiguriert ist', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(false);
+      capabilities.isEnabled.mockResolvedValue(false);
       const authService = createMockAuthService();
       const controller = createController({ capabilities, authService });
 
@@ -307,7 +307,7 @@ describe('AuthController', () => {
 
     it('gibt 429 wenn die IP registrierungs-limitiert ist (Scope register)', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
       const rateLimiter = createMockRateLimiter();
       rateLimiter.isBlocked.mockResolvedValue(true);
@@ -329,7 +329,7 @@ describe('AuthController', () => {
 
     it('zaehlt fehlgeschlagene Registrierungen (409) im Scope register', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
       authService.registerLocalAccount.mockRejectedValue(
         new ConflictException('Benutzername ist bereits vergeben'),
@@ -354,7 +354,7 @@ describe('AuthController', () => {
   describe('POST /auth/local/login', () => {
     it('gibt 501 wenn lokale Auth deaktiviert ist', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(false);
+      capabilities.isEnabled.mockResolvedValue(false);
       const controller = createController({ capabilities });
       const req = { session: { regenerate: vi.fn() } } as unknown as RequestLike;
       const res = {
@@ -368,7 +368,7 @@ describe('AuthController', () => {
 
     it('gibt 429 wenn IP rate-limitiert ist', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const rateLimiter = createMockRateLimiter();
       rateLimiter.isBlocked.mockResolvedValue(true);
       const controller = createController({ capabilities, rateLimiter });
@@ -384,7 +384,7 @@ describe('AuthController', () => {
 
     it('gibt 400 bei fehlenden Feldern', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const controller = createController({ capabilities });
       const req = { ip: '1.2.3.4', socket: {}, session: { regenerate: vi.fn() } } as unknown as RequestLike;
       const res = {
@@ -398,7 +398,7 @@ describe('AuthController', () => {
 
     it('gibt 401 bei ungueltigen Anmeldedaten (generic)', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
       authService.localLogin.mockResolvedValue(null);
       const controller = createController({ capabilities, authService });
@@ -414,7 +414,7 @@ describe('AuthController', () => {
 
     it('gibt 200 und User bei erfolgreichem Login', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
       authService.localLogin.mockResolvedValue(mockUser);
       const rateLimiter = createMockRateLimiter();
@@ -434,7 +434,7 @@ describe('AuthController', () => {
 
     it('zaehlt fehlgeschlagene Versuche im Rate-Limiter', async () => {
       const capabilities = createMockCapabilities();
-      capabilities.isEnabled.mockReturnValue(true);
+      capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
       authService.localLogin.mockResolvedValue(null);
       const rateLimiter = createMockRateLimiter();

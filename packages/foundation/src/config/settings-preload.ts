@@ -2,18 +2,18 @@ import { Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { AesGcmEncryptionAdapter } from '../encryption/aes-gcm-encryption.adapter';
 import { AppConfigService } from './app-config.service';
-import { getRestartRequiredKeys, getSettingDefinition } from './settings-catalog';
+import { getBootPreloadKeys, getSettingDefinition } from './settings-catalog';
 import { validateSettingValue } from './settings-validation';
 
 /**
- * Boot-Preload fuer "restart"-kategorisierte Settings (AP-17).
+ * Boot-Preload fuer Konstruktionszeit-Settings (AP-17/BugFix-05).
  *
  * Kategorie-4-Werte ("nicht dynamisch anwendbar") werden ueber die
  * Admin-UI in der Datenbank gespeichert und erst beim naechsten
  * Prozessstart aktiv. Diese Funktion liest sie VOR der Nest-DI-
  * Initialisierung aus der Datenbank und schreibt sie in die
  * Umgebungsvariable, damit Konstruktionszeit-Konsumenten (z. B.
- * Rate-Limiter, Capability-Flags) die DB-Werte sehen.
+ * Rate-Limiter, OIDC-Strategie) die DB-Werte sehen.
  *
  * Garantien:
  * - Fail-soft: Ist die Datenbank beim Start nicht erreichbar oder
@@ -24,9 +24,9 @@ import { validateSettingValue } from './settings-validation';
  *   Timeout, ausgelasteter Pool), gibt der Preload nach Ablauf auf und
  *   die App startet trotzdem – ein App-Start darf nie am Preload
  *   haengen bleiben.
- * - Nur katalogisierte `restart`-Schluessel werden uebertragen;
- *   keine Secrets (aktuell kein Secret in dieser Kategorie) und keine
- *   bootstrap-Werte.
+ * - Es werden nur katalogisierte `restart`-Schluessel sowie Secrets
+ *   mit `bootActivation` (z. B. OIDC_CLIENT_SECRET) uebertragen;
+ *   keine bootstrap-Werte.
  * - Wird von API- und Worker-main.ts vor NestFactory aufgerufen.
  */
 const PRELOAD_TIMED_OUT = 'PRELOAD_TIMED_OUT';
@@ -35,7 +35,7 @@ export async function preloadRestartSettingsIntoEnv(
   env: Record<string, string | undefined> = process.env,
   timeoutMs = 15_000,
 ): Promise<number> {
-  const restartKeys = getRestartRequiredKeys();
+  const restartKeys = getBootPreloadKeys();
   if (restartKeys.length === 0) return 0;
 
   const databaseUrl = env.DATABASE_URL;

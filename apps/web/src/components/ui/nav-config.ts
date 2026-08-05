@@ -39,6 +39,9 @@ export const NAV_SECTIONS: NavSection[] = [
       // und sind (serverseitig durchgesetzt) nur fuer ADMIN sichtbar.
       { href: '/settings', label: 'nav.myProfile', icon: 'settings' },
       { href: '/admin', label: 'nav.admin', icon: 'admin' },
+      // BugFix-05: Benutzerfreundliche Feature-Verwaltung (KI, OIDC,
+      // Paperless, Speicher, Familien-Freigaben) – statt roher Schluessel.
+      { href: '/admin/features', label: 'nav.features', icon: 'settings' },
       // BugFix-02: Admin-Nutzerverwaltung
       { href: '/admin/users', label: 'nav.adminUsers', icon: 'users' },
       // BugFix-04: Audit-Log + Monitoring (vorher nur API, jetzt UI)

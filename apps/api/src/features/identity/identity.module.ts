@@ -1,6 +1,6 @@
 import { Global, Module, OnModuleInit, Logger } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { CapabilityFlagsService } from '@versigo/foundation';
+import { AppConfigService, CapabilityFlagsService, type AppConfig } from '@versigo/foundation';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { OidcStrategy } from './oidc.strategy';
@@ -34,12 +34,33 @@ export class IdentityModule implements OnModuleInit {
 
   constructor(
     private readonly capabilities: CapabilityFlagsService,
+    private readonly config: AppConfigService,
     private readonly adminBootstrap: LocalAdminBootstrapService,
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const oidcEnabled = this.capabilities.isEnabled('oidc');
-    const localEnabled = this.capabilities.isEnabled('local');
+    // BugFix-05: Capability-Aufloesung laeuft seit der Resolver-Umstellung
+    // asynchron (UI > ENV > DEFAULT). Ist die Datenbank beim Boot nicht
+    // erreichbar (Prisma-Verbindung lazy, $connect() prueft nicht), faellt
+    // die Identitaets-Konfiguration auf den Umgebungs-Snapshot zurueck
+    // (Verhalten vor BugFix-05): Die API startet dann trotz DB-Ausfall und
+    // der Health-Endpunkt meldet db: down, statt den Boot zu verhindern.
+    let oidcEnabled: boolean;
+    let localEnabled: boolean;
+    try {
+      [oidcEnabled, localEnabled] = await Promise.all([
+        this.capabilities.isEnabled('oidc'),
+        this.capabilities.isEnabled('local'),
+      ]);
+    } catch (error) {
+      this.logger.warn(
+        'Capability-Aufloesung beim Boot fehlgeschlagen (DB nicht erreichbar?) – ' +
+          'Fallback auf Umgebungs-Konfiguration: ' +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+      oidcEnabled = Boolean(this.config.get('OIDC_ENABLED' as keyof AppConfig));
+      localEnabled = Boolean(this.config.get('LOCAL_AUTH_ENABLED' as keyof AppConfig));
+    }
 
     if (!oidcEnabled && !localEnabled) {
       this.logger.error(

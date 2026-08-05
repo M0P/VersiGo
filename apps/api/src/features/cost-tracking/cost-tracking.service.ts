@@ -11,6 +11,15 @@ const FREQUENCY_MAP: Record<PaymentFrequency, number> = {
   ANNUAL: 1,
 };
 
+// Durchschnittliche Periodenlaenge in Tagen (365.25-Tage-Jahr) – Basis fuer die
+// anteilige "bisher gezahlt"-Berechnung (BugFix-05, Befund 3).
+const PERIOD_DAYS: Record<PaymentFrequency, number> = {
+  MONTHLY: 365.25 / 12,
+  QUARTERLY: 365.25 / 4,
+  SEMI_ANNUAL: 365.25 / 2,
+  ANNUAL: 365.25,
+};
+
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 @Injectable()
@@ -55,6 +64,44 @@ export class CostTrackingService {
     }
 
     return Math.round(annual * 100) / 100;
+  }
+
+  /** Alle vier Periodenbetraege, abgeleitet aus dem Jahresbetrag (Befund 3/7). */
+  private derivePerFrequency(annualGross: number) {
+    return {
+      MONTHLY: Math.round((annualGross / 12) * 100) / 100,
+      QUARTERLY: Math.round((annualGross / 4) * 100) / 100,
+      SEMI_ANNUAL: Math.round((annualGross / 2) * 100) / 100,
+      ANNUAL: annualGross,
+    };
+  }
+
+  /**
+   * Bisher faellige Betraege bis `now`: je Eintrag anteilig (validFrom →
+   * min(validTo, now)) anhand der Periodenlaenge. Gemeinsame Logik von
+   * `getOverview` (Befund 3) und `getHouseholdSummary` (Befund 7).
+   */
+  private calculatePaidToDate(entries: { grossAmount: unknown; frequency: PaymentFrequency; validFrom: Date; validTo: Date | null }[], now: Date): number {
+    let paidToDate = 0;
+    for (const entry of entries) {
+      if (entry.validFrom > now) continue;
+      const from = entry.validFrom;
+      const to = entry.validTo && entry.validTo < now ? entry.validTo : now;
+      const days = Math.round((to.getTime() - from.getTime()) / MS_PER_DAY) + 1;
+      if (days <= 0) continue;
+      paidToDate += Number(entry.grossAmount) * (days / PERIOD_DAYS[entry.frequency]);
+    }
+    return Math.round(paidToDate * 100) / 100;
+  }
+
+  /** Aktiven (sonst letzten) Kosten-Eintrag ermitteln – gemeinsame Basis der Uebersichten. */
+  private selectActiveOrLatestEntry<T extends { validFrom: Date; validTo: Date | null }>(entries: T[], now: Date): T | null {
+    if (entries.length === 0) return null;
+    return (
+      entries
+        .filter((e) => e.validFrom <= now && (!e.validTo || e.validTo >= now))
+        .sort((a, b) => b.validFrom.getTime() - a.validFrom.getTime())[0] ?? null
+    );
   }
 
   async create(householdId: string, userId: string, policyId: string, dto: CreateCostEntryDto) {
@@ -218,6 +265,64 @@ export class CostTrackingService {
       this.logger.error(`remove cost entry ${entryId} failed: ${err.message}`, err.stack);
       throw err;
     });
+  }
+
+  /**
+   * BugFix-05 (Befund 3): Kostenuebersicht je Versicherung.
+   * - `annualGross`/`annualNet`: auf Basis des aktiven (sonst letzten) Eintrags
+   * - `perFrequency`: alle vier Periodenbetraege (MONTHLY/QUARTERLY/SEMI_ANNUAL/ANNUAL),
+   *   abgeleitet aus dem Jahresbetrag – die UI zeigt passend zur Frequenz-Einstellung
+   * - `paidToDate`: Summe der bereits faelligen Betraege bis heute, anteilig je
+   *   Eintrag (validFrom → min(validTo, heute)) anhand der Periodenlaenge
+   */
+  async getOverview(householdId: string, user: AuthenticatedUser, policyId: string) {
+    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
+
+    const entries = await this.db.policyCostEntry.findMany({
+      where: { policyId },
+      orderBy: { validFrom: 'asc' },
+    });
+
+    if (entries.length === 0) {
+      return null;
+    }
+
+    const now = new Date();
+    const active = this.selectActiveOrLatestEntry(entries, now);
+    const latestEntry = active ?? entries[entries.length - 1];
+
+    const annualGross = this.calculateAnnualGross({
+      grossAmount: Number(latestEntry.grossAmount),
+      frequency: latestEntry.frequency,
+      validFrom: latestEntry.validFrom,
+      validTo: latestEntry.validTo,
+    });
+
+    const annualNet = latestEntry.netAmount
+      ? this.calculateAnnualGross({
+          grossAmount: Number(latestEntry.netAmount),
+          frequency: latestEntry.frequency,
+          validFrom: latestEntry.validFrom,
+          validTo: latestEntry.validTo,
+        })
+      : null;
+
+    return {
+      policyId,
+      asOf: now.toISOString(),
+      annualGross,
+      annualNet,
+      perFrequency: this.derivePerFrequency(annualGross),
+      paidToDate: this.calculatePaidToDate(entries, now),
+      calculationBasis: {
+        entryId: latestEntry.id,
+        frequency: latestEntry.frequency,
+        grossAmount: Number(latestEntry.grossAmount),
+        validFrom: latestEntry.validFrom,
+        validTo: latestEntry.validTo,
+      },
+    };
   }
 
   async getAnnualCost(householdId: string, user: AuthenticatedUser, policyId: string) {
@@ -388,6 +493,18 @@ export class CostTrackingService {
       },
     });
 
+    // BugFix-05 (Befund 7): Je Versicherung einzeln (id, name, type, annualGross,
+    // perFrequency, paidToDate) – gleiche Berechnungslogik wie getOverview (Befund 3).
+    const policiesWithCosts: Array<{
+      id: string;
+      name: string;
+      type: string;
+      frequency: PaymentFrequency | null;
+      annualGross: number | null;
+      perFrequency: { MONTHLY: number; QUARTERLY: number; SEMI_ANNUAL: number; ANNUAL: number } | null;
+      paidToDate: number;
+    }> = [];
+
     let totalAnnualGross = 0;
     const perType: Record<string, number> = {};
 
@@ -397,11 +514,10 @@ export class CostTrackingService {
         perType[type] = 0;
       }
 
-      if (policy.costEntries.length > 0) {
-        const active = policy.costEntries.find(
-          (e) => !e.validTo || e.validTo >= now,
-        );
-        const latest = active ?? policy.costEntries[0];
+      const entryCount = policy.costEntries.length;
+
+      if (entryCount > 0) {
+        const latest = this.selectActiveOrLatestEntry(policy.costEntries, now) ?? policy.costEntries[0];
         const annual = this.calculateAnnualGross({
           grossAmount: Number(latest.grossAmount),
           frequency: latest.frequency,
@@ -410,6 +526,25 @@ export class CostTrackingService {
         });
         totalAnnualGross += annual;
         perType[type] += annual;
+        policiesWithCosts.push({
+          id: policy.id,
+          name: policy.insurerName,
+          type,
+          frequency: latest.frequency,
+          annualGross: Math.round(annual * 100) / 100,
+          perFrequency: this.derivePerFrequency(annual),
+          paidToDate: this.calculatePaidToDate(policy.costEntries, now),
+        });
+      } else {
+        policiesWithCosts.push({
+          id: policy.id,
+          name: policy.insurerName,
+          type,
+          frequency: null,
+          annualGross: null,
+          perFrequency: null,
+          paidToDate: 0,
+        });
       }
     }
 
@@ -422,6 +557,7 @@ export class CostTrackingService {
       totalAnnualGross,
       perType,
       policyCount: policies.length,
+      policies: policiesWithCosts,
     };
   }
 }

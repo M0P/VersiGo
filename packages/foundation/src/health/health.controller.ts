@@ -48,6 +48,22 @@ export class HealthController {
       this.workerHeartbeat.getStatus(),
     ]);
 
+    // BugFix-05: snapshot ist seit der Resolver-Umstellung asynchron
+    // (SettingsResolverService, UI > ENV > DEFAULT) und greift dabei auf die
+    // Datenbank zu. Fail-soft wie die uebrigen Checks: Faellt die DB aus,
+    // duerfen die Capabilities den Readiness-Request nicht zu HTTP 500 machen –
+    // /ready soll in dem Fall weiterhin mit status 'degraded' antworten (die
+    // DB ist ohnehin bereits als 'down' ausgewiesen) und ein leeres
+    // Capabilities-Objekt liefern statt zu werfen.
+    let capabilities: Record<string, boolean> = {};
+    try {
+      capabilities = await this.capabilities.snapshot();
+    } catch {
+      // DB-Ausfall: Capability-Flags nicht aufloesbar, leer melden.
+      // Der Gesamt-Status wird durch databaseHealthy unten bereits
+      // auf 'degraded' gesetzt.
+    }
+
     const allHealthy = databaseHealthy && redisHealthy;
 
     return {
@@ -55,7 +71,7 @@ export class HealthController {
       database: databaseHealthy ? 'up' : 'down',
       redis: redisHealthy ? 'up' : 'down',
       worker: workerStatus.worker,
-      capabilities: this.capabilities.snapshot(),
+      capabilities,
     };
   }
 }
