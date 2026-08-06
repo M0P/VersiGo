@@ -146,7 +146,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine annual costs in Household A abrufen (Isolation)', async () => {
+  it('User B kann keine schedule in Household A abrufen (Isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -155,7 +155,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     });
 
     await expect(
-      service.getAnnualCost(householdA, userBUser, policyInA),
+      service.getSchedule(householdA, userBUser, policyInA),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -169,7 +169,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keinen year comparison in Household A abrufen (Isolation)', async () => {
+  it('User B kann keine Policy-Eintraege in Household A lesen (Isolation, findAll)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -178,7 +178,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     });
 
     await expect(
-      service.getYearComparison(householdA, userBUser, policyInA, 2025),
+      service.findAll(householdA, userBUser, policyInA),
     ).rejects.toThrow(ForbiddenException);
   });
 });

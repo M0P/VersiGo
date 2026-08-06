@@ -1,67 +1,107 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Next Work Package: BugFix-06 (Release-Verifikation der Docker-Optimierungen BugFix-04 + BugFix-05)
+## Next work package: Package B — `prompts/BugFix-08-costs-overhaul-and-overview-page.md`
 
-**File:** `prompts/BugFix-06-release-verification-docker.md` (source of truth — implement ONLY this work package).
+The work package `prompts/BugFix-07-ui-fixes-and-branding.md` (Package A) is
+implemented, reviewed (3 review rounds, acceptance condition met: 0 Critical /
+0 High / 0 Medium / 1 Minor), and committed on branch
+`fix/BugFix-06-release-verification` (commit `8ae6f09`,
+see `docs/reviews/BugFix-07-review-1.md` … `review-3.md`).
 
----
+The Package B prompt file now exists (authored from the user's full original
+2026-08-06 request) and is the next work package. Implement **only** it.
 
-## Instructions for Next Agent
+## Ready-to-paste prompt for the new coding-agent session
 
-You are starting a **new coding-agent session**. Your task is to implement **only** the work package defined below. Follow the same review loop (invoke @code-reviewer, save each result verbatim under `docs/reviews/BugFix-06-review-<n>.md`, fix Critical/High/Medium findings, iterate until 0 Critical / 0 High / 0 Medium and at most 8 Minor findings, with the canonical Docker Compose test suite green). Clean up all Docker/Podman artifacts you create at the end of the work package (see AGENTS.md rules 9–11). Do **not** start any later work package, and do **not** touch BugFix-05 (Feature-Konfiguration UI, Portal-URL-Normalisierung, Kosten je Versicherung, Spinner, Signout, Tab-Reload, Family-Sharing) — that package is committed (findings 1–9) and out of scope here.
+> Implement **only** the work package `prompts/BugFix-08-costs-overhaul-and-overview-page.md`.
+> Its full content follows:
+>
+> ---
+>
+> # BugFix-08 – Costs overhaul + separate costs overview page (Package B, user Q4/Q5)
+>
+> Source: user batch (2026-08-06) – "improvements: the costs feature needs a general overhaul" (Q4) and "there should be a separate costs overview page" (Q5). Package B per `prompts/BugFix-07-ui-fixes-and-branding.md` ("Out of scope – separate work package for another agent").
+>
+> ## Context (what exists today)
+>
+> The current cost-tracking feature is considered **too complicated and not user-friendly** ("too many different views to configure it") and must be **completely rebuilt**:
+>
+> - API module `apps/api/src/features/cost-tracking/` (controller, service, DTOs, specs). Model `PolicyCostEntry` in `prisma/schema.prisma` (`policyId`, `validFrom`, `validTo?`, `grossAmount` DECIMAL, `netAmount?`, `frequency` `PaymentFrequency` MONTHLY/QUARTERLY/SEMI_ANNUAL/ANNUAL, `bookingSource?`, `note?`). `InsurancePolicy` additionally carries legacy fields `paymentFrequency`/`premiumAmount`.
+> - Existing endpoints: CRUD on `households/:householdId/policies/:policyId/costs` plus `overview`, `annual`, `compare?year=`, `paid-history` and a household `summary` endpoint.
+> - UI: a separate per-policy costs page `apps/web/src/app/policies/[id]/costs/page.tsx` (annual overview, entries table, paid history, new-entry form) and a household summary page `apps/web/src/app/household/costs/page.tsx`. Both must be reworked/consolidated by this package.
+>
+> ## Scope (Package B only)
+>
+> ### 1. Costs data model & API rebuild (Q4)
+> - Each insurance must support **adding costs** (already the case at the data level; keep/extend `PolicyCostEntry`).
+> - **Cost periods:** define costs per **month, quarter, year** (`MONTHLY`, `QUARTERLY`, `ANNUAL`). The existing `SEMI_ANNUAL` value must be handled (keep for existing data or migrate cleanly in a schema migration — decide and document; a data-lossless path is required).
+> - **Cost increases from a start date:** "es muss möglich sein, die Kosten ab einem bestimmten Zeitpunkt zu erhöhen" — model this as the entry's `validFrom` (and `validTo` on the superseded entry). At any point in time exactly **one entry applies** for a policy (the one with the greatest `validFrom` ≤ period start). An increase = adding a new entry with a later `validFrom`; the previous entry is automatically ended. This must be reflected in all calculations.
+> - **Table view of incurred and expected costs:** a period-based table (one row per period: period start/end, amount, incurred/expected). Past periods = incurred, future periods = expected (projected from the currently valid entry).
+> - **Paid-to-date sum:** "wie viel wurde für die Versicherung bis heute gezahlt; die Berechnung ist eine Summe der vergangenen Perioden, kein Tageswert" — the sum over **past periods** (each completed period contributes its full period amount). **No daily/daily-prorated values.**
+> - **Historic entries must be editable:** PATCH + DELETE for any entry, including past ones (existing API support must be preserved in the rebuild).
+> - Money handling: keep DECIMAL storage, round displayed/calculated amounts to 2 decimals, never use floats for sums. German API messages (existing convention). Household isolation + role guards (READ_ONLY read-only, USER/ADMIN write) must be preserved, as must the BugFix-06 (Teil 3) semantics: calculation by billing period, not daily-prorated.
+> - Decide which of the existing endpoints (`overview`, `annual`, `compare`, `paid-history`) survive the rebuild; the UI must not call dead endpoints. Update/extend the service specs accordingly (paid-to-date = sum of past periods and increase-from-date must be explicitly covered by tests, incl. a frequency-change and an increase-mid-year case).
+>
+> ### 2. Costs in the insurance detail view (Q4)
+> - Costs must be addable **directly in the insurance detail view** (`apps/web/src/app/policies/[id]/page.tsx` or a clearly reachable section/tab from it).
+> - The section shows: the period-based incurred/expected table, the paid-to-date sum ("bisher gezahlt"), and add/edit/delete controls (incl. editing historic entries). The current separate per-policy costs page (`policies/[id]/costs/page.tsx`) is folded into the detail view — no duplicate configuration views remain.
+> - UX requirements from the user: simple, one clear place per insurance; each insurance has the possibility to add costs; no hidden multi-view setup flow.
+>
+> ### 3. Separate costs overview page (Q5)
+> - A dedicated overview page (rework of `apps/web/src/app/household/costs/page.tsx`), reachable from the navigation.
+> - **Lowest level is the insurance + its total costs so far** (paid-to-date). The goal: "wie viel hat der Nutzer ausgegeben" — per insurance and **per month and per year for all insurances** (total spend, e.g. €/month and €/year across the household).
+> - **Historic graph:** a chart of the costs per year (e.g. per-year bars/line over the last years) — "vielleicht einen historischen Graphen, der die Kosten pro Jahr zeigt". Keep it dependency-light (an existing chart/design-system pattern is preferred; no heavy new chart library without justification).
+> - Aggregation must use the same "sum of past periods" semantics as the per-policy paid-to-date (no daily proration).
+>
+> ### 4. Conventions
+> - de/en i18n parity for every new/changed UI string (`apps/web/src/i18n/locales/de.ts` + `en.ts`), i18n guard must stay green (no hardcoded German in TSX).
+> - German API error messages; English code identifiers; follow existing patterns (cards/badges/tables, `PageHeader`, `Alert`, `FormField`).
+> - Migration via the Compose `migration` service (canonical path, BugFix-07): any schema change must be a new Prisma migration folder in `prisma/migrations/` and work on a fresh clone.
+> - No further Docker image size work is required in this package (done in BugFix-07: api ~371 MB / worker ~365 MB / web ~207 MB) — the build must simply keep working and not regress sizes.
+>
+> ## Out of scope
+> - Everything already delivered in BugFix-07 (Package A): admin settings single page, OIDC readiness + self-service account linking, Paperless document linking, portal URL https normalization, branding/favicon, Docker image size reduction.
+> - Any other feature not listed above.
+>
+> ## Acceptance
+> - All gates green: `docker compose -f docker-compose.test.yml` unit/integration (vitest), tsc, eslint, i18n guard, `docker compose config`, and `./scripts/compose-smoke-test.sh --build --clean` (fresh-clone contract: `docker compose up --build` works, migrations run via the migration service; rebuild the migration image with `docker compose build migration` after adding a migration — the smoke script does not build it).
+> - Review loop (code-reviewer subagent via Task tool): write each review verbatim to `docs/reviews/BugFix-08-review-<n>.md`; fix every Critical/High/Medium (and Minor where reasonable) until **0 Critical / 0 High / 0 Medium / ≤ 8 Minor**, max 5 rounds; then commit (message starting `BugFix-08:`), write a new `docs/reviews/NEXT-CODING-AGENT-PROMPT.md` handoff, and clean up all podman artifacts per AGENTS.md.
+> - The costs rebuild must demonstrably remove the "too many views" complexity: one place to manage costs per insurance (detail view) + one household overview page.
+>
+> ---
+>
+> Use the **same review loop** as the BugFix-07 session: implement, run the
+> gates via Docker Compose, invoke the `code-reviewer` subagent (Task tool) on
+> the uncommitted diff, write its report verbatim to
+> `docs/reviews/BugFix-08-review-<n>.md`, fix every Critical/High/Medium (and
+> Minor where reasonable), re-review until 0 Critical / 0 High / 0 Medium /
+> ≤8 Minor (max 5 rounds), then commit (message starting `BugFix-08:`) and
+> write a new handoff.
+>
+> Do **not** start any later work package after that handoff.
+> Obey AGENTS.md: clean up every podman/Docker artifact you create before the
+> commit and verify `df -h /var/home` afterwards.
 
----
+## Environment reminders for the next session (Podman host)
 
-# BugFix-06: Release-Verifikation der Docker-Optimierungen (BugFix-04 + BugFix-05)
+- `docker` is a Podman shim → podman-compose 1.6.0. Reuse stale containers
+  after rebuilds: always `docker compose -f docker-compose.test.yml down -v`
+  (or `down`) before `up`; the smoke script supports `--clean`.
+- Node/pnpm are NOT on the host PATH; run gates via
+  `podman run --rm -v <repo>:/work -w /work node:24-alpine` with direct
+  binary paths (e.g. `node /work/apps/api/node_modules/vitest/vitest.mjs run`).
+- The migration service image is NOT rebuilt by the smoke script
+  (`$COMPOSE build api web worker` only): after adding a migration, rebuild it
+  manually (`docker compose build migration`) before `--clean` smoke runs.
+- Known environmental quirk (NOT a regression): the smoke step-11 auth
+  fail-fast test hangs if a dev DB volume carries persisted restart settings
+  (`preloadRestartSettingsIntoEnv` overwrites process.env); fresh clones /
+  `--clean` are unaffected.
 
-## Kontext
+## Verification state of the BugFix-07 commit (8ae6f09)
 
-BugFix-04 (Commit `09e680b`) hat die Docker-Images verkleinert (API 839→493 MB, Worker 828→488 MB, Web 241→206 MB) und BugFix-05 (Commit `e1ca357`) hat den Docker-Produktions-Build von api/worker repariert (parallele Store-Cache-Race in der CI + selbstenthaeltender Build durch Mitkopieren der Paket-`node_modules`).
-
-Vor dem nächsten Feature-Arbeitsschritt muss **von einem frischen Clone** bewiesen werden, dass die gesamte Docker-Lieferkette funktioniert (AGENTS.md „Required Future-Feature Contract": *Every feature must leave `docker compose up --build` working from a fresh clone*). Dieses Paket ist eine reine **Verifikations- und Dokumentationsaufgabe** – es enthält keine neuen Features. Die offenen BugFix-05-Befunde 1–8 (Feature-Verwaltung, Portal-URL-Normalisierung, Kosten je Versicherung, Spinner, Signout, Tab-Reload, Family-Sharing) sind **nicht** Teil dieses Pakets und werden separat bearbeitet.
-
-## Umfang (Checkliste)
-
-1. **Fresh-Clone-Compose:** In einem frischen Arbeitsverzeichnis (git clone bzw. `git clean -fdx`-äquivalenter Zustand, kein `node_modules`, keine alten Volumes):
-   - `cp .env.example .env` (mit gültigen Platzhalterwerten für lokale Entwicklung)
-   - `docker compose down -v` (Altlasten entfernen)
-   - `docker compose up --build` → alle Services starten: db, redis, migration (one-shot, läuft durch), api, worker, web.
-   - Healthchecks werden `healthy`: api `/health` 200 (Port 3001), web 2xx/3xx (Port 3000), worker Liveness (3100, nur im Container).
-   - Login mit dem initialen lokalen Administrator funktioniert.
-2. **Compose-Smoke-Test:** `./scripts/compose-smoke-test.sh --build` läuft komplett durch (alle 12 Schritte, inkl. Produktions-Erfolgspfad).
-3. **CI-Build-Szenario (BugFix-05-Regression):** `docker compose build api web worker` läuft fehlerfrei – zusätzlich einmal **kalt** (`--no-cache`) für api/worker, um die Store-Race-Variante (TS2307 in `@versigo/foundation:build`) auszuschließen.
-4. **Image-Größen (Zielwerte aus BugFix-04):** `api ≤ 520 MB`, `worker ≤ 520 MB`, `web ≤ 230 MB` (`podman image ls` / `docker image ls`; geprüft nach `docker compose build`).
-5. **Voller Test-Gate:** `docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test` → grün (Lint, Typecheck, Unit/Integration, i18n-Guard, Turbo 5/5).
-6. **Dokumentation:** `docs/docker-image-guide.md` spiegelt den Ist-Stand (Befehle, Ports, Image-Größen, Hinweis auf den Cache-Store je Service). Bei Abweichungen dokumentieren/korrigieren.
-7. **Keine offenen Docker-Bauchschmerzen:** `.dockerignore` deckt `node_modules/`, `.env*`, `.git` ab; keine `.env`-Datei im Image (Prüfung: `podman run --rm --entrypoint sh <image> -c 'ls -la /app | grep -c .env'` liefert 0 Treffer).
-
-## Akzeptanzkriterien
-
-- `docker compose up --build` startet den kompletten Stack aus einem frischen Clone fehlerfrei (alle Services `healthy`, Web http://localhost:3000, API http://localhost:3001).
-- `scripts/compose-smoke-test.sh --build` grün (12/12).
-- `docker compose build api web worker` sowie die Kalt-Builds (`--no-cache`) für api/worker grün ohne TS2307.
-- Image-Größen: api ≤ 520 MB, worker ≤ 520 MB, web ≤ 230 MB.
-- Volles Test-Gate grün (Lint, Typecheck, Tests, i18n).
-- Keine unverschmutzten Images: keine `.env`-Dateien, keine Host-`node_modules` im Kontext.
-- Review-Loop: 0 Critical / 0 High / 0 Medium, ≤ 8 Minor; alle Pflicht-Checks grün oder Abweichung dokumentiert.
-
-## Nächste Schritte
-
-1. Fresh-Clone-Szenario lokal durchspielen (siehe Umfang 1–4), Befunde protokollieren.
-2. `scripts/compose-smoke-test.sh --build` ausführen.
-3. Volles Test-Gate ausführen.
-4. Bei Fehlern: Root Cause analysieren und beheben **innerhalb** dieses Pakets (nur Docker/Verifikation betreffend).
-5. `docs/docker-image-guide.md` auf Ist-Stand bringen.
-6. Review-Loop wie gehabt (@code-reviewer, Ergebnis verbatim nach `docs/reviews/BugFix-06-review-<n>.md`).
-7. Am Ende: alle Podman/Docker-Artefakte aufräumen (AGENTS.md Regeln 9–11), Commit `BugFix-06: ...`.
-
-## Referenzen
-
-- AGENTS.md (Docker Compose primary, Required Future-Feature Contract, Podman-Hinweise 1–11)
-- `docs/docker-image-guide.md` (Liefer-/Deploy-Dokumentation)
-- `scripts/compose-smoke-test.sh` (Smoke-Gate inkl. `--build`)
-- `Dockerfile`, `Dockerfile.test`, `apps/{api,web,worker}/Dockerfile` (BugFix-04/05-Änderungen)
-- `docker-compose.yml`, `docker-compose.test.yml`, `docker-compose.override.yml`
-- `.dockerignore`
-- `.github/workflows/ci.yml` (`compose-smoke`-Job: `docker compose build api web worker`)
-- BugFix-04 (Commit `09e680b`), BugFix-05 (Commit `e1ca357`) inkl. `docs/reviews/BugFix-04-review-*.md`, `docs/reviews/BugFix-05-review-*.md`
+- vitest 813/813 (75 files; web 47/47), tsc API+web, eslint API+web, i18n
+  guard, `docker compose config` — green.
+- `./scripts/compose-smoke-test.sh --clean`: ALL PASSED, 15 migrations applied
+  on a fresh Postgres incl. `20260806140000_bugfix07_paperless_link_dedupe`.
+- Review loop: 3 rounds, acceptance met (`docs/reviews/BugFix-07-review-1.md` … `review-3.md`).

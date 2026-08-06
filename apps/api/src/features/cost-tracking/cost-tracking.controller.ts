@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   UseGuards,
 } from '@nestjs/common';
 import { GlobalRole } from '@prisma/client';
@@ -17,6 +16,17 @@ import { Roles } from '../identity/roles.decorator';
 import { CreateCostEntryDto, UpdateCostEntryDto } from './dto/cost-tracking.dto';
 import type { AuthenticatedUser } from '../identity/auth.service';
 
+/**
+ * BugFix-08 (Q4/Q5): Kosten-API nach dem Overhaul.
+ *
+ * Ueberlebende Endpunkte (die UI ruft ausschliesslich diese auf):
+ * - POST/GET (Liste) + GET/PATCH/DELETE :entryId  -> vollstaendige CRUD
+ *   inkl. Bearbeitung historischer Eintraege.
+ * - GET schedule -> periodenbasierte Tabelle (incurred/expected) mit
+ *   paidToDate und aktuellem Eintrag (ersetzt overview/annual/compare/
+ *   paid-history).
+ * - GET households/:householdId/costs/summary -> Haushaltsuebersicht (Q5).
+ */
 @Controller('households/:householdId/policies/:policyId/costs')
 @UseGuards(HouseholdMembershipGuard)
 export class CostTrackingController {
@@ -43,49 +53,17 @@ export class CostTrackingController {
     return this.service.findAll(householdId, user, policyId);
   }
 
-  // BugFix-05 (Befund 3): Kostenuebersicht mit paidToDate + perFrequency.
-  @Get('overview')
+  // BugFix-08: Periodenbasierte Kosten-Tabelle (incurred/expected) mit
+  // paidToDate. Achtung: VOR der :entryId-Route, damit 'schedule' nicht als
+  // entryId interpretiert wird.
+  @Get('schedule')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
-  async getOverview(
+  async getSchedule(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.getOverview(householdId, user, policyId);
-  }
-
-  @Get('annual')
-  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
-  async getAnnualCost(
-    @Param('householdId') householdId: string,
-    @Param('policyId') policyId: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.service.getAnnualCost(householdId, user, policyId);
-  }
-
-  @Get('compare')
-  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
-  async getYearComparison(
-    @Param('householdId') householdId: string,
-    @Param('policyId') policyId: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('year') year: string,
-  ) {
-    return this.service.getYearComparison(householdId, user, policyId, Number(year));
-  }
-
-  // BugFix-06 (Teil 3): Gezahlte Kosten je Abrechnungsperiode, von
-  // Versicherungsbeginn bis heute (Achtung: VOR der :entryId-Route, damit
-  // 'paid-history' nicht als entryId interpretiert wird).
-  @Get('paid-history')
-  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
-  async getPaidHistory(
-    @Param('householdId') householdId: string,
-    @Param('policyId') policyId: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.service.getPaidHistory(householdId, user, policyId);
+    return this.service.getSchedule(householdId, user, policyId);
   }
 
   @Get(':entryId')

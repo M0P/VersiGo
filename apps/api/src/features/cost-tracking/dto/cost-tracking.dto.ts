@@ -1,6 +1,18 @@
-import { IsString, IsEnum, IsOptional, IsDateString, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsDateString, IsNumber, Min, IsIn } from 'class-validator';
 import { PaymentFrequency } from '@prisma/client';
 import { Type } from 'class-transformer';
+
+/**
+ * BugFix-08 (Q4): Fuer NEUE Kosten-Eintraege zulaessige Frequenzen.
+ * SEMI_ANNUAL bleibt als Legacy-Wert fuer Bestandsdaten im Enum erhalten
+ * (verlustfreie Entscheidung, keine Migration) und wird weiterhin korrekt
+ * berechnet, kann aber nicht mehr neu angelegt werden.
+ */
+export const COST_FREQUENCIES: PaymentFrequency[] = [
+  PaymentFrequency.MONTHLY,
+  PaymentFrequency.QUARTERLY,
+  PaymentFrequency.ANNUAL,
+];
 
 export class CreateCostEntryDto {
   @IsDateString()
@@ -21,7 +33,7 @@ export class CreateCostEntryDto {
   @Type(() => Number)
   netAmount?: number;
 
-  @IsEnum(PaymentFrequency)
+  @IsIn(COST_FREQUENCIES, { message: 'Frequenz muss MONTHLY, QUARTERLY oder ANNUAL sein' })
   frequency!: PaymentFrequency;
 
   @IsOptional()
@@ -55,7 +67,7 @@ export class UpdateCostEntryDto {
   netAmount?: number;
 
   @IsOptional()
-  @IsEnum(PaymentFrequency)
+  @IsIn(COST_FREQUENCIES, { message: 'Frequenz muss MONTHLY, QUARTERLY oder ANNUAL sein' })
   frequency?: PaymentFrequency;
 
   @IsOptional()
