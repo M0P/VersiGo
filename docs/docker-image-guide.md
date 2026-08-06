@@ -1,77 +1,74 @@
 # Docker Image Guide – Build, Tag, Push, Deploy, Upgrade, Rollback, Restore
 
-**Version:** 1.0.0-beta (AP-20)  
-**Datum:** 2026-08-03  
-**Gilt für:** `versigo-api`, `versigo-worker`, `versigo-web` (sowie `versigo-test` für CI)
+**Version:** 1.1.0 (BugFix-04/06)  
+**Date:** 2026-08-05  
+**Applies to:** `versigo-api`, `versigo-worker`, `versigo-web` (and `versigo-test` for CI)
 
 ---
 
-## 1. Überblick
+## 1. Overview
 
-VersiGo wird als **drei Laufzeit-Images** gebaut, die ausschließlich
-**Produktions-Dependencies** enthalten (AP-20):
+VersiGo is built as **three runtime images** that contain **production
+dependencies only** (AP-20, BugFix-04):
 
-| Image | Dockerfile | Basis | Inhalt | Größe (AP-20) |
-|-------|------------|-------|--------|---------------|
-| `versigo-api` | `apps/api/Dockerfile` | `node:24-alpine` | NestJS-Build (`dist`), Prisma (Schema, Migrations, CLI, Client), `postgresql16-client`, `docker/start.sh` | **~839 MB** |
-| `versigo-worker` | `apps/worker/Dockerfile` | `node:24-alpine` | BullMQ-Worker-Build (`dist`), Prisma (CLI, Client), `postgresql16-client`, `docker/start.sh` | **~828 MB** |
-| `versigo-web` | `apps/web/Dockerfile` | `node:24-alpine` | Next.js `output: "standalone"` (nur gerenderter App-Code + Tracing-Deps) | **~240 MB** |
+| Image | Dockerfile | Base | Contents | Size (BugFix-04) |
+|-------|------------|-------|----------|-------------------|
+| `versigo-api` | `apps/api/Dockerfile` | `node:24-alpine` | NestJS build (`dist`), Prisma (schema, migrations, CLI, client), `postgresql16-client`, `docker/start.sh` | **~493 MB** |
+| `versigo-worker` | `apps/worker/Dockerfile` | `node:24-alpine` | BullMQ worker build (`dist`), Prisma (CLI, client), `postgresql16-client`, `docker/start.sh` | **~487 MB** |
+| `versigo-web` | `apps/web/Dockerfile` | `node:24-alpine` | Next.js `output: "standalone"` (only rendered app code + tracing deps) | **~207 MB** |
 
-**Vorher/Nachher (AP-20):**
+**Before/After (AP-20 → BugFix-04):**
 
-| Image | Vor AP-20 | Nach AP-20 | Reduktion |
-|-------|-----------|------------|-----------|
-| `versigo-api` | 1.12 GB (inkl. Dev-Tools) | ~839 MB | ~25 % |
-| `versigo-worker` | 1.12 GB (inkl. Dev-Tools) | ~828 MB | ~26 % |
-| `versigo-web` | 240 MB | 240 MB | – |
+| Image | Before AP-20 | After AP-20 | After BugFix-04 |
+|-------|--------------|-------------|-----------------|
+| `versigo-api` | 1.12 GB (incl. dev tools) | ~839 MB | **~493 MB** |
+| `versigo-worker` | 1.12 GB (incl. dev tools) | ~828 MB | **~487 MB** |
+| `versigo-web` | 240 MB | 240 MB | **~207 MB** |
 
-### Warum so schlank?
+### Why so slim?
 
-- Die Runner-Stage kopiert **nur** die Produktions-Dependencies. Dafür wird
-  `pnpm deploy --filter @versigo/<app> --prod --legacy` verwendet (erzeugt ein
-  eigenständiges Verzeichnis mit Laufzeit-Deps inkl. gepacktem
-  `@versigo/foundation`).
-- Kein TypeScript, kein ESLint, kein Vitest, kein `@nestjs/cli`, kein
-  Quellcode im Runtime-Image.
-- `prisma` + `typescript` (peer-Dependency von `prisma`) und `@prisma/client`
-  sind **bewusste Laufzeit-Abhängigkeiten**: `docker/start.sh` führt
-  `npx prisma migrate deploy` aus, und die Anwendung benötigt den generierten
-  Prisma-Client.
-- Der Prisma-Client wird **beim Image-Build** generiert
-  (`prisma generate --schema=/app/prisma/schema.prisma`), damit das Image
-  den vollständigen Client mit Query-Engine enthält.
-- Hinweis: `pnpm install --prod` verlinkt in pnpm 11.17.0 keine
-  Top-Level-Pakete (Regression) – deshalb `pnpm deploy` (siehe Kommentar in
-  den Dockerfiles).
-- **Laufzeit-Netzwerkzugriffe (AP-20 P1):** Die Produktions-Images benötigen
-  zur Laufzeit **keine unkontrollierten Netzwerkzugriffe**. API/Worker
-  sprechen ausschließlich DB, Redis und – nur falls konfiguriert – die
-  optionalen externen Integrationen an. Buildzeit-Abhängigkeiten sind über
-  den pnpm-Lockfile (frozen lockfile) reproduzierbar festgelegt; die
-  Prisma-Engines werden **während des Builds** heruntergeladen, nicht zur
-  Laufzeit.
+- The runner stage copies **only** the production dependencies. This uses
+  `pnpm deploy --filter @versigo/<app> --prod --legacy` (creates a standalone
+  directory with runtime deps including the packed `@versigo/foundation`).
+- No TypeScript, no ESLint, no Vitest, no `@nestjs/cli`, no source code in the
+  runtime image.
+- `prisma` + `typescript` (peer dependency of `prisma`) and `@prisma/client`
+  are **deliberate runtime dependencies**: `docker/start.sh` runs
+  `npx prisma migrate deploy`, and the app needs the generated Prisma client.
+- The Prisma client is generated **at image build time**
+  (`prisma generate --schema=/app/prisma/schema.prisma`) so the image contains
+  the full client with the query engine.
+- Note: `pnpm install --prod` does not link top-level packages in pnpm
+  11.17.0 (regression) – therefore `pnpm deploy` is used (see comment in the
+  Dockerfiles).
+- **Runtime network access (AP-20 P1):** The production images need **no
+  uncontrolled network access** at runtime. API/worker only talk to DB,
+  Redis and – only if configured – the optional external integrations.
+  Build-time dependencies are pinned reproducibly via the pnpm lockfile
+  (frozen lockfile); the Prisma engines are downloaded **during the build**,
+  not at runtime.
 
 ---
 
-## 2. Voraussetzungen
+## 2. Prerequisites
 
-- Docker Engine 24+ **oder** Podman 5+ mit docker-compose-kompatiblem Wrapper
-- 4 GB+ RAM, 10 GB+ freier Speicher (Build-Phase benötigt pnpm-Store)
-- `.env` aus `.env.example` kopiert
+- Docker Engine 24+ **or** Podman 5+ with a docker-compose-compatible wrapper
+- 4 GB+ RAM, 10 GB+ free disk space (the build phase needs the pnpm store)
+- `.env` copied from `.env.example`
 
 ---
 
 ## 3. Build
 
-### 3.1 Über Docker Compose (empfohlen)
+### 3.1 Via Docker Compose (recommended)
 
 ```bash
 docker compose build api worker web
-# oder alle Dienste inkl. Start:
+# or build and start all services:
 docker compose up --build -d
 ```
 
-### 3.2 Manuell mit Podman/Docker
+### 3.2 Manually with Podman/Docker
 
 ```bash
 podman build -f apps/api/Dockerfile    -t versigo-api:latest    .
@@ -79,47 +76,48 @@ podman build -f apps/worker/Dockerfile -t versigo-worker:latest .
 podman build -f apps/web/Dockerfile    -t versigo-web:latest    .
 ```
 
-> **Podman-Hinweis:** `docker compose up --build` **allein** reicht auf Maschinen
-> mit podman-compose nicht aus – bereits existierende Container bleiben an der
-> **alten Image-ID** hängen. Vor dem Neustart:
-> `docker compose down` (bzw. `docker compose down -v`), danach `up --build`.
+> **Podman note:** `docker compose up --build` **alone** is not enough on
+> machines with podman-compose – existing containers stay pinned to the
+> **old image ID**. Before a restart:
+> `docker compose down` (or `docker compose down -v`), then `up --build`.
 
-### 3.3 Build-Dauer
+### 3.3 Build duration
 
-- Clean Build (ohne Cache): ~8–10 Min für alle drei Images (gemessen AP-20).
-- Inkrementelle Builds mit pnpm-Store-Cache (`--mount=type=cache`) sind deutlich schneller.
+- Clean build (no cache): ~8–10 min for all three images (measured AP-20).
+- Incremental builds with the pnpm store cache (`--mount=type=cache`) are
+  significantly faster.
 
-### 3.4 Unterstützte Architekturen & Multi-Platform-Build (Buildx)
+### 3.4 Supported architectures & multi-platform build (Buildx)
 
-- **Primär unterstützt und getestet:** `linux/amd64` (AP-20 gemessen, CI,
-  Compose-Smoke).
-- Die Basis-Images (`node:24-alpine`) sind als Multi-Arch-Manifeste
-  (`linux/amd64`, `linux/arm64`) verfügbar; die Dockerfiles enthalten keine
-  plattformspezifischen Befehle. Ein `arm64`-Image ist damit prinzipiell
-  baubar, wurde in AP-20 aber **nicht** verifiziert.
-- **Optionaler Multi-Platform-Build mit Docker Buildx** (kein Pflichtpfad,
-  kein CI-Job):
+- **Primarily supported and tested:** `linux/amd64` (measured AP-20, CI,
+  Compose smoke).
+- The base images (`node:24-alpine`) are available as multi-arch manifests
+  (`linux/amd64`, `linux/arm64`); the Dockerfiles contain no
+  platform-specific commands. An `arm64` image is therefore buildable in
+  principle, but was **not** verified in AP-20.
+- **Optional multi-platform build with Docker Buildx** (not a required path,
+  no CI job):
 
   ```bash
-  docker buildx create --use          # einmalig
+  docker buildx create --use          # once
   docker buildx build --platform linux/amd64,linux/arm64 \
     -f apps/api/Dockerfile -t versigo-api:latest . \
-    --push                            # Push in eine Registry (OCI-kompatibel)
-  # analog worker + web
+    --push                            # push to a registry (OCI compatible)
+  # analogous for worker + web
   ```
 
-  Ohne `--push` verbleibt das Ergebnis im Buildx-Cache und ist nur mit
-  `docker buildx` (nicht mit klassischem `docker run`) direkt verwendbar.
+  Without `--push` the result stays in the Buildx cache and can only be used
+  directly with `docker buildx` (not with classic `docker run`).
 
 ---
 
 ## 4. Tag & Push
 
-Konvention: `<registry>/versigo-<dienst>:<tag>`, wobei `<tag>` entweder
-`latest` (Entwicklung) oder ein Versions-Tag wie `v1.0.0-beta` ist.
+Convention: `<registry>/versigo-<service>:<tag>`, where `<tag>` is either
+`latest` (development) or a version tag such as `v1.0.0-beta`.
 
 ```bash
-REGISTRY=ghcr.io/mein-user   # oder eigene Container-Registry
+REGISTRY=ghcr.io/mein-user   # or your own container registry
 TAG=v1.0.0-beta
 
 podman tag versigo-api:latest    "$REGISTRY/versigo-api:$TAG"
@@ -131,76 +129,76 @@ podman push "$REGISTRY/versigo-worker:$TAG"
 podman push "$REGISTRY/versigo-web:$TAG"
 ```
 
-Zusätzlich die `latest`-Tags pushen, wenn die Betriebsumgebung ohne
-Versions-Tag zieht:
+Also push the `latest` tags if the operating environment pulls without a
+version tag:
 
 ```bash
 podman tag versigo-api:latest "$REGISTRY/versigo-api:latest"
 podman push "$REGISTRY/versigo-api:latest"
-# analog worker + web
+# analogous for worker + web
 ```
 
-> Die CI (`.github/workflows/ci.yml`) führt den Build-Metrik-Job **nicht
-> blockierend** aus; ein optionaler Publish-Workflow kann die Tags
-> automatisiert bauen und pushen (siehe `docs/`).
+> The CI (`.github/workflows/ci.yml`) does **not** run the build-metrics job
+> blockingly; an optional publish workflow can build and push the tags
+> automatically (see `docs/`).
 
 ---
 
-## 5. Deploy (Frische Installation)
+## 5. Deploy (Fresh installation)
 
 ```bash
 git clone <repo> versigo && cd versigo
 cp .env.example .env
-# .env anpassen (zwingend):
-#   1. NODE_ENV=production        <- zentral, siehe Hinweis unten
+# adjust .env (mandatory):
+#   1. NODE_ENV=production        <- central, see note below
 #   2. DATABASE_URL, REDIS_URL, SESSION_SECRET, SETTINGS_ENCRYPTION_KEY
-#   3. Auth-Konfiguration (LOCAL_AUTH_ENABLED / OIDC_ENABLED)
+#   3. Auth configuration (LOCAL_AUTH_ENABLED / OIDC_ENABLED)
 docker compose up --build -d
 ```
 
-> **Wichtig (AP-20, `NODE_ENV=production`):** `.env.example` setzt
-> `NODE_ENV=development` (lokaler Entwicklungsmodus). Für den
-> Beta-/Produktionsbetrieb muss **explizit `NODE_ENV=production`** in der
-> `.env` gesetzt werden – erst dann gelten die Sicherheitsgarantien: kein
-> automatisch angelegter Default-Admin, Ablehnung des
-> `.env.example`-Platzhalter-Passworts, Session-Cookie mit `Secure`-Flag und
-> Auth-Fail-Fast beim Start. Der Compose-Smoke-Test verifiziert diesen
-> Produktionspfad (Schritt 12).
+> **Important (AP-20, `NODE_ENV=production`):** `.env.example` sets
+> `NODE_ENV=development` (local development mode). For
+> beta/production operation **`NODE_ENV=production` must be set explicitly**
+> in the `.env` – only then do the security guarantees apply: no
+> automatically created default admin, rejection of the
+> `.env.example` placeholder password, session cookie with the `Secure` flag
+> and auth fail-fast at startup. The Compose smoke test verifies this
+> production path (step 12).
 >
-> `COOKIE_SECURE` (Secure-Flag des Session-Cookies) ist standardmäßig
-> `true` in Produktion. Nur Deployments, die die API kontrolliert über
-> reines HTTP bedienen (TLS-terminierender Reverse-Proxy oder
-> kontrollierte interne Installation ohne TLS), setzen `COOKIE_SECURE=false`
-> explizit – in allen anderen Fällen ungesetzt lassen.
+> `COOKIE_SECURE` (secure flag of the session cookie) defaults to
+> `true` in production. Only deployments that serve the API deliberately
+> over plain HTTP (TLS-terminating reverse proxy or
+> a controlled internal installation without TLS) set `COOKIE_SECURE=false`
+> explicitly – in all other cases leave it unset.
 >
-> Der initiale Administrator wird **niemals automatisch** angelegt. Für den
-> ersten Start muss `LOCAL_AUTH_ENABLED=true` sowie ein eigenes, starkes
-> `LOCAL_ADMIN_PASSWORD` (nicht der `.env.example`-Platzhalter, der in
-> Produktion abgelehnt wird) gesetzt sein. Die API legt dann genau einmal
-> den Admin plus das Referenz-Household `default` an; danach können weitere
-> Konten über `/admin/users` freigeschaltet werden.
+> The initial administrator is **never created automatically**. For the
+> first start, `LOCAL_AUTH_ENABLED=true` and your own strong
+> `LOCAL_ADMIN_PASSWORD` (not the `.env.example` placeholder, which is
+> rejected in production) must be set. The API then creates the admin plus
+> the reference household `default` exactly once; afterwards further
+> accounts can be enabled via `/admin/users`.
 >
-> **Reiner OIDC-Betrieb:** OIDC provisioniert keine Konten und
-> `LOCAL_ADMIN_*` ist wirkungslos, solange `LOCAL_AUTH_ENABLED=false`
-> (bzw. in Produktion nicht gesetzt) ist. Für den ersten Start muss
-> deshalb zusätzlich `LOCAL_AUTH_ENABLED=true` mit eigenem, starkem
-> `LOCAL_ADMIN_PASSWORD` gesetzt werden, damit der initiale Admin und das
-> Household `default` angelegt werden. Erst danach kann die lokale
-> Authentifizierung wieder deaktiviert werden.
+> **Pure OIDC operation:** OIDC does not provision accounts and
+> `LOCAL_ADMIN_*` has no effect while `LOCAL_AUTH_ENABLED=false`
+> (or unset in production). For the first start you must therefore
+> additionally set `LOCAL_AUTH_ENABLED=true` with your own strong
+> `LOCAL_ADMIN_PASSWORD` so that the initial admin and the
+> household `default` are created. Only afterwards can local
+> authentication be disabled again.
 
-Beim ersten Start:
-1. `db` → Migrationen über den Einmal-Dienst `migration` (`npx prisma migrate deploy`)
-2. `api` → `docker/start.sh` wartet auf die DB, führt Migrationen erneut (idempotent) und startet
-3. `worker` → startet nach DB/Redis
-4. `web` → startet nach API-Health
+On first start:
+1. `db` → migrations via the one-shot service `migration` (`npx prisma migrate deploy`)
+2. `api` → `docker/start.sh` waits for the DB, runs migrations again (idempotent) and starts
+3. `worker` → starts after DB/Redis
+4. `web` → starts after the API health check
 
-Verifikation:
+Verification:
 
 ```bash
 docker compose ps
 curl http://localhost:3001/health   # {"status":"ok"}
 curl http://localhost:3000/         # HTTP 200
-./scripts/compose-smoke-test.sh     # vollständiger Smoke-Test
+./scripts/compose-smoke-test.sh     # complete smoke test
 ```
 
 ---
@@ -208,60 +206,59 @@ curl http://localhost:3000/         # HTTP 200
 ## 6. Upgrade
 
 ```bash
-git pull                        # neuen Code holen
-docker compose down             # Container stoppen (Daten bleiben in Volumes)
-docker compose build api worker web   # neue Images bauen
-docker compose up -d            # starten; migration-Dienst führt Migrationen aus
+git pull                        # fetch the new code
+docker compose down             # stop containers (data stays in volumes)
+docker compose build api worker web   # build the new images
+docker compose up -d            # start; the migration service runs migrations
 ```
 
-Wichtig:
+Important:
 
-- **Idempotente Migrationen:** `prisma migrate deploy` läuft bei jedem Start
-  und wendet nur ausstehende Migrationen an. Ein erneuter Start nach einem
-  Teil-Upgrade ist unkritisch.
-- **Keine automatische Rückwärtsmigration** (Downgrade-DB-Migrationen sind
-  nicht vorgesehen). Bei Rückbau bitte Backup wiederherstellen (Abschnitt 8).
-- **Podman-Maschinen:** vor dem `up` immer `docker compose down` ausführen,
-  sonst bleiben Container an alten Image-IDs (Abschnitt 3.2).
+- **Idempotent migrations:** `prisma migrate deploy` runs at every start
+  and only applies pending migrations. A restart after a partial upgrade is
+  not critical.
+- **No automatic backward migrations** (downgrade DB migrations are not
+  provided). For rollback, restore a backup instead (section 8).
+- **Podman machines:** always run `docker compose down` before `up`,
+  otherwise containers stay on old image IDs (section 3.2).
 
 ---
 
-## 7. Rollback (Image-Ebene)
+## 7. Rollback (Image level)
 
-Wenn ein neues Image fehlerhaft ist:
+If a new image is broken:
 
 ```bash
-# Auf den letzten funktionierenden Stand zurueck (nur Image-Tag),
-# sofern die Compose-Datei externe Tags nutzt:
+# Go back to the last working state (image tag only),
+# provided the Compose file uses external tags:
 docker compose down
-# in docker-compose.yml bzw. .env das Image-Tag auf die letzte
-# funktionierende Version zeigen lassen (z. B. IMAGE_TAG=v1.0.0-beta-1)
+# point the image tag in docker-compose.yml / .env at the last
+# working version (e.g. IMAGE_TAG=v1.0.0-beta-1)
 docker compose up -d
 ```
 
-Ist die Datenbank bereits durch Migrationen vorgerückt und das Rollback-
-Image eine ältere Datenbankstruktur erwartet, **nicht** einfach starten –
-stattdessen Backup wiederherstellen (Abschnitt 8). Ein reines Rollback des
-Code-Stands ohne DB-Rückschnitt funktioniert nur, wenn die Migrationen des
-fehlerhaften Releases keine Breaking-Änderungen an der Datenbank hinterlassen
-haben.
+If the database has already advanced through migrations and the rollback
+image expects an older database structure, **do not** simply start it –
+instead restore a backup (section 8). A pure code-state rollback without a
+database downgrade only works if the migrations of the faulty release left
+no breaking changes in the database.
 
 ---
 
-## 8. Restore (Datenebene)
+## 8. Restore (Data level)
 
-### 8.1 Backup erstellen
+### 8.1 Create a backup
 
 ```bash
 # PostgreSQL
 docker compose exec db pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c -f /tmp/versigo.dump
 docker compose cp db:/tmp/versigo.dump ./versigo-backup-$(date +%F).dump
 
-# Redis (optional, Queue-Status)
+# Redis (optional, queue state)
 docker compose exec redis redis-cli BGSAVE
 docker compose cp redis:/data/dump.rdb ./redis-backup-$(date +%F).rdb
 
-# Uploads (falls Dokumente lokal abgelegt werden)
+# Uploads (if documents are stored locally)
 docker run --rm -v versigo_uploads-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/uploads-backup-$(date +%F).tar.gz -C /data .
 ```
@@ -270,54 +267,54 @@ docker run --rm -v versigo_uploads-data:/data -v "$PWD":/backup alpine \
 
 ```bash
 docker compose down
-# alte Volumes entfernen (VORSICHT: loescht Daten unwiderruflich)
+# remove the old volumes (CAUTION: deletes data irreversibly)
 docker compose down -v
 
 docker compose up -d db redis
-# warten bis db healthy ist
+# wait until db is healthy
 docker compose cp ./versigo-backup-YYYY-MM-DD.dump db:/tmp/versigo.dump
 docker compose exec db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists /tmp/versigo.dump'
 
-# Uploads-Volume wieder befuellen
+# repopulate the uploads volume
 docker run --rm -v versigo_uploads-data:/data -v "$PWD":/backup alpine \
   tar xzf /backup/uploads-backup-YYYY-MM-DD.tar.gz -C /data
 
-docker compose up -d   # startet API, Worker, Web inkl. Migrationen
+docker compose up -d   # starts API, Worker, Web incl. migrations
 ```
 
-### 8.3 Datenbank-Reset (Nur Entwicklung/Test)
+### 8.3 Database reset (Development/Test only)
 
 ```bash
-docker compose down -v   # loescht ALLE Volumes (postgres, redis, uploads, minio)
+docker compose down -v   # deletes ALL volumes (postgres, redis, uploads, minio)
 ```
 
 ---
 
-## 9. Image-Inhalte prüfen
+## 9. Inspect image contents
 
-Schneller Inhalts-Check ohne Compose (Podman):
+Quick content check without Compose (Podman):
 
 ```bash
 podman run --rm --entrypoint sh versigo-api:latest -c '
-  ls apps/api/dist/apps/api/src/main.js &&      # Build vorhanden
-  node -e "require(\"@versigo/foundation\")" &&  # Workspace-Paket aufloesbar
+  ls apps/api/dist/apps/api/src/main.js &&      # build present
+  node -e "require(\"@versigo/foundation\")" &&  # workspace package resolvable
   node node_modules/prisma/build/index.js --version | head -1   # Prisma CLI
 '
 
-# Dev-Tools dürfen NICHT enthalten sein:
+# Dev tools must NOT be included:
 podman run --rm --entrypoint sh versigo-api:latest -c \
-  'ls node_modules/.pnpm | grep -Ei "^(eslint|vitest|@nestjs\+cli)@" && echo "LEAK!" || echo "OK: keine Dev-Tools"'
+  'ls node_modules/.pnpm | grep -Ei "^(eslint|vitest|@nestjs\+cli)@" && echo "LEAK!" || echo "OK: no dev tools"'
 ```
 
 ---
 
 ## 10. Troubleshooting (Image/Deploy)
 
-| Symptom | Ursache / Lösung |
+| Symptom | Cause / Solution |
 |---------|------------------|
-| Container startet mit altem Code | podman-compose recycelt Container – `docker compose down` **vor** `up --build` |
-| `prisma` CLI fehlt im Image | `prisma` muss in `apps/<app>/package.json` unter `dependencies` stehen (peer `typescript` ebenfalls) |
-| `Cannot find module '@prisma/client'` | `prisma generate` im Runner nicht gelaufen bzw. `@prisma/client`-Link fehlt (Worker: Top-Level-Link im Dockerfile) |
-| Build schlägt mit `no space left on device` fehl | `podman system prune -a -f`, danach neu bauen |
-| `pnpm install --prod` erzeugt leeres `node_modules` | pnpm-11.17.0-Regression → Dockerfiles nutzen `pnpm deploy --prod --legacy` |
-| `pg_isready` schlägt fehl | `postgresql16-client` muss im Runner installiert sein (Alpine-APK) |
+| Container starts with old code | podman-compose recycles containers – run `docker compose down` **before** `up --build` |
+| `prisma` CLI missing in the image | `prisma` must be under `dependencies` in `apps/<app>/package.json` (peer `typescript` likewise) |
+| `Cannot find module '@prisma/client'` | `prisma generate` did not run in the runner or the `@prisma/client` link is missing (worker: top-level link in the Dockerfile) |
+| Build fails with `no space left on device` | `podman system prune -a -f`, then rebuild |
+| `pnpm install --prod` creates an empty `node_modules` | pnpm-11.17.0 regression → the Dockerfiles use `pnpm deploy --prod --legacy` |
+| `pg_isready` fails | `postgresql16-client` must be installed in the runner (Alpine APK) |

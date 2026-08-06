@@ -8,3 +8,4 @@ export * from './encryption';
 export * from './queue';
 export * from './ai';
 export * from './auth';
+export * from './restart';

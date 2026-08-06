@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/foundation';
 import { tryParseExtractionResponse } from './ai-json.helper';
+import { optionalRelaxedHttpsAgent } from '../../common/connectivity/tls-agent';
 
 interface OpenAiChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -58,6 +59,8 @@ interface OpenAiRuntimeConfig {
   model: string;
   timeout: number;
   configured: boolean;
+  /** BugFix-06: HTTPS-Agent mit deaktivierter Zertifikatsvalidierung (opt-in). */
+  httpsAgent?: import('https').Agent;
 }
 
 /**
@@ -85,6 +88,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
     const timeout =
       (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
     const configured = baseUrl.length > 0 && apiKey.length > 0;
+    const relaxedAgent = await optionalRelaxedHttpsAgent(this.settings);
 
     if (configured && baseUrl.startsWith('http://')) {
       this.logger.warn(
@@ -93,7 +97,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
       );
     }
 
-    return { baseUrl, apiKey, model, timeout, configured };
+    return { baseUrl, apiKey, model, timeout, configured, ...relaxedAgent };
   }
 
   private async chatCompletion(
@@ -123,6 +127,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
             'Content-Type': 'application/json',
           },
           timeout: config.timeout,
+          ...(config.httpsAgent !== undefined ? { httpsAgent: config.httpsAgent } : {}),
         }),
       );
 
@@ -212,6 +217,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
             'Content-Type': 'application/json',
           },
           timeout: 5_000,
+          ...(config.httpsAgent !== undefined ? { httpsAgent: config.httpsAgent } : {}),
         }),
       );
       return status >= 200 && status < 300;

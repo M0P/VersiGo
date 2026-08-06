@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsBoolean,
   MinLength,
+  MaxLength,
 } from 'class-validator';
 
 // --- Global Integration Settings ---
@@ -78,4 +79,13 @@ export class ConnectivityTestResultDto {
   success!: boolean;
   message!: string;
   timestamp!: string;
+}
+
+// --- Dienste-Neustart (BugFix-06, Teil 3.4) ---
+
+export class RestartServicesDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }

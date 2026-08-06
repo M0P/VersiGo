@@ -12,16 +12,21 @@ vi.mock('openid-client', () => ({
   randomPKCECodeVerifier: vi.fn(),
   randomState: vi.fn(),
   authorizationCodeGrant: vi.fn(),
+  allowInsecureRequests: vi.fn(),
+  customFetch: Symbol.for('customFetch'),
 }));
 
 import {
+  allowInsecureRequests,
   authorizationCodeGrant,
   buildAuthorizationUrl,
   calculatePKCECodeChallenge,
+  customFetch,
   discovery,
   randomPKCECodeVerifier,
   randomState,
 } from 'openid-client';
+import { relaxedFetch } from '../../../common/connectivity/relaxed-fetch';
 
 const mockedAuthorizationCodeGrant = vi.mocked(authorizationCodeGrant);
 const mockedBuildAuthorizationUrl = vi.mocked(buildAuthorizationUrl);
@@ -29,6 +34,7 @@ const mockedCalculatePKCECodeChallenge = vi.mocked(calculatePKCECodeChallenge);
 const mockedDiscovery = vi.mocked(discovery);
 const mockedRandomPKCECodeVerifier = vi.mocked(randomPKCECodeVerifier);
 const mockedRandomState = vi.mocked(randomState);
+const mockedAllowInsecureRequests = vi.mocked(allowInsecureRequests);
 
 function createMockConfig() {
   return {
@@ -39,6 +45,12 @@ function createMockConfig() {
 function createMockCapabilities() {
   return {
     isEnabled: vi.fn(),
+  };
+}
+
+function createMockSettingsResolver() {
+  return {
+    getEffectiveBoolean: vi.fn().mockResolvedValue(false),
   };
 }
 
@@ -60,13 +72,15 @@ function setClient(strategy: Strategy, client: unknown): void {
 function createStrategy() {
   const config = createMockConfig();
   const capabilities = createMockCapabilities();
+  const settings = createMockSettingsResolver();
   const authService = createMockAuthService();
   const strategy = new OidcStrategy(
     config as never,
     capabilities as never,
+    settings as never,
     authService as never,
   );
-  return { strategy, config, capabilities, authService };
+  return { strategy, config, capabilities, settings, authService };
 }
 
 const mockUser = {
@@ -134,6 +148,11 @@ describe('OidcStrategy', () => {
           redirect_uris: ['https://app.example.com/auth/callback'],
           client_secret: 'secret',
         }),
+        // BugFix-06 (Teil 2): discovery() erhaelt jetzt immer die
+        // (leeren) DiscoveryRequestOptions als 5. Argument – ohne
+        // aktivierte Lockerungs-Flags bleiben sie leer.
+        undefined,
+        expect.objectContaining({}),
       );
       await expect(strategy.isEnabled()).resolves.toBe(true);
     });
@@ -158,6 +177,93 @@ describe('OidcStrategy', () => {
       await strategy.onModuleInit();
 
       await expect(strategy.isEnabled()).resolves.toBe(false);
+    });
+
+    it('setzt allowInsecureRequests (execute), wenn CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS aktiv ist', async () => {
+      const { strategy, config, capabilities, settings } = createStrategy();
+      capabilities.isEnabled.mockResolvedValue(true);
+      config.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'OIDC_ISSUER_URL':
+            return 'http://idp.lan';
+          case 'OIDC_CALLBACK_URL':
+            return 'https://app.example.com/auth/callback';
+          case 'OIDC_CLIENT_ID':
+            return 'versigo';
+          default:
+            return undefined;
+        }
+      });
+      settings.getEffectiveBoolean.mockImplementation((key: string) =>
+        key === 'CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS'
+          ? Promise.resolve(true)
+          : Promise.resolve(false),
+      );
+      mockedDiscovery.mockResolvedValue({} as never);
+
+      await strategy.onModuleInit();
+
+      expect(mockedDiscovery).toHaveBeenCalledWith(
+        new URL('http://idp.lan'),
+        'versigo',
+        expect.objectContaining({ redirect_uris: ['https://app.example.com/auth/callback'] }),
+        undefined,
+        expect.objectContaining({ execute: [mockedAllowInsecureRequests] }),
+      );
+      await expect(strategy.isEnabled()).resolves.toBe(true);
+    });
+
+    it('setzt customFetch=relaxedFetch, wenn CONNECTIVITY_ALLOW_SELF_SIGNED aktiv ist', async () => {
+      const { strategy, config, capabilities, settings } = createStrategy();
+      capabilities.isEnabled.mockResolvedValue(true);
+      config.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'OIDC_ISSUER_URL':
+            return 'https://idp.lan';
+          case 'OIDC_CALLBACK_URL':
+            return 'https://app.example.com/auth/callback';
+          case 'OIDC_CLIENT_ID':
+            return 'versigo';
+          default:
+            return undefined;
+        }
+      });
+      settings.getEffectiveBoolean.mockImplementation((key: string) =>
+        key === 'CONNECTIVITY_ALLOW_SELF_SIGNED' ? Promise.resolve(true) : Promise.resolve(false),
+      );
+      mockedDiscovery.mockResolvedValue({} as never);
+
+      await strategy.onModuleInit();
+
+      const options = mockedDiscovery.mock.calls[0][4] as Record<PropertyKey, unknown>;
+      expect(options).toMatchObject({ [customFetch]: relaxedFetch });
+      // Kein execute-Eintrag ohne allowPrivate-Flag.
+      expect(options.execute).toBeUndefined();
+      await expect(strategy.isEnabled()).resolves.toBe(true);
+    });
+
+    it('laesst die Lockerungs-Optionen leer, wenn beide Flags deaktiviert sind', async () => {
+      const { strategy, config, capabilities } = createStrategy();
+      capabilities.isEnabled.mockResolvedValue(true);
+      config.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'OIDC_ISSUER_URL':
+            return 'https://idp.example.com';
+          case 'OIDC_CALLBACK_URL':
+            return 'https://app.example.com/auth/callback';
+          case 'OIDC_CLIENT_ID':
+            return 'versigo';
+          default:
+            return undefined;
+        }
+      });
+      mockedDiscovery.mockResolvedValue({} as never);
+
+      await strategy.onModuleInit();
+
+      const options = mockedDiscovery.mock.calls[0][4] as Record<PropertyKey, unknown>;
+      expect(options.execute).toBeUndefined();
+      expect(options[customFetch]).toBeUndefined();
     });
 
     it('faellt auf den Umgebungs-Snapshot zurueck, wenn die Capability-Aufloesung fehlschlaegt (DB down)', async () => {

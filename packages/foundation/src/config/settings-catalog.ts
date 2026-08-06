@@ -284,6 +284,43 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     permission: 'ADMIN',
   },
 
+  // ====================== Connectivity (SSRF-Lockerung) ======================
+  // BugFix-06: Explizit opt-in – der strikte SSRF-Schutz (nur oeffentliche
+  // http(s)-Endpunkte) bleibt der sichere Default. Erst wenn ein Endanwender
+  // Paperless-ngx, Ollama oder einen OIDC-Provider im LAN betreibt, aktiviert
+  // er die Lockerung bewusst; die Cloud-Metadata-Adresse 169.254.169.254
+  // bleibt auch dann gesperrt.
+  {
+    key: 'CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS',
+    envVar: 'CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS',
+    category: 'runtime',
+    type: 'boolean',
+    group: 'Connectivity',
+    description:
+      'Erlaubt Connectivity-Tests und AI-/OIDC-Aufrufe gegen lokale/private Endpunkte ' +
+      '(RFC-1918, Loopback, lokale Hostnamen) – z. B. Paperless-ngx im LAN oder Ollama ' +
+      'unter localhost. Standard: aus (= strikter SSRF-Schutz). Die Cloud-Metadata-Adresse ' +
+      '169.254.169.254 bleibt auch bei aktivierter Option gesperrt. ' +
+      'Hinweis: OIDC-Discovery liest das Flag nur beim Boot – fuer einen OIDC-Provider ' +
+      'im LAN ist danach ein Neustart erforderlich.',
+    defaultValue: false,
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
+  {
+    key: 'CONNECTIVITY_ALLOW_SELF_SIGNED',
+    envVar: 'CONNECTIVITY_ALLOW_SELF_SIGNED',
+    category: 'runtime',
+    type: 'boolean',
+    group: 'Connectivity',
+    description:
+      'Duldet bei HTTPS-Endpunkten selbst signierte/ungenuegende TLS-Zertifikate ' +
+      '(nur fuer Connectivity-Tests und AI-/OIDC-Aufrufe, nicht global). Standard: aus.',
+    defaultValue: false,
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
+
   // ====================== Bootstrap / Infrastruktur (nur Environment/Compose) ======================
   {
     key: 'NODE_ENV',

@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/foundation';
 import { tryParseExtractionResponse } from './ai-json.helper';
+import { optionalRelaxedHttpsAgent } from '../../common/connectivity/tls-agent';
 
 interface OllamaChatResponse {
   model: string;
@@ -39,6 +40,8 @@ interface OllamaRuntimeConfig {
   baseUrl: string;
   model: string;
   timeout: number;
+  /** BugFix-06: HTTPS-Agent mit deaktivierter Zertifikatsvalidierung (opt-in). */
+  httpsAgent?: import('https').Agent;
 }
 
 /**
@@ -64,7 +67,8 @@ export class OllamaAdapter implements IAIAdapter {
     const model = (await this.settings.getEffectiveString('AI_OLLAMA_MODEL')) ?? 'llama3';
     const timeout =
       (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
-    return { baseUrl, model, timeout };
+    const relaxedAgent = await optionalRelaxedHttpsAgent(this.settings);
+    return { baseUrl, model, timeout, ...relaxedAgent };
   }
 
   private async chatCompletion(
@@ -86,7 +90,10 @@ export class OllamaAdapter implements IAIAdapter {
             ],
             stream: false,
           },
-          { timeout: config.timeout },
+          {
+            timeout: config.timeout,
+            ...(config.httpsAgent !== undefined ? { httpsAgent: config.httpsAgent } : {}),
+          },
         ),
       );
       return data.message?.content ?? null;
@@ -167,7 +174,10 @@ export class OllamaAdapter implements IAIAdapter {
       const config = await this.runtimeConfig();
       const url = `${config.baseUrl}/api/tags`;
       const { status } = await firstValueFrom(
-        this.httpService.get(url, { timeout: 5_000 }),
+        this.httpService.get(url, {
+          timeout: 5_000,
+          ...(config.httpsAgent !== undefined ? { httpsAgent: config.httpsAgent } : {}),
+        }),
       );
       return status >= 200 && status < 300;
     } catch {

@@ -47,6 +47,35 @@ export class PolicyRegistryController {
     return this.service.findAll(householdId, user);
   }
 
+  @Get('pinned')
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
+  async findPinned(
+    @Param('householdId') householdId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.findPinned(householdId, user);
+  }
+
+  @Post(':policyId/pin')
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
+  async pin(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.pin(householdId, user.id, policyId);
+  }
+
+  @Delete(':policyId/pin')
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
+  async unpin(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.unpin(householdId, user.id, policyId);
+  }
+
   @Get(':policyId')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findOne(

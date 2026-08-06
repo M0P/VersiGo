@@ -82,6 +82,9 @@ export const en = {
     settingsTitle: 'Settings',
     settingsDescription: 'Customize your experience.',
     goToSettings: 'Go to settings',
+    pinnedTitle: 'Pinned policies',
+    pinnedEmpty: 'No pinned policies yet. Pin a policy in the list to always see it here.',
+    pinnedError: 'Could not load pinned policies',
   },
   auth: {
     title: 'Sign in',
@@ -172,6 +175,10 @@ export const en = {
     notFound: 'Not found',
     notFoundAlert: 'Policy not found.',
     backToOverview: 'Back to overview',
+    pinned: 'Pinned',
+    pin: 'Pin to dashboard',
+    unpin: 'Remove from dashboard',
+    pinError: 'Could not update the pin state',
     masterData: 'Master data',
     tariff: 'Tariff',
     endDate: 'End date',
@@ -312,6 +319,27 @@ export const en = {
     saving: 'Saving...',
     createError: 'Error while creating',
     createErrorDetail: 'Error while creating the cost entry',
+    // BugFix-06 (Teil 3): Edit/delete of existing cost entries.
+    edit: 'Edit',
+    delete: 'Delete',
+    cancel: 'Cancel',
+    updateError: 'Error while saving',
+    updateErrorDetail: 'Error while saving the cost entry',
+    deleteErrorDetail: 'Error while deleting the cost entry',
+    confirmDeleteEntry: 'Delete this cost entry?',
+    // BugFix-06 (Teil 3): Payment history per billing period.
+    paidHistoryTitle: 'Payment history',
+    paidHistoryDescription: 'Due and paid amounts per billing period, from the start of the policy until today.',
+    period: 'Period',
+    dueAmount: 'Due',
+    paidAmount: 'Paid',
+    deviation: 'Deviation',
+    status: 'Status',
+    historyStatus: {
+      paid: 'Paid',
+      current: 'Current',
+      future: 'Future',
+    },
     frequencies: {
       MONTHLY: 'Monthly',
       QUARTERLY: 'Quarterly',
@@ -601,7 +629,15 @@ export const en = {
       testError: 'Error while testing the connection',
       connectionTest: 'Test connection',
       ssrfHint:
-        'For security reasons (SSRF protection), connection tests can only be run against public http(s) endpoints. Local services (e.g. Ollama on localhost) cannot be tested via the UI - please check their availability directly on the host.',
+        'For security reasons (SSRF protection), connection tests run against public http(s) endpoints by default. Local services (e.g. Paperless-ngx or Ollama in your network) can be enabled explicitly via the "Connectivity" settings (Allow private endpoints / Allow self-signed certificates). The cloud metadata address (169.254.169.254) stays blocked in any case.',
+      // BugFix-06 (Teil 3.4): Dienste-Neustart ueber die UI
+      restartServices: 'Restart services',
+      restartServicesHint:
+        'Settings of the "restart" category (e.g. OIDC bootstrap) only take effect when the API and the worker are restarted. Use this action to restart both services safely - they are briefly unavailable while doing so.',
+      confirmRestart:
+        'Restart API and worker now?\n\nThe services will be briefly unavailable. Restart-category settings are applied afterwards.',
+      restartTriggered: 'Restart triggered. API and worker are being restarted...',
+      restartError: 'Error while triggering the restart',
     },
     // BugFix-04: Audit-Log UI (vorher nur API: GET /admin/audit/events)
     audit: {

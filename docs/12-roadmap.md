@@ -1,27 +1,27 @@
 # Roadmap
 
 ## Phase 1
-- Grundgerüst
-- OIDC Login
-- Haushalte und Benutzer
-- Versicherungsverwaltung
-- Dokumente intern
-- Basis-Kostenhistorie
+- Foundation
+- OIDC login
+- Households and users
+- Insurance management
+- Internal documents
+- Basic cost history
 
 ## Phase 2
-- Familienfreigaben
-- Admin-UI für Integrationen
-- Paperless-ngx Anbindung
-- Jahresauswertungen und Preissteigerungsanalyse
+- Family sharing
+- Admin UI for integrations
+- Paperless-ngx integration
+- Annual reviews and premium increase analysis
 
 ## Phase 3
-- AI Extraktion
-- AI Leistungszusammenfassungen
-- Provider-Management
-- Job-Monitoring
+- AI extraction
+- AI benefit summaries
+- Provider management
+- Job monitoring
 
 ## Phase 4
-- Portal-Katalog
-- erste optionale Portal-Connectoren
-- Benachrichtigungen
-- Hardening und Datenschutzfunktionen
+- Portal catalog
+- First optional portal connectors
+- Notifications
+- Hardening and privacy features

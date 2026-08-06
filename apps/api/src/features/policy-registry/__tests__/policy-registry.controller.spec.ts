@@ -9,6 +9,9 @@ type ServiceLike = {
   findOne: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
+  findPinned: ReturnType<typeof vi.fn>;
+  pin: ReturnType<typeof vi.fn>;
+  unpin: ReturnType<typeof vi.fn>;
   addCoveredPerson: ReturnType<typeof vi.fn>;
   updateCoveredPerson: ReturnType<typeof vi.fn>;
   removeCoveredPerson: ReturnType<typeof vi.fn>;
@@ -24,6 +27,9 @@ function createMockService(): ServiceLike {
     findOne: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
+    findPinned: vi.fn(),
+    pin: vi.fn(),
+    unpin: vi.fn(),
     addCoveredPerson: vi.fn(),
     updateCoveredPerson: vi.fn(),
     removeCoveredPerson: vi.fn(),
@@ -139,5 +145,39 @@ describe('PolicyRegistryController', () => {
     });
 
     expect(result.providerKey).toBe('test');
+  });
+
+  it('findPinned delegiert an Service', async () => {
+    const service = createMockService();
+    const controller = new PolicyRegistryController(service as never);
+    service.findPinned.mockResolvedValue([{ id: policyId, pinnedAt: new Date().toISOString() }]);
+
+    const result = await controller.findPinned(householdId, mockUser);
+
+    expect(result).toHaveLength(1);
+    expect(service.findPinned).toHaveBeenCalledWith(householdId, mockUser);
+  });
+
+  it('pin delegiert an Service', async () => {
+    const service = createMockService();
+    const controller = new PolicyRegistryController(service as never);
+    const pinned = { id: policyId, pinnedAt: new Date().toISOString() };
+    service.pin.mockResolvedValue(pinned);
+
+    const result = await controller.pin(householdId, policyId, mockUser);
+
+    expect(result).toEqual(pinned);
+    expect(service.pin).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
+  });
+
+  it('unpin delegiert an Service', async () => {
+    const service = createMockService();
+    const controller = new PolicyRegistryController(service as never);
+    service.unpin.mockResolvedValue({ id: policyId, pinnedAt: null });
+
+    const result = await controller.unpin(householdId, policyId, mockUser);
+
+    expect(result.pinnedAt).toBeNull();
+    expect(service.unpin).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 });

@@ -9,12 +9,15 @@ import {
   UseGuards,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { GlobalRole } from '@prisma/client';
 import { SettingsStoreService } from './settings-store.service';
+import { RestartService } from './restart.service';
 import {
   AppConfigService,
   DatabaseService,
+  SettingsResolverService,
   getSettingDefinition,
   validateSettingValue,
 } from '@versigo/foundation';
@@ -30,8 +33,10 @@ import {
   UpdateHouseholdSettingDto,
   ConnectivityTestDto,
   ConnectivityTestResultDto,
+  RestartServicesDto,
 } from './dto/admin-settings.dto';
 import { assertSafeTestEndpoint } from '../../common/connectivity/connectivity-guard';
+import { testEndpoint } from '../../common/connectivity/connectivity-test';
 
 // Hilfsfunktion: Prueft, ob der User die globale Rolle ADMIN hat (ADR-007)
 function assertIsGlobalAdmin(user: AuthenticatedUser): void {
@@ -42,10 +47,14 @@ function assertIsGlobalAdmin(user: AuthenticatedUser): void {
 
 @Controller()
 export class AdminSettingsController {
+  private readonly logger = new Logger(AdminSettingsController.name);
+
   constructor(
     private readonly settingsStore: SettingsStoreService,
     private readonly config: AppConfigService,
     private readonly db: DatabaseService,
+    private readonly resolver: SettingsResolverService,
+    private readonly restartService: RestartService,
   ) {}
 
   // =====================
@@ -142,10 +151,19 @@ export class AdminSettingsController {
         default: {
           // Allgemeiner HTTP-Connectivity-Test fuer externe Dienste
           if (dto.endpoint) {
+            // BugFix-06 (Teil 2): SSRF-Lockerung ist explizit opt-in. Der
+            // strikte Default (nur oeffentliche http(s)-Endpunkte) bleibt
+            // erhalten; erst die Admin-Einstellung
+            // CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS erlaubt lokale/private
+            // Endpunkte (Cloud-Metadata bleibt immer gesperrt).
+            const allowPrivate = await this.resolveBooleanSetting(
+              'CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS',
+            );
+            const allowSelfSigned = await this.resolveBooleanSetting(
+              'CONNECTIVITY_ALLOW_SELF_SIGNED',
+            );
             try {
-              // SSRF-Schutz (M4): nur http(s), keine lokalen/privaten/
-              // metadata-Adressen – identisch zur Systemkonfiguration.
-              await assertSafeTestEndpoint(dto.endpoint);
+              await assertSafeTestEndpoint(dto.endpoint, { allowPrivate });
             } catch (error: unknown) {
               // M5-ext: gleiche Handlungsanleitung wie beim
               // Systemkonfigurations-Test, damit Nutzer nicht annehmen,
@@ -158,19 +176,19 @@ export class AdminSettingsController {
                 `direkt auf dem Host.`;
               break;
             }
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 5000);
             try {
-              const response = await fetch(dto.endpoint, {
-                signal: controller.signal,
-                headers: dto.apiToken
-                  ? { Authorization: `Bearer ${dto.apiToken}` }
-                  : undefined,
+              const tested = await testEndpoint(dto.endpoint, {
+                token: dto.apiToken,
+                rejectUnauthorized: allowSelfSigned ? false : true,
+                // Redirect-Ziele mit dem gleichen Modus gegen den SSRF-Guard
+                // pruefen (BugFix-06, Review-Fix).
+                allowPrivate,
               });
-              result.success = response.ok || response.status < 500;
-              result.message = `HTTP ${response.status}: ${response.statusText}`;
-            } finally {
-              clearTimeout(timeout);
+              result.success = tested.success;
+              result.message = tested.message;
+            } catch {
+              result.success = false;
+              result.message = 'Verbindungsfehler: Der Endpunkt ist nicht erreichbar.';
             }
           } else {
             result.message = `Kein Endpoint fuer Integration '${dto.integrationKey}' angegeben`;
@@ -184,6 +202,27 @@ export class AdminSettingsController {
     }
 
     return result;
+  }
+
+  // =====================
+  // Dienste-Neustart (BugFix-06, Teil 3.4)
+  // =====================
+
+  /**
+   * Startet API und Worker kontrolliert neu, damit boot-relevante
+   * Einstellungen (Kategorie "restart", z. B. OIDC-Bootstrap) wirksam
+   * werden. Nur globale Admins. Die HTTP-Antwort erreicht den Client
+   * (der API-Prozess beendet sich erst nach kurzer Verzoegerung);
+   * Compose (`restart: unless-stopped`) startet den Container neu.
+   */
+  @Post('admin/restart')
+  async restartServices(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: RestartServicesDto,
+  ) {
+    assertIsGlobalAdmin(user);
+    await this.restartService.requestRestart(user, dto.reason);
+    return { success: true, message: 'Neustart von API und Worker ausgeloest.' };
   }
 
   // =====================
@@ -381,6 +420,25 @@ export class AdminSettingsController {
   // =====================
   // Intern (M3): Katalog-Allowlist + Wertvalidierung fuer Legacy-Endpunkte
   // =====================
+
+  /**
+   * Liest einen katalogisierten Boolean-Schluessel ueber die zentrale
+   * Aufloesung (UI > .env > Default). Ein Aufloesungsfehler degradiert
+   * sicher auf `false` (= striktes Verhalten), damit ein kaputter
+   * DB-Wert niemals den SSRF-Schutz lockert.
+   */
+  private async resolveBooleanSetting(key: string): Promise<boolean> {
+    try {
+      return (await this.resolver.getEffectiveBoolean(key)) ?? false;
+    } catch (error) {
+      this.logger.warn(
+        `Einstellung '${key}' konnte nicht aufgeloest werden – verwende strikten Default: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
+  }
 
   /**
    * Allowlist-Pruefung fuer die Legacy-Global-Settings-Endpunkte: Der

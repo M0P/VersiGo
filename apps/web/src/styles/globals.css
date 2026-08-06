@@ -1219,6 +1219,15 @@
   flex-wrap: wrap;
 }
 
+/* BugFix-06 (Teil 3.4): Dienste-Neustart-Karte */
+.settings-restart-row {
+  display: flex;
+  gap: var(--versigo-space-4);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
 .settings-filter-checks {
   display: flex;
   gap: var(--versigo-space-4);

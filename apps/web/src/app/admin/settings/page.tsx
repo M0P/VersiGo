@@ -93,6 +93,10 @@ export default function AdminSettingsPage(): ReactElement {
   const [saving, setSaving] = useState(false);
   const [testState, setTestState] = useState<Record<string, { testing: boolean; result: ConnectivityResult | null }>>({});
 
+  // BugFix-06 (Teil 3.4): Dienste-Neustart ueber die UI.
+  const [restarting, setRestarting] = useState(false);
+  const [restartMessage, setRestartMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
   const loadEntries = () => {
     setLoading(true);
     setError(null);
@@ -241,6 +245,36 @@ export default function AdminSettingsPage(): ReactElement {
     }
   };
 
+  // BugFix-06 (Teil 3.4): Neustart von API und Worker. Nach Bestaetigung
+  // wird der geschuetzte Admin-Endpunkt aufgerufen; die API beendet sich
+  // kurz danach kontrolliert selbst (Compose restart: unless-stopped).
+  const handleRestart = async () => {
+    if (!window.confirm(t('admin.settings.confirmRestart'))) {
+      return;
+    }
+    setError(null);
+    setRestartMessage(null);
+    setRestarting(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/restart`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message ?? t('admin.settings.restartError'));
+      }
+      setRestartMessage({ ok: true, text: t('admin.settings.restartTriggered') });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : t('admin.settings.restartError');
+      setRestartMessage({ ok: false, text: message });
+    } finally {
+      setRestarting(false);
+    }
+  };
+
   if (loading) {
     return (
       <AppShell navSections={NAV_SECTIONS}>
@@ -258,6 +292,28 @@ export default function AdminSettingsPage(): ReactElement {
       />
 
       {error && <Alert variant="danger" title={t('common.error')}>{error}</Alert>}
+
+      {/* BugFix-06 (Teil 3.4): Dienste-Neustart fuer Restart-Kategorie-Settings */}
+      <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
+        <div className="settings-restart-row">
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <strong>{t('admin.settings.restartServices')}</strong>
+            <p className="form-hint" style={{ margin: 0 }}>
+              {t('admin.settings.restartServicesHint')}
+            </p>
+          </div>
+          <Button variant="secondary" size="sm" onClick={handleRestart} disabled={restarting}>
+            {restarting ? t('common.saving') : t('admin.settings.restartServices')}
+          </Button>
+        </div>
+        {restartMessage && (
+          <div style={{ marginTop: 'var(--versigo-space-3)' }}>
+            <Alert variant={restartMessage.ok ? 'success' : 'danger'}>
+              {restartMessage.text}
+            </Alert>
+          </div>
+        )}
+      </Card>
 
       {/* Werkzeugleiste: Suche + Filter */}
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>

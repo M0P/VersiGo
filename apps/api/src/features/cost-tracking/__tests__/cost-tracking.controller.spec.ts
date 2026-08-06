@@ -12,6 +12,7 @@ type ServiceLike = {
   remove: ReturnType<typeof vi.fn>;
   getAnnualCost: ReturnType<typeof vi.fn>;
   getYearComparison: ReturnType<typeof vi.fn>;
+  getPaidHistory: ReturnType<typeof vi.fn>;
   getHouseholdSummary: ReturnType<typeof vi.fn>;
 };
 
@@ -24,6 +25,7 @@ function createMockService(): ServiceLike {
     remove: vi.fn(),
     getAnnualCost: vi.fn(),
     getYearComparison: vi.fn(),
+    getPaidHistory: vi.fn(),
     getHouseholdSummary: vi.fn(),
   };
 }
@@ -132,6 +134,18 @@ describe('CostTrackingController', () => {
     expect(result).not.toBeNull();
     expect(result!.absoluteChange).toBe(100);
     expect(service.getYearComparison).toHaveBeenCalledWith(householdId, mockUser, policyId, 2025);
+  });
+
+  // BugFix-06 (Teil 3): paid-history delegiert an Service.
+  it('getPaidHistory delegiert an Service', async () => {
+    const service = createMockService();
+    const controller = new CostTrackingController(service as never);
+    service.getPaidHistory.mockResolvedValue({ policyId, periods: [] });
+
+    const result = await controller.getPaidHistory(householdId, policyId, mockUser);
+
+    expect(result.periods).toEqual([]);
+    expect(service.getPaidHistory).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 });
 

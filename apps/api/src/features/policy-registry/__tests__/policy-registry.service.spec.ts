@@ -456,4 +456,96 @@ describe('PolicyRegistryService', () => {
       expect(result.catalog?.displayName).toBe('HUK-COBURG');
     });
   });
+
+  describe('Dashboard Pinning (BugFix-06, Teil 4)', () => {
+    it('pin setzt pinnedAt und protokolliert Audit-Ereignis', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.insurancePolicy.update.mockResolvedValue({
+        id: policyId,
+        pinnedAt: new Date('2026-08-05T12:00:00.000Z'),
+      });
+
+      const result = await service.pin(householdId, userId, policyId);
+
+      const updateCall = mockDb.insurancePolicy.update.mock.calls[0][0] as {
+        data: { pinnedAt: Date | null };
+      };
+      expect(updateCall.data.pinnedAt).toBeInstanceOf(Date);
+      expect(result.pinnedAt).toEqual(new Date('2026-08-05T12:00:00.000Z'));
+      const auditData = mockDb.auditEvent.create.mock.calls[0][0] as {
+        data: { action: string; diffJson: { pinnedAt: string } };
+      };
+      expect(auditData.data.action).toBe('PIN');
+      expect(auditData.data.diffJson.pinnedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it('unpin setzt pinnedAt auf null und protokolliert Audit-Ereignis', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({
+        id: policyId,
+        householdId,
+        pinnedAt: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      mockDb.insurancePolicy.update.mockResolvedValue({ id: policyId, pinnedAt: null });
+
+      const result = await service.unpin(householdId, userId, policyId);
+
+      const updateCall = mockDb.insurancePolicy.update.mock.calls[0][0] as {
+        data: { pinnedAt: null };
+      };
+      expect(updateCall.data.pinnedAt).toBeNull();
+      expect(result.pinnedAt).toBeNull();
+      const auditData = mockDb.auditEvent.create.mock.calls[0][0] as {
+        data: { action: string };
+      };
+      expect(auditData.data.action).toBe('UNPIN');
+    });
+
+    it('pin/unpin werfen NotFoundException fuer fremde Policies', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
+
+      await expect(service.pin(householdId, userId, policyId)).rejects.toThrow(NotFoundException);
+      await expect(service.unpin(householdId, userId, policyId)).rejects.toThrow(NotFoundException);
+      expect(mockDb.insurancePolicy.update).not.toHaveBeenCalled();
+    });
+
+    it('findPinned liefert nur angepinnte Policies, neueste zuerst', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findMany.mockResolvedValue([
+        {
+          id: policyId,
+          contractNumber: 'POL-123',
+          portalLinks: [],
+          coveredPersons: [],
+          pinnedAt: new Date('2026-08-05T00:00:00.000Z'),
+        },
+        {
+          id: 'policy-2',
+          contractNumber: 'POL-2',
+          portalLinks: [],
+          coveredPersons: [],
+          pinnedAt: new Date('2026-08-01T00:00:00.000Z'),
+        },
+      ]);
+
+      const result = await service.findPinned(householdId, user);
+
+      expect(result).toHaveLength(2);
+      const findManyCall = mockDb.insurancePolicy.findMany.mock.calls[0][0] as {
+        where: { pinnedAt: { not: null } };
+        orderBy: { pinnedAt: string };
+      };
+      expect(findManyCall.where.pinnedAt).toEqual({ not: null });
+      expect(findManyCall.orderBy).toEqual({ pinnedAt: 'desc' });
+    });
+
+    it('findPinned verweigert den Zugriff auf fremde Households', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue(null);
+
+      await expect(service.findPinned('household-fremd', user)).rejects.toThrow(ForbiddenException);
+      expect(mockDb.insurancePolicy.findMany).not.toHaveBeenCalled();
+    });
+  });
 });

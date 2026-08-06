@@ -75,6 +75,19 @@ export class CostTrackingController {
     return this.service.getYearComparison(householdId, user, policyId, Number(year));
   }
 
+  // BugFix-06 (Teil 3): Gezahlte Kosten je Abrechnungsperiode, von
+  // Versicherungsbeginn bis heute (Achtung: VOR der :entryId-Route, damit
+  // 'paid-history' nicht als entryId interpretiert wird).
+  @Get('paid-history')
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
+  async getPaidHistory(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.getPaidHistory(householdId, user, policyId);
+  }
+
   @Get(':entryId')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findOne(

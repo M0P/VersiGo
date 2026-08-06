@@ -1,15 +1,24 @@
 import { Injectable, Logger, OnModuleInit, UnauthorizedException } from '@nestjs/common';
-import { AppConfigService, CapabilityFlagsService, type AppConfig } from '@versigo/foundation';
+import {
+  AppConfigService,
+  CapabilityFlagsService,
+  SettingsResolverService,
+  type AppConfig,
+} from '@versigo/foundation';
 import { AuthService, AuthenticatedUser } from './auth.service';
+import { relaxedFetch } from '../../common/connectivity/relaxed-fetch';
 
 import {
+  allowInsecureRequests,
   authorizationCodeGrant,
   buildAuthorizationUrl,
   calculatePKCECodeChallenge,
+  customFetch,
   discovery,
   randomPKCECodeVerifier,
   randomState,
   type Configuration,
+  type DiscoveryRequestOptions,
 } from 'openid-client';
 
 // openid-client v6 (gepinnt mit ^6.8.0) stellt die v5-Exporte (Issuer, Client,
@@ -51,6 +60,7 @@ export class OidcStrategy implements OnModuleInit {
   constructor(
     private readonly config: AppConfigService,
     private readonly capabilities: CapabilityFlagsService,
+    private readonly settings: SettingsResolverService,
     private readonly authService: AuthService,
   ) {}
 
@@ -93,6 +103,27 @@ export class OidcStrategy implements OnModuleInit {
       if (!clientId) {
         throw new Error('OIDC_CLIENT_ID nicht konfiguriert');
       }
+      // BugFix-06 (Teil 2): TLS-/Endpoint-Lockerung fuer lokale IdPs mit
+      // selbst signierten Zertifikaten. Beide Flags sind Admin-Einstellungen
+      // der Kategorie `runtime` (Default false). Ist die Datenbank beim Boot
+      // nicht erreichbar, faellt die Aufloesung wie bei den Capabilities auf
+      // den Umgebungs-Snapshot zurueck (strikt, d.h. Lockerung deaktiviert).
+      const flags = await this.resolveConnectivityFlags();
+      const options: DiscoveryRequestOptions = {};
+      if (flags.allowPrivate) {
+        // Erlaubt http://-Issuer-URLs (typisch fuer IdPs im LAN).
+        // openid-client v6: die Lockerung erfolgt ueber die `execute`-Liste
+        // (Konfigurations-Mutator), NICHT ueber ein Boolean-Feld.
+        options.execute = [allowInsecureRequests];
+      }
+      if (flags.allowSelfSigned) {
+        // Selbst signierte Provider-Zertifikate: Alle OIDC-Requests
+        // (Discovery, Token, Userinfo) laufen dann ueber den TLS-lockernden
+        // relaxedFetch; alle uebrigen App-Requests behalten strikte Pruefung.
+        // `customFetch` ist in openid-client v6 ein Unique-Symbol-Schluessel
+        // (kein String-Feld) – daher die Computed-Property-Syntax.
+        options[customFetch] = relaxedFetch;
+      }
       // Ohne explizites clientAuthentication waehlt die Configuration bei
       // gesetztem client_secret automatisch ClientSecretPost (vgl. v5:
       // client_secret im Client-Objekt). Ein public Client ohne Secret
@@ -100,10 +131,38 @@ export class OidcStrategy implements OnModuleInit {
       this.client = await discovery(new URL(issuerUrl), clientId, {
         redirect_uris: [callbackUrl],
         client_secret: this.config.get('OIDC_CLIENT_SECRET'),
-      });
+      }, undefined, options);
+      if (Object.keys(options).length > 0) {
+        this.logger.log(
+          `OIDC-Client mit Lockerungen konfiguriert (allowInsecure=${flags.allowPrivate}, allowSelfSigned=${flags.allowSelfSigned})`,
+        );
+      }
       this.logger.log(`OIDC-Client konfiguriert fuer Issuer ${issuerUrl}`);
     } catch (err) {
       this.logger.error('OIDC-Client-Initialisierung fehlgeschlagen', (err as Error).message);
+    }
+  }
+
+  /**
+   * Loeest die Konnektivitaets-Lockerungsflags der Kategorie `runtime` auf.
+   * Fallback bei DB-/Resolver-Ausfall: strikte Defaults (false) – eine
+   * fehlgeschlagene Aufloesung darf NIE zu einer ungewollten Lockerung
+   * der TLS-/Endpoint-Pruefung fuehren (Fail-Closed).
+   */
+  private async resolveConnectivityFlags(): Promise<{ allowPrivate: boolean; allowSelfSigned: boolean }> {
+    try {
+      const [allowPrivate, allowSelfSigned] = await Promise.all([
+        this.settings.getEffectiveBoolean('CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS'),
+        this.settings.getEffectiveBoolean('CONNECTIVITY_ALLOW_SELF_SIGNED'),
+      ]);
+      return { allowPrivate: allowPrivate ?? false, allowSelfSigned: allowSelfSigned ?? false };
+    } catch (error) {
+      this.logger.warn(
+        'Konnektivitaets-Flags nicht aufloesbar (DB nicht erreichbar?) – ' +
+          'OIDC ohne Lockerungen (strikt): ' +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { allowPrivate: false, allowSelfSigned: false };
     }
   }
 

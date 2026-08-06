@@ -78,6 +78,9 @@ export const de = {
     settingsTitle: 'Einstellungen',
     settingsDescription: 'Passen Sie Ihr Erlebnis an.',
     goToSettings: 'Zu den Einstellungen',
+    pinnedTitle: 'Angepinnte Versicherungen',
+    pinnedEmpty: 'Noch keine Versicherung angepinnt. Pinnen Sie eine Versicherung in der Liste, um sie hier dauerhaft zu sehen.',
+    pinnedError: 'Angepinnte Versicherungen konnten nicht geladen werden',
   },
   auth: {
     title: 'Anmeldung',
@@ -168,6 +171,10 @@ export const de = {
     notFound: 'Nicht gefunden',
     notFoundAlert: 'Versicherung nicht gefunden.',
     backToOverview: 'Zurück zur Übersicht',
+    pinned: 'Angepinnt',
+    pin: 'An Dashboard pinnen',
+    unpin: 'Vom Dashboard entfernen',
+    pinError: 'Der Pinn-Status konnte nicht aktualisiert werden',
     masterData: 'Stammdaten',
     tariff: 'Tarif',
     endDate: 'Ende',
@@ -305,6 +312,27 @@ export const de = {
     saving: 'Speichern...',
     createError: 'Fehler beim Anlegen',
     createErrorDetail: 'Fehler beim Anlegen der Kostenposition',
+    // BugFix-06 (Teil 3): Bearbeiten/Loeschen bestehender Kostenpositionen.
+    edit: 'Bearbeiten',
+    delete: 'Löschen',
+    cancel: 'Abbrechen',
+    updateError: 'Fehler beim Speichern',
+    updateErrorDetail: 'Fehler beim Speichern der Kostenposition',
+    deleteErrorDetail: 'Fehler beim Löschen der Kostenposition',
+    confirmDeleteEntry: 'Diese Kostenposition löschen?',
+    // BugFix-06 (Teil 3): Zahlungshistorie je Abrechnungszeitraum.
+    paidHistoryTitle: 'Zahlungshistorie',
+    paidHistoryDescription: 'Fällige und gezahlte Beträge je Abrechnungszeitraum, vom Versicherungsbeginn bis heute.',
+    period: 'Zeitraum',
+    dueAmount: 'Fällig',
+    paidAmount: 'Gezahlt',
+    deviation: 'Abweichung',
+    status: 'Status',
+    historyStatus: {
+      paid: 'Gezahlt',
+      current: 'Laufend',
+      future: 'Künftig',
+    },
     frequencies: {
       MONTHLY: 'Monatlich',
       QUARTERLY: 'Vierteljaehrlich',
@@ -594,7 +622,15 @@ export const de = {
       testError: 'Fehler beim Verbindungstest',
       connectionTest: 'Verbindung testen',
       ssrfHint:
-        'Verbindungstests sind aus Sicherheitsgründen (SSRF-Schutz) nur gegen öffentliche http(s)-Endpunkte möglich. Lokale Dienste (z.&nbsp;B. Ollama unter localhost) sind nicht über die UI testbar – prüfen Sie deren Erreichbarkeit bitte direkt auf dem Host.',
+        'Verbindungstests laufen aus Sicherheitsgründen (SSRF-Schutz) standardmäßig nur gegen öffentliche http(s)-Endpunkte. Lokale Dienste (z.&nbsp;B. Paperless-ngx oder Ollama im eigenen Netz) lassen sich über die "Connectivity"-Einstellungen explizit freischalten (Private Endpunkte erlauben / Selbst signierte Zertifikate erlauben). Die Cloud-Metadata-Adresse (169.254.169.254) bleibt in jedem Fall gesperrt.',
+      // BugFix-06 (Teil 3.4): Dienste-Neustart ueber die UI
+      restartServices: 'Dienste neu starten',
+      restartServicesHint:
+        'Einstellungen der Kategorie "restart" (z.&nbsp;B. OIDC-Bootstrap) wirken erst nach einem Neustart von API und Worker. Mit dieser Aktion starten Sie beide Dienste kontrolliert neu – sie sind dabei kurzzeitig nicht erreichbar.',
+      confirmRestart:
+        'API und Worker jetzt neu starten?\n\nDie Dienste sind kurzzeitig nicht erreichbar. Neustart-Kategorie-Einstellungen werden anschließend angewendet.',
+      restartTriggered: 'Neustart ausgelöst. API und Worker werden neu gestartet...',
+      restartError: 'Fehler beim Auslösen des Neustarts',
     },
     // BugFix-04: Audit-Log UI (vorher nur API: GET /admin/audit/events)
     audit: {

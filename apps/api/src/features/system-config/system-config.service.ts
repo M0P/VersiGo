@@ -26,6 +26,7 @@ import {
   assertSafeTestEndpoint,
   UnsafeEndpointError,
 } from '../../common/connectivity/connectivity-guard';
+import { testEndpoint } from '../../common/connectivity/connectivity-test';
 
 /**
  * Zentrale Systemkonfiguration (AP-17).
@@ -149,25 +150,30 @@ export class SystemConfigService {
         return result;
       }
 
-      // SSRF-Schutz: nur http(s), keine lokalen/privaten/metadata-Adressen.
-      await assertSafeTestEndpoint(url);
+      // BugFix-06 (Teil 2): SSRF-Lockerung ist explizit opt-in. Der strikte
+      // Default (nur oeffentliche http(s)-Endpunkte) bleibt erhalten; erst
+      // CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS erlaubt lokale/private Endpunkte
+      // (Cloud-Metadata bleibt immer gesperrt). CONNECTIVITY_ALLOW_SELF_SIGNED
+      // toleriert selbst signierte Zertifikate nur fuer diesen Test-Request.
+      const allowPrivate = await this.resolveBooleanSetting(
+        'CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS',
+      );
+      const allowSelfSigned = await this.resolveBooleanSetting('CONNECTIVITY_ALLOW_SELF_SIGNED');
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5_000);
-      try {
-        const response = await fetch(url, {
-          signal: controller.signal,
-          headers: token
-            ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-            : { 'Content-Type': 'application/json' },
-        });
-        // <500 gilt als "erreichbar": auch 401/403 beweisen, dass der
-        // Endpunkt laeuft, ohne dass der Response-Inhalt geprueft wird.
-        result.success = response.ok || response.status < 500;
-        result.message = `HTTP ${response.status}: ${response.statusText}`;
-      } finally {
-        clearTimeout(timeout);
-      }
+      // SSRF-Schutz: nur http(s), keine lokalen/privaten/metadata-Adressen.
+      await assertSafeTestEndpoint(url, { allowPrivate });
+
+      const tested = await testEndpoint(url, {
+        token,
+        rejectUnauthorized: allowSelfSigned ? false : true,
+        // Redirect-Ziele mit dem gleichen Modus gegen den SSRF-Guard
+        // pruefen (BugFix-06, Review-Fix).
+        allowPrivate,
+      });
+      // <500 gilt als "erreichbar": auch 401/403 beweisen, dass der
+      // Endpunkt laeuft, ohne dass der Response-Inhalt geprueft wird.
+      result.success = tested.success;
+      result.message = tested.message;
     } catch (error: unknown) {
       if (error instanceof UnsafeEndpointError) {
         // M5: statt einer verwirrenden Ablehnung eine klare Begruendung +
@@ -284,6 +290,25 @@ export class SystemConfigService {
       );
     }
     return definition;
+  }
+
+  /**
+   * Liest einen katalogisierten Boolean-Schluessel ueber die zentrale
+   * Aufloesung (UI > .env > Default). Ein Aufloesungsfehler degradiert
+   * sicher auf `false` (= striktes Verhalten), damit ein kaputter
+   * DB-Wert niemals den SSRF-Schutz lockert.
+   */
+  private async resolveBooleanSetting(key: string): Promise<boolean> {
+    try {
+      return (await this.resolver.getEffectiveBoolean(key)) ?? false;
+    } catch (error) {
+      this.logger.warn(
+        `Einstellung '${key}' konnte nicht aufgeloest werden – verwende strikten Default: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
   }
 
   /** Leitet fuer pruefbare Schluessel den Test-Endpunkt aus dem effektiven Wert ab. */

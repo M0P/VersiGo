@@ -2,7 +2,7 @@
 
 > Status: **AP-17** – Versionierter Konfigurationskatalog (Allowlist), zentrale
 > Prioritätsauflösung, Admin-UI, Profil-UI, Audit und Dokumentation.
-> Katalogversion: `SETTINGS_CATALOG_VERSION = 1`.
+> Katalogversion: `SETTINGS_CATALOG_VERSION = 2`.
 
 ## Ziel
 
@@ -90,6 +90,22 @@ Konfigurationswerte, Secrets, Metadaten oder Änderungsmöglichkeiten preis.
 | `PAPERLESS_URL` | string | runtime | – | URL; Connectivity-Test |
 | `PAPERLESS_API_TOKEN` | string | **secret** | – | verschlüsselt; Connectivity-Test |
 
+#### Connectivity / SSRF relaxation (BugFix-06, opt-in)
+
+| Key | Type | Category | Default | Validation |
+|---|---|---|---|---|
+| `CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS` | boolean | runtime | `false` | `true`/`false`; strictly opt-in |
+| `CONNECTIVITY_ALLOW_SELF_SIGNED` | boolean | runtime | `false` | `true`/`false`; strictly opt-in |
+
+Security note: both flags are deliberately **off by default** (strict SSRF
+protection: only public `http(s)` endpoints). They apply to the connectivity
+test, the OIDC discovery/callback, the AI providers (Ollama /
+OpenAI-compatible) and Paperless-ngx. The cloud metadata address
+`169.254.169.254` (and its IPv6/IPv4-mapped forms) stays blocked **always**,
+even with `CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS=true`. OIDC discovery reads
+the flags once at boot – enabling them for a LAN OIDC provider requires a
+restart (see the "restart required" hint in the UI).
+
 #### Authentifizierung
 
 | Schlüssel | Typ | Kategorie | Default | Validierung |
@@ -172,16 +188,27 @@ setzbar; die Admin-API lehnt diese Schlüssel ab (`ForbiddenException`):
 - Aktionen: Setzen/Ändern (atomar validiert), Zurücksetzen auf Fallback
   (löscht die DB-Zeile), sicherer Connectivity-Test (nur für als testbar
   markierte Schlüssel, 5 s Timeout, ohne Secret-Preisgabe).
-- **Connectivity-Test-Beschränkung (SSRF-Schutz):** Der Test erlaubt nur
-  **öffentliche `http(s)`-Endpunkte**. Lokale/private Adressen und
-  Hostnamen (`localhost`, `*.local`, `*.internal`, 127.0.0.0/8, 10/8,
-  172.16/12, 192.168/16, 169.254.169.254, IPv6-ULA/Link-Local) werden
-  abgewiesen – auch wenn sie der konfigurierte Wert ist. Lokale Dienste
-  (z. B. Ollama unter `http://localhost:11434`, der Katalog-Default) sind
-  daher **nicht über die UI testbar**; prüfen Sie deren Erreichbarkeit
-  direkt auf dem Host (`curl` / Health-Check). Der Guard beantwortet
-  DNS-Namen und blockt Auflösungen auf private Adressen (einfacher
-  DNS-Rebinding-Schutz).
+- **Connectivity-Test-Beschränkung (SSRF-Schutz, BugFix-06):** By default the
+  test only allows **public `http(s)` endpoints**. Local/private addresses and
+  hostnames (`localhost`, `*.local`, `*.internal`, 127.0.0.0/8, 10/8,
+  172.16/12, 192.168/16, 100.64/10, 169.254/16, IPv6 ULA/Link-Local) are
+  rejected – even if they are the configured value. The guard resolves DNS
+  names and blocks lookups into private ranges (simple DNS-rebinding
+  protection). Local services (e.g. Ollama under `http://localhost:11434`,
+  the catalog default) are therefore **not testable via the UI** unless the
+  opt-in is enabled; check their reachability directly on the host
+  (`curl` / health check).
+- With `CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS=true` the test (and the OIDC/AI/
+  Paperless clients) accept local/private endpoints for LAN deployments
+  (e.g. Paperless-ngx on `http://192.168.24.8:8010`, Ollama on localhost).
+  The cloud metadata address `169.254.169.254` (IPv4, IPv6 `fd00:ec2::254`
+  and the IPv4-mapped IPv6 forms `::ffff:169.254.169.254` /
+  `::ffff:a9fe:a9fe`) remains blocked **always** – it is the primary SSRF
+  target and an end user testing local services never needs it.
+- With `CONNECTIVITY_ALLOW_SELF_SIGNED=true` the connectivity test tolerates
+  self-signed/incomplete TLS certificates **for that test request only**
+  (`rejectUnauthorized: false` on the request agent – never globally). Both
+  flags are explicit opt-ins; the strict default is preserved.
 - Bootstrap-Schlüssel erscheinen nicht in der UI und sind über die API
   unzugänglich.
 

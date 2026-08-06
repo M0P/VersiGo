@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import axios from 'axios';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { getSettingDefinition } from '@versigo/foundation';
 import { SystemConfigService } from '../system-config.service';
@@ -302,22 +303,27 @@ describe('SystemConfigService', () => {
 
     it('meldet Erfolg bei erreichbarem Endpunkt (Ollama) und auditiert den Test', async () => {
       const { db, service } = createService();
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue({ ok: true, status: 200, statusText: 'OK' });
-      vi.stubGlobal('fetch', fetchMock);
+      // Der eigentliche Request laeuft seit BugFix-06 Teil 2 ueber
+      // testEndpoint() (axios, TLS-Lockerung moeglich) – also axios statt
+      // globalem fetch mocken.
+      const axiosGetMock = vi
+        .spyOn(axios, 'get')
+        .mockResolvedValue({ status: 200, statusText: 'OK' } as never);
 
       const result = await service.testConnectivity('AI_OLLAMA_BASE_URL', ACTOR);
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('HTTP 200: OK');
-      expect(fetchMock).toHaveBeenCalledWith(
+      expect(axiosGetMock).toHaveBeenCalledWith(
         'http://localhost:11434/api/tags',
         expect.objectContaining({ signal: expect.anything() }),
       );
-      // SSRF-Guard wird VOR dem fetch aufgerufen (Guard selbst ist in der
+      // SSRF-Guard wird VOR dem Request aufgerufen (Guard selbst ist in der
       // eigenen Spec getestet, hier nur der Aufrufpfad).
-      expect(assertSafeTestEndpoint).toHaveBeenCalledWith('http://localhost:11434/api/tags');
+      expect(assertSafeTestEndpoint).toHaveBeenCalledWith(
+        'http://localhost:11434/api/tags',
+        expect.objectContaining({ allowPrivate: false }),
+      );
       // Connectivity-Tests werden revisionssicher auditiert (M1) – ohne
       // URLs/Tokens, nur Key + Status.
       const auditCall = db.auditEvent.create.mock.calls[0][0].data as any;
@@ -325,22 +331,21 @@ describe('SystemConfigService', () => {
       expect(auditCall.entityId).toBe('AI_OLLAMA_BASE_URL');
       expect(auditCall.actorUserId).toBe('admin-1');
       expect(auditCall.diffJson).toEqual({ key: 'AI_OLLAMA_BASE_URL', redacted: true, outcome: 'ok' });
-      vi.unstubAllGlobals();
+      axiosGetMock.mockRestore();
     });
 
     it('meldet Verbindungsfehler sicher ohne Secrets', async () => {
       const { service } = createService();
-      vi.stubGlobal(
-        'fetch',
-        vi.fn().mockRejectedValue(new Error('ECONNREFUSED') as never),
-      );
+      const axiosGetMock = vi
+        .spyOn(axios, 'get')
+        .mockRejectedValue(new Error('ECONNREFUSED'));
 
       const result = await service.testConnectivity('AI_OLLAMA_BASE_URL', ACTOR);
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('Verbindungsfehler');
       expect(result.message).not.toContain('11434');
-      vi.unstubAllGlobals();
+      axiosGetMock.mockRestore();
     });
 
     it('lehnt unsichere Endpunkte (SSRF) ab, ohne sie anzufragen', async () => {
@@ -348,14 +353,14 @@ describe('SystemConfigService', () => {
       assertSafeTestEndpoint.mockRejectedValueOnce(
         new UnsafeEndpointError('Adresse liegt in einem gesperrten Bereich'),
       );
-      vi.stubGlobal('fetch', vi.fn());
+      const axiosGetMock = vi.spyOn(axios, 'get');
 
       const result = await service.testConnectivity('AI_OLLAMA_BASE_URL', ACTOR);
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('abgelehnt');
-      expect(fetch).not.toHaveBeenCalled();
-      vi.unstubAllGlobals();
+      expect(axiosGetMock).not.toHaveBeenCalled();
+      axiosGetMock.mockRestore();
     });
   });
 });

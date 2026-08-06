@@ -616,6 +616,242 @@ describe('CostTrackingService', () => {
     });
   });
 
+  describe('getPaidHistory (BugFix-06: Abrechnungsperioden seit Beginn)', () => {
+    function mockMembershipAndPolicy(policy: Record<string, unknown>) {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, ...policy });
+    }
+
+    it('zahlt je begonnener Monatsperiode einen vollen Beitrag (keine Tagesanteile)', async () => {
+      mockMembershipAndPolicy({
+        startDate: new Date('2024-01-15'),
+        paymentFrequency: PaymentFrequency.MONTHLY,
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 100,
+          netAmount: null,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2024-01-15'),
+          validTo: null,
+        },
+      ]);
+
+      // Fixer Zeitpunkt: 3 volle Perioden begonnen (15.01., 15.02., 15.03.),
+      // laufende Periode zaehlt (Beitrag faellig zu Periodenbeginn) -> 3 * 100.
+      const result = await service.getPaidHistory(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      expect(result.frequency).toBe('MONTHLY');
+      expect(result.periods.length).toBe(3);
+      expect(result.periods[0].periodLabel).toBe('01/2024');
+      expect(result.periods[0].dueAmount).toBe(100);
+      expect(result.periods[0].paidAmount).toBe(100);
+      expect(result.periods[0].status).toBe('paid');
+      expect(result.periods[1].periodLabel).toBe('02/2024');
+      expect(result.periods[2].periodLabel).toBe('03/2024');
+      expect(result.periods[2].status).toBe('current');
+      // paidAmount == dueAmount fuer jede begonnene Periode (faellig am Beginn).
+      for (const period of result.periods) {
+        expect(period.paidAmount).toBe(period.dueAmount);
+      }
+    });
+
+    it('nutzt die Jahresfrequenz der Versicherung (jaehrlich, 01/2024, ...)', async () => {
+      mockMembershipAndPolicy({
+        startDate: new Date('2024-01-01'),
+        paymentFrequency: PaymentFrequency.ANNUAL,
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 500,
+          netAmount: null,
+          frequency: 'ANNUAL',
+          validFrom: new Date('2024-01-01'),
+          validTo: null,
+        },
+      ]);
+
+      const result = await service.getPaidHistory(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      expect(result.frequency).toBe('ANNUAL');
+      expect(result.periods.length).toBe(1);
+      expect(result.periods[0].periodLabel).toBe('01/2024');
+      expect(result.periods[0].dueAmount).toBe(500);
+      expect(result.periods[0].status).toBe('current');
+    });
+
+    it('beruecksichtigt Frequenzwechsel (Beitragserhoehung mid-period)', async () => {
+      mockMembershipAndPolicy({
+        startDate: new Date('2024-01-15'),
+        paymentFrequency: PaymentFrequency.MONTHLY,
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 100,
+          netAmount: null,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2024-01-15'),
+          validTo: new Date('2024-06-14'),
+        },
+        {
+          id: 'c2',
+          grossAmount: 120,
+          netAmount: null,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2024-06-15'),
+          validTo: null,
+        },
+      ]);
+
+      const result = await service.getPaidHistory(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-08-31T12:00:00.000Z'),
+      );
+
+      expect(result.periods[0].dueAmount).toBe(100); // 01/2024
+      expect(result.periods[5].periodLabel).toBe('06/2024');
+      expect(result.periods[5].dueAmount).toBe(120); // neue Beitragshoehe ab 06/2024
+      // Nachfolgende Perioden ebenfalls mit neuem Beitrag.
+      expect(result.periods[6].dueAmount).toBe(120);
+    });
+
+    it('skaliert Eintraege, deren Frequenz von der Abrechnungsfrequenz abweicht', async () => {
+      // Versicherung MONTHLY, Kosten-Eintrag QUARTERLY (300): jede Monatsperiode
+      // schuldet 300/3 = 100 – Jahres-Summe bleibt konsistent (4 * 300 = 12 * 100).
+      mockMembershipAndPolicy({
+        startDate: new Date('2024-01-01'),
+        paymentFrequency: PaymentFrequency.MONTHLY,
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 300,
+          netAmount: null,
+          frequency: 'QUARTERLY',
+          validFrom: new Date('2024-01-01'),
+          validTo: null,
+        },
+      ]);
+
+      const result = await service.getPaidHistory(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      expect(result.frequency).toBe('MONTHLY');
+      expect(result.periods.length).toBe(3);
+      for (const period of result.periods) {
+        expect(period.dueAmount).toBe(100);
+        expect(period.paidAmount).toBe(100);
+      }
+    });
+
+    it('realigned Perioden nach kurzen Monaten am Anker (Schaltjahr 2024)', async () => {
+      // Anker 31.01.2024: +1 Monat -> 29.02.2024, +2 Monate -> 31.03.2024
+      // (kein Drift auf den 29. des Folgemonats).
+      mockMembershipAndPolicy({
+        startDate: new Date('2024-01-31'),
+        paymentFrequency: PaymentFrequency.MONTHLY,
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 100,
+          netAmount: null,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2024-01-31'),
+          validTo: null,
+        },
+      ]);
+
+      const result = await service.getPaidHistory(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-31T12:00:00.000Z'),
+      );
+
+      expect(result.periods.length).toBe(3);
+      expect(result.periods[0].periodLabel).toBe('01/2024');
+      expect(result.periods[0].periodStart).toBe('2024-01-31T00:00:00.000Z');
+      expect(result.periods[1].periodLabel).toBe('02/2024');
+      expect(result.periods[1].periodStart).toBe('2024-02-29T00:00:00.000Z');
+      expect(result.periods[2].periodLabel).toBe('03/2024');
+      expect(result.periods[2].periodStart).toBe('2024-03-31T00:00:00.000Z');
+    });
+
+    it('wirft NotFoundException bei fehlender Policy', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getPaidHistory(householdId, user, policyId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('liefert leere Periodenliste ohne CostEntries', async () => {
+      mockMembershipAndPolicy({
+        startDate: new Date('2024-01-15'),
+        paymentFrequency: PaymentFrequency.MONTHLY,
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([]);
+
+      const result = await service.getPaidHistory(householdId, user, policyId);
+
+      expect(result.periods).toEqual([]);
+      expect(result.frequency).toBe('MONTHLY');
+    });
+  });
+
+  describe('getOverview paidToDate (BugFix-06: periodenbasiert)', () => {
+    it('berechnet paidToDate je Abrechnungsperiode statt tagesanteilig', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({
+        id: policyId,
+        householdId,
+        startDate: new Date('2024-01-01'),
+        paymentFrequency: PaymentFrequency.MONTHLY,
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 100,
+          netAmount: null,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2024-01-01'),
+          validTo: null,
+        },
+      ]);
+
+      const result = await service.getOverview(householdId, user, policyId);
+
+      expect(result).not.toBeNull();
+      // Periodenbasiert: ganze Monatsbetraege (kein Tagesbruchteil).
+      expect(result!.paidToDate % 100).toBe(0);
+      expect(result!.paidToDate).toBeGreaterThanOrEqual(100);
+      expect(mockDb.insurancePolicy.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: policyId, householdId } }),
+      );
+    });
+  });
+
   describe('Household-Isolation', () => {
     it('verweigert Zugriff ohne Mitgliedschaft bei findAll', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);

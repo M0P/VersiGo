@@ -298,6 +298,7 @@ model InsurancePolicy {
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
   archivedAt           DateTime?
+  pinnedAt             DateTime?
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   ownerUser User      @relation(fields: [ownerUserId], references: [id])
@@ -311,6 +312,7 @@ model InsurancePolicy {
 
   @@index([householdId])
   @@index([ownerUserId])
+  @@index([pinnedAt])
   @@map("insurance_policies")
 }
 

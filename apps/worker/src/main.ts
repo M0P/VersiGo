@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import {
   preloadRestartSettingsIntoEnv,
+  RestartCoordinatorService,
   WorkerHeartbeatService,
   WorkerLivenessService,
 } from '@versigo/foundation';
@@ -38,6 +39,20 @@ async function bootstrap(): Promise<void> {
   // AP-19: Health-/Readiness-Grundlage des Workers
   app.get(WorkerHeartbeatService).start();
   app.get(WorkerLivenessService).start();
+
+  // BugFix-06 (Teil 3.4): Admin-Neustart ueber die UI. Der Worker
+  // konsumiert die Redis-Neustart-Anforderung und beendet sich sauber,
+  // damit er die Restart-Kategorie-Settings beim naechsten Start
+  // uebernimmt (Compose restart: unless-stopped).
+  const restartCoordinator = app.get(RestartCoordinatorService);
+  restartCoordinator.watchRestartRequests((payload) => {
+    new Logger('RestartWatcher').log(
+      `Neustart durch '${payload.requestedBy}' angefordert` +
+        (payload.reason ? ` (Grund: ${payload.reason})` : '') +
+        ' – Worker wird sauber beendet.',
+    );
+    void app.close().then(() => process.exit(0));
+  });
 
   new Logger('WorkerBootstrap').log(
     'Worker bereit - Queue-Infrastruktur verbunden (PostgreSQL + Redis).',

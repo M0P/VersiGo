@@ -9,6 +9,7 @@ import type {
   PaperlessSyncResult,
   PaperlessSearchResult,
 } from './paperless-ngx.interface';
+import { optionalRelaxedHttpsAgent } from '../../common/connectivity/tls-agent';
 
 interface PaperlessApiDocument {
   id: number;
@@ -111,6 +112,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
         this.httpService.get<T>(url, {
           headers: this.createHeaders(apiToken),
           timeout: 10_000,
+          ...(await this.tlsRelaxation()),
         }),
       );
       return data;
@@ -118,6 +120,16 @@ export class PaperlessNgxService implements IPaperlessAdapter {
       this.logError('GET', path, err);
       return null;
     }
+  }
+
+  /**
+   * BugFix-06 (Teil 2): TLS-Lockerung fuer Paperless-Endpunkte mit selbst
+   * signierten Zertifikaten, wenn die Admin-Einstellung
+   * CONNECTIVITY_ALLOW_SELF_SIGNED aktiv ist. Fehlgeschlagene Aufloesung
+   * degradiert sicher auf strikte Validierung (kein Agent).
+   */
+  private async tlsRelaxation(): Promise<{ httpsAgent?: import('https').Agent }> {
+    return optionalRelaxedHttpsAgent(this.settings);
   }
 
   private async fetchName(
@@ -135,6 +147,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
           {
             headers: this.createHeaders(apiToken),
             timeout: 10_000,
+            ...(await this.tlsRelaxation()),
           },
         ),
       );
@@ -301,6 +314,7 @@ export class PaperlessNgxService implements IPaperlessAdapter {
         this.httpService.get(url, {
           headers: this.createHeaders(apiToken),
           timeout: 5_000,
+          ...(await this.tlsRelaxation()),
         }),
       );
       return status >= 200 && status < 300;

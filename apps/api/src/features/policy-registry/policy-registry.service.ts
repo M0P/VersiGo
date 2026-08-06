@@ -7,7 +7,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { DatabaseService, ENCRYPTION_PORT, EncryptionPort } from '@versigo/foundation';
-import { GlobalRole, Prisma } from '@prisma/client';
+import { GlobalRole, Prisma, PortalAccountLink } from '@prisma/client';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { PortalConnectorService } from '../portal-connectors/portal-connector.service';
 import {
@@ -274,6 +274,107 @@ export class PolicyRegistryService {
       this.logger.error(`hardDelete policy ${policyId} failed: ${err.message}`, err.stack);
       throw err;
     });
+  }
+
+  // Dashboard Pinning (BugFix-06, Teil 4)
+  //
+  // Policies can be pinned to the dashboard per household. The pin is stored
+  // on the policy itself (nullable `pinnedAt`), so all household members see
+  // the same pin state; READ_ONLY members only see policies that were shared
+  // with them (same rule as findAll).
+
+  async findPinned(householdId: string, user: AuthenticatedUser) {
+    await this.assertHouseholdAccess(householdId, user.id);
+
+    const readableIds = await this.authService.getReadablePolicyIds(user, householdId);
+    const where =
+      user.role === GlobalRole.READ_ONLY && readableIds
+        ? { householdId, archivedAt: null, pinnedAt: { not: null }, id: { in: readableIds } }
+        : { householdId, archivedAt: null, pinnedAt: { not: null } };
+
+    const policies = await this.db.insurancePolicy.findMany({
+      where,
+      include: {
+        coveredPersons: true,
+        portalLinks: true,
+      },
+      orderBy: { pinnedAt: 'desc' },
+    });
+
+    return policies.map((policy) => this.withEnrichedPortalLinks(policy));
+  }
+
+  async pin(householdId: string, userId: string, policyId: string) {
+    await this.assertHouseholdAccess(householdId, userId);
+
+    const existing = await this.db.insurancePolicy.findFirst({
+      where: { id: policyId, householdId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Versicherung nicht gefunden');
+    }
+
+    const pinnedAt = new Date();
+    return this.db.$transaction(async (tx) => {
+      const policy = await tx.insurancePolicy.update({
+        where: { id: policyId },
+        data: { pinnedAt },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'InsurancePolicy',
+          entityId: policyId,
+          action: 'PIN',
+          diffJson: { pinnedAt: pinnedAt.toISOString() },
+        },
+      });
+
+      return policy;
+    });
+  }
+
+  async unpin(householdId: string, userId: string, policyId: string) {
+    await this.assertHouseholdAccess(householdId, userId);
+
+    const existing = await this.db.insurancePolicy.findFirst({
+      where: { id: policyId, householdId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Versicherung nicht gefunden');
+    }
+
+    return this.db.$transaction(async (tx) => {
+      const policy = await tx.insurancePolicy.update({
+        where: { id: policyId },
+        data: { pinnedAt: null },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          entityType: 'InsurancePolicy',
+          entityId: policyId,
+          action: 'UNPIN',
+          diffJson: {},
+        },
+      });
+
+      return policy;
+    });
+  }
+
+  /** AP-18: Portal-Links anreichern (Deeplink-Aufloesung, Katalog-/Connector-Sicht). */
+  private withEnrichedPortalLinks(policy: { contractNumber: string | null; portalLinks: PortalAccountLink[] }) {
+    return {
+      ...policy,
+      portalLinks: policy.portalLinks.map((link) =>
+        this.portalConnectors.enrichPortalLink(link, policy.contractNumber),
+      ),
+    };
   }
 
   // Covered Persons

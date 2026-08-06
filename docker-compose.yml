@@ -9,9 +9,9 @@ services:
     image: docker.io/postgres:16.4-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB muss gesetzt sein}
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER muss gesetzt sein}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss gesetzt sein}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -52,7 +52,7 @@ services:
     image: versigo-api:latest
     entrypoint: []
     environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL muss gesetzt sein}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       NODE_ENV: ${NODE_ENV:-production}
     command: ["node", "-e", "\
       const { execSync } = require('child_process'); \
@@ -79,29 +79,29 @@ services:
     environment:
       APP_PORT: "3001"
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL muss gesetzt sein}
-      REDIS_URL: ${REDIS_URL:?REDIS_URL muss gesetzt sein}
-      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET muss gesetzt sein}
-      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY muss gesetzt sein}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL must be set}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY must be set}
       STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
       DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
-      # AP-16: Nur hinter einem vertrauenswuerdigen Reverse-Proxy auf true setzen
-      # (sonst faellt req.ip hinter dem Proxy auf die Proxy-IP zurueck und die
-      # per-IP-Rate-Limits sperren alle Clients global).
+      # AP-16: Only set to true behind a trusted reverse proxy
+      # (otherwise req.ip falls back to the proxy IP behind the proxy and the
+      # per-IP rate limits would lock out all clients globally).
       TRUST_PROXY: "${TRUST_PROXY:-false}"
-      # AP-20: Secure-Flag des Session-Cookies. Default: true in Produktion
-      # (abgeleitet aus NODE_ENV). Nur explizit setzen, wenn die API kontrolliert
-      # ueber reines HTTP bedient wird (TLS-terminierender Reverse-Proxy oder
-      # kontrollierte interne Installation).
+      # AP-20: Secure flag of the session cookie. Default: true in production
+      # (derived from NODE_ENV). Only set explicitly when the API is served
+      # deliberately over plain HTTP (TLS-terminating reverse proxy or
+      # controlled internal installation).
       COOKIE_SECURE: "${COOKIE_SECURE:-}"
-      # AP-16: Erlaubte Browser-Origins fuer CORS (Komma-separierte Liste).
+      # AP-16: Allowed browser origins for CORS (comma-separated list).
       CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
-      # Auth-Flags werden nur durchgereicht, wenn gesetzt; die Default-
-      # Aufloesung (lokale Auth aktiv im Dev-Modus) uebernimmt die App.
+      # Auth flags are only passed through when set; the default
+      # resolution (local auth active in dev mode) is done by the app.
       LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
       LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
       LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
-      # Initialer lokaler Administrator (nur lokale Entwicklung)
+      # Initial local administrator (local development only)
       LOCAL_ADMIN_USERNAME: "${LOCAL_ADMIN_USERNAME:-}"
       LOCAL_ADMIN_PASSWORD: "${LOCAL_ADMIN_PASSWORD:-}"
       OIDC_ENABLED: "${OIDC_ENABLED:-}"
@@ -114,6 +114,11 @@ services:
       PAPERLESS_ENABLED: "${PAPERLESS_ENABLED:-false}"
       PAPERLESS_URL: ${PAPERLESS_URL:-}
       PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-}
+      # BugFix-06 (Teil 2): SSRF/TLS relaxation for the connectivity test,
+      # OIDC discovery, AI providers and Paperless-ngx. Opt-in, off by default
+      # (strict SSRF protection; cloud metadata 169.254.169.254 stays blocked).
+      CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS: "${CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS:-false}"
+      CONNECTIVITY_ALLOW_SELF_SIGNED: "${CONNECTIVITY_ALLOW_SELF_SIGNED:-false}"
     ports:
       - "${APP_PORT:-3001}:3001"
     volumes:
@@ -143,14 +148,14 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL muss gesetzt sein}
-      REDIS_URL: ${REDIS_URL:?REDIS_URL muss gesetzt sein}
-      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET muss gesetzt sein}
-      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY muss gesetzt sein}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL must be set}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY must be set}
       STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
       DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
-      # Auth-Flags werden konsistent zur API durchgereicht (die Default-
-      # Aufloesung uebernimmt die App).
+      # Auth flags are passed through consistently to the API (the default
+      # resolution is done by the app).
       LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
       LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
       LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
@@ -158,14 +163,18 @@ services:
       OIDC_ENABLED: "${OIDC_ENABLED:-}"
       AI_ENABLED: "${AI_ENABLED:-false}"
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
-      # AP-19: Worker-Health (Liveness-Port + Heartbeat-Intervall/Timeout)
+      # BugFix-06 (Teil 2): Same connectivity relaxation flags as the API
+      # (AI providers run in the worker too); opt-in, off by default.
+      CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS: "${CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS:-false}"
+      CONNECTIVITY_ALLOW_SELF_SIGNED: "${CONNECTIVITY_ALLOW_SELF_SIGNED:-false}"
+      # AP-19: Worker health (liveness port + heartbeat interval/timeout)
       WORKER_HEALTH_PORT: "${WORKER_HEALTH_PORT:-3100}"
       WORKER_HEARTBEAT_INTERVAL_MS: "${WORKER_HEARTBEAT_INTERVAL_MS:-15000}"
       WORKER_HEARTBEAT_TIMEOUT_MS: "${WORKER_HEARTBEAT_TIMEOUT_MS:-45000}"
-    # Kein Host-Port-Mapping: Der Worker-Liveness-Port (3100) wird bewusst
-    # NICHT auf den Host veroeffentlicht (nur Web 3000 + API 3001 sind
-    # oeffentliche Ports, siehe docs/07-security-privacy.md). Der Compose-
-    # Healthcheck und der Smoke-Test pruefen ihn im Container.
+    # No host port mapping: the worker liveness port (3100) is deliberately
+    # NOT published to the host (only web 3000 + API 3001 are public ports,
+    # see docs/07-security-privacy.md). The Compose healthcheck and the smoke
+    # test check it inside the container.
     volumes:
       - uploads-data:/data/uploads
     networks:
@@ -222,8 +231,8 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER muss gesetzt sein}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD muss gesetzt sein}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
     volumes:
       - minio-data:/data
     networks:

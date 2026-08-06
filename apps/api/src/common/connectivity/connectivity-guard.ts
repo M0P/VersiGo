@@ -74,32 +74,41 @@ export function isBlockedIpv4(ip: string): boolean {
   return BLOCKED_IPV4_RANGES.some(([start, end]) => numeric >= start && numeric <= end);
 }
 
+/**
+ * Extracts the embedded IPv4 address of an IPv4-mapped IPv6 literal
+ * (`::ffff:127.0.0.1` dotted-quad or the canonical hex form `::ffff:7f00:1`,
+ * which Node.js `URL.hostname` rewrites to dotted-quad). Returns null for
+ * anything that is not an IPv4-mapped IPv6 literal.
+ */
+export function extractMappedIpv4(ip: string): string | null {
+  const normalized = ip.toLowerCase();
+  const mapped = /^::ffff:(.+)$/.exec(normalized);
+  if (!mapped) return null;
+  const embedded = mapped[1];
+  if (embedded.includes('.')) {
+    return isIP(embedded) === 4 ? embedded : null;
+  }
+  const [hi, lo] = embedded.split(':');
+  if (hi === undefined || lo === undefined) return null;
+  const a = parseInt(hi || '0', 16);
+  const b = parseInt(lo || '0', 16);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return `${(a >> 8) & 0xff}.${a & 0xff}.${(b >> 8) & 0xff}.${b & 0xff}`;
+}
+
 /** Gesperrt ein IPv6-Literal? (Loopback, ULA, Link-Local, Multicast, unspecified, IPv4-mapped) */
 export function isBlockedIpv6(ip: string): boolean {
   const normalized = ip.toLowerCase();
   if (normalized === '::' || normalized === '::1') return true;
 
-  // IPv4-mapped IPv6: `::ffff:127.0.0.1` (Dotted-Quad) oder die kanonische
-  // Hex-Form `::ffff:7f00:1`, in die Node.js `URL.hostname` die Dotted-Quad-
-  // Variante umschreibt. Die eingebettete IPv4-Adresse muss gegen die
-  // IPv4-Blockliste geprueft werden.
-  const mapped = /^::ffff:(.+)$/.exec(normalized);
-  if (mapped) {
-    const embedded = mapped[1];
-    if (embedded.includes('.')) {
-      return isBlockedIpv4(embedded);
-    }
-    const [hi, lo] = embedded.split(':');
-    if (hi !== undefined && lo !== undefined) {
-      const a = parseInt(hi || '0', 16);
-      const b = parseInt(lo || '0', 16);
-      if (!Number.isNaN(a) && !Number.isNaN(b)) {
-        const dotted = `${(a >> 8) & 0xff}.${a & 0xff}.${(b >> 8) & 0xff}.${b & 0xff}`;
-        return isBlockedIpv4(dotted);
-      }
-    }
-    // Ungewoehnliche ::ffff:-Form (z. B. IPv4-kompatibel, veraltet):
-    // konservativ blockieren.
+  // IPv4-mapped IPv6: Die eingebettete IPv4-Adresse muss gegen die
+  // IPv4-Blockliste geprueft werden. Ungewoehnliche ::ffff:-Formen
+  // (z. B. IPv4-kompatibel, veraltet) werden konservativ blockiert.
+  const mappedIpv4 = extractMappedIpv4(normalized);
+  if (mappedIpv4 !== null) {
+    return isBlockedIpv4(mappedIpv4);
+  }
+  if (/^::ffff:/.test(normalized)) {
     return true;
   }
 
@@ -131,11 +140,65 @@ export function isBlockedHostname(hostname: string): boolean {
 }
 
 /**
+ * Cloud-Metadata-Adressen, die AUCH bei aktivierter SSRF-Lockerung
+ * (`CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS`) gesperrt bleiben. Die Cloud-
+ * Metadata-Endpunkte (AWS/GCP/Azure: 169.254.169.254, AWS IPv6
+ * fd00:ec2::254) sind das primaere SSRF-Ziel – ein Endanwender, der
+ * lokale Dienste testen will, muss sie niemals erreichen.
+ */
+const METADATA_IPV4 = 0xa9fea9fe; // 169.254.169.254
+
+/** Cloud-Metadata-Adresse (IPv4-Literal)? */
+export function isCloudMetadataIpv4(ip: string): boolean {
+  return ipv4ToUint32(ip) === METADATA_IPV4;
+}
+
+/** Cloud-Metadata-Adresse (IPv6-Literal inkl. IPv4-mapped-Formen)? */
+export function isCloudMetadataIpv6(ip: string): boolean {
+  const normalized = ip.toLowerCase();
+  if (normalized === 'fd00:ec2::254') return true;
+  // IPv4-mapped IPv6 (`::ffff:169.254.169.254` / `::ffff:a9fe:a9fe`)
+  // zielt ueber IPv4-mapped-Sockets auf die Metadata-Adresse und muss
+  // daher ebenfalls als Metadata behandelt werden.
+  const mappedIpv4 = extractMappedIpv4(normalized);
+  return mappedIpv4 !== null && isCloudMetadataIpv4(mappedIpv4);
+}
+
+/** Cloud-Metadata-Adresse (Literale beider Familien)? */
+export function isCloudMetadataAddress(address: string): boolean {
+  const version = isIP(address);
+  if (version === 4) return isCloudMetadataIpv4(address);
+  if (version === 6) return isCloudMetadataIpv6(address);
+  return false;
+}
+
+/**
+ * Opt-in-Optionen fuer den Connectivity-Test (BugFix-06). Die Lockerung
+ * wird ausschliesslich ueber die Admin-Einstellungen
+ * `CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS` / `CONNECTIVITY_ALLOW_SELF_SIGNED`
+ * aktiviert; der sichere Default bleibt strikt.
+ */
+export interface EndpointSafetyOptions {
+  /**
+   * Erlaubt lokale/private Endpunkte (RFC-1918, Loopback, Link-Local,
+   * CGNAT, lokale Hostnamen wie localhost / *.local / *.home / *.internal).
+   * Cloud-Metadata (169.254.169.254, fd00:ec2::254) bleibt IMMER gesperrt.
+   */
+  allowPrivate?: boolean;
+}
+
+/**
  * Prueft eine Endpunkt-URL auf SSRF-Sicherheit. Wirft `UnsafeEndpointError`
  * fuer nicht-http(s)-Protokolle, gesperrte IP-Literale, lokale Hostnamen und
  * DNS-Namen, die auf gesperrte Adressen aufloesen. Liefert bei Erfolg nichts.
+ *
+ * Mit `{ allowPrivate: true }` (explizite Admin-Opt-in) werden lokale/private
+ * Endpunkte zugelassen; die Cloud-Metadata-Blockliste gilt unveraendert.
  */
-export async function assertSafeTestEndpoint(rawUrl: string): Promise<void> {
+export async function assertSafeTestEndpoint(
+  rawUrl: string,
+  options: EndpointSafetyOptions = {},
+): Promise<void> {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -148,11 +211,6 @@ export async function assertSafeTestEndpoint(rawUrl: string): Promise<void> {
   }
 
   const hostname = parsed.hostname.toLowerCase();
-  if (isBlockedHostname(hostname)) {
-    throw new UnsafeEndpointError(
-      `Hostname '${hostname}' ist lokal/intern und fuer Connectivity-Tests gesperrt`,
-    );
-  }
 
   // IPv6-Literale liefert `URL.hostname` inkl. eckiger Klammern ([::1]) –
   // vor der Literal-Pruefung entfernen, damit sie nicht als DNS-Name
@@ -161,7 +219,44 @@ export async function assertSafeTestEndpoint(rawUrl: string): Promise<void> {
     ? hostname.slice(1, -1)
     : hostname;
 
-  if (isIP(literal)) {
+  const isLiteral = isIP(literal) !== 0;
+
+  if (options.allowPrivate) {
+    // Lockerungsmodus (BugFix-06, Teil 2): lokale/private Endpunkte sind
+    // erlaubt, nur die Cloud-Metadata-Adressen bleiben gesperrt.
+    if (isLiteral) {
+      if (isCloudMetadataAddress(literal)) {
+        throw new UnsafeEndpointError(
+          `Adresse '${literal}' ist eine gesperrte Cloud-Metadata-Adresse`,
+        );
+      }
+      return;
+    }
+    let addresses: { address: string; family: number }[];
+    try {
+      addresses = await lookup(hostname, { all: true });
+    } catch {
+      // Aufloesung fehlgeschlagen: der nachfolgende fetch-Fehler liefert die Meldung.
+      return;
+    }
+    for (const { address } of addresses) {
+      if (isCloudMetadataAddress(address)) {
+        throw new UnsafeEndpointError(
+          `Hostname '${hostname}' loest auf die gesperrte Cloud-Metadata-Adresse auf`,
+        );
+      }
+    }
+    return;
+  }
+
+  // Striker Modus (Default): bisheriges SSRF-Schutzverhalten.
+  if (isBlockedHostname(hostname)) {
+    throw new UnsafeEndpointError(
+      `Hostname '${hostname}' ist lokal/intern und fuer Connectivity-Tests gesperrt`,
+    );
+  }
+
+  if (isLiteral) {
     if (isBlockedAddress(literal)) {
       throw new UnsafeEndpointError(
         `Adresse '${literal}' liegt in einem gesperrten Bereich (lokal/privat/metadata)`,

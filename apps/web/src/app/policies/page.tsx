@@ -19,6 +19,7 @@ type Policy = {
   status: string;
   premiumAmount: number | null;
   startDate: string;
+  pinnedAt: string | null;
 };
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
@@ -30,6 +31,7 @@ export default function PolicyListPage(): ReactElement {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pinningId, setPinningId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/households/default/policies`, { credentials: 'include' })
@@ -42,6 +44,26 @@ export default function PolicyListPage(): ReactElement {
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [t]);
+
+  // Pin/Unpin toggle (BugFix-06, Teil 4): optimistisch mit Rueckfall auf den
+  // Fehlerzustand – kein setState nach abgelaufenen Requests (Sequenz-Schutz).
+  const togglePin = async (policy: Policy) => {
+    const pinned = policy.pinnedAt != null;
+    setPinningId(policy.id);
+    try {
+      const res = await fetch(`${API_BASE}/households/default/policies/${policy.id}/pin`, {
+        method: pinned ? 'DELETE' : 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(t('policies.pinError'));
+      const updated = await res.json();
+      setPolicies((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('policies.pinError'));
+    } finally {
+      setPinningId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -78,6 +100,7 @@ export default function PolicyListPage(): ReactElement {
         <div className="split-layout">
           {policies.map((p) => (
             <Card key={p.id}>
+              {p.pinnedAt != null && <span className="badge badge-primary">{t('policies.pinned')}</span>}
               <h3>{p.insurerName}</h3>
               <p className="text-sm text-muted">{p.type}</p>
               <p className="text-sm">
@@ -89,10 +112,18 @@ export default function PolicyListPage(): ReactElement {
               {p.premiumAmount != null && (
                 <p className="text-sm">{t('policies.premium')}: {formatCurrency(p.premiumAmount, language)}</p>
               )}
-              <div style={{ marginTop: 'var(--versigo-space-3)' }}>
+              <div style={{ marginTop: 'var(--versigo-space-3)', display: 'flex', gap: 'var(--versigo-space-2)' }}>
                 <a href={`/policies/${p.id}`}>
                   <Button variant="secondary" size="sm">{t('policies.details')}</Button>
                 </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => togglePin(p)}
+                  disabled={pinningId === p.id}
+                >
+                  {p.pinnedAt != null ? t('policies.unpin') : t('policies.pin')}
+                </Button>
               </div>
             </Card>
           ))}

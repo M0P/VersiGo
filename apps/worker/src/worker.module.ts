@@ -6,6 +6,7 @@ import {
   EncryptionModule,
   CapabilityFlagsModule,
   QueueFoundationModule,
+  RestartFoundationModule,
   SettingsFoundationModule,
   WorkerHealthFoundationModule,
 } from '@versigo/foundation';
@@ -22,6 +23,7 @@ import { AiExtractionProcessor } from './ai-extraction.processor';
     EncryptionModule,
     CapabilityFlagsModule,
     QueueFoundationModule,
+    RestartFoundationModule,
     SettingsFoundationModule,
     WorkerHealthFoundationModule,
 

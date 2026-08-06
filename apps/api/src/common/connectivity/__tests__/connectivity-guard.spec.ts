@@ -7,6 +7,7 @@ import {
   assertSafeTestEndpoint,
   isBlockedIpv4,
   isBlockedIpv6,
+  isCloudMetadataAddress,
   UnsafeEndpointError,
 } from '../connectivity-guard';
 
@@ -107,5 +108,100 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
     expect(isBlockedIpv6('::ffff:7f00:1')).toBe(true);
     expect(isBlockedIpv6('::ffff:8.8.8.8')).toBe(false);
     expect(isBlockedIpv6('::ffff:808:808')).toBe(false);
+  });
+});
+
+describe('connectivity-guard (BugFix-06: opt-in Lockerung)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('isCloudMetadataAddress erkennt die Metadata-Literale beider Familien', () => {
+    expect(isCloudMetadataAddress('169.254.169.254')).toBe(true);
+    expect(isCloudMetadataAddress('fd00:ec2::254')).toBe(true);
+    expect(isCloudMetadataAddress('192.168.1.1')).toBe(false);
+    expect(isCloudMetadataAddress('127.0.0.1')).toBe(false);
+    // IPv4-mapped IPv6-Formen der Metadata-Adresse (BugFix-06 High-Fix)
+    expect(isCloudMetadataAddress('::ffff:169.254.169.254')).toBe(true);
+    expect(isCloudMetadataAddress('::ffff:a9fe:a9fe')).toBe(true);
+  });
+
+  it('allowPrivate=true erlaubt private/lokale IPv4-Literale', async () => {
+    const allowed = [
+      'http://192.168.24.8:8010/api', // Paperless im LAN (Fehlerbild des Nutzers)
+      'http://10.0.0.5/',
+      'http://172.16.0.1/',
+      'http://127.0.0.1:11434/', // Ollama localhost
+      'http://100.64.0.1/',
+    ];
+    for (const url of allowed) {
+      await expect(
+        assertSafeTestEndpoint(url, { allowPrivate: true }),
+      ).resolves.toBeUndefined();
+    }
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('allowPrivate=true erlaubt lokale Hostnamen (DNS-Aufloesung egal)', async () => {
+    lookup.mockResolvedValue([{ address: '192.168.1.50', family: 4 }]);
+    await expect(
+      assertSafeTestEndpoint('http://papierkram.home:8010/api', { allowPrivate: true }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertSafeTestEndpoint('http://printer.local/', { allowPrivate: true }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertSafeTestEndpoint('http://localhost:11434/', { allowPrivate: true }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('allowPrivate=true blockiert die Cloud-Metadata-Adresse weiterhin', async () => {
+    await expect(
+      assertSafeTestEndpoint('http://169.254.169.254/latest/meta-data/', {
+        allowPrivate: true,
+      }),
+    ).rejects.toThrow(UnsafeEndpointError);
+    await expect(
+      assertSafeTestEndpoint('http://[fd00:ec2::254]/', { allowPrivate: true }),
+    ).rejects.toThrow(UnsafeEndpointError);
+    // IPv4-mapped IPv6-Formen der Metadata-Adresse muessen auch im
+    // Lockerungsmodus gesperrt bleiben (BugFix-06 High-Fix).
+    await expect(
+      assertSafeTestEndpoint('http://[::ffff:169.254.169.254]/latest/meta-data/', {
+        allowPrivate: true,
+      }),
+    ).rejects.toThrow(UnsafeEndpointError);
+    await expect(
+      assertSafeTestEndpoint('http://[::ffff:a9fe:a9fe]/', { allowPrivate: true }),
+    ).rejects.toThrow(UnsafeEndpointError);
+  });
+
+  it('allowPrivate=true blockiert DNS-Namen, die auf Metadata aufloesen', async () => {
+    lookup.mockResolvedValue([{ address: '169.254.169.254', family: 4 }]);
+    await expect(
+      assertSafeTestEndpoint('https://metadata.example.com/', { allowPrivate: true }),
+    ).rejects.toThrow(UnsafeEndpointError);
+    expect(lookup).toHaveBeenCalled();
+  });
+
+  it('allowPrivate=true blockiert DNS-Namen, die auf IPv4-mapped Metadata aufloesen', async () => {
+    lookup.mockResolvedValue([{ address: '::ffff:a9fe:a9fe', family: 6 }]);
+    await expect(
+      assertSafeTestEndpoint('https://metadata-v6.example.com/', { allowPrivate: true }),
+    ).rejects.toThrow(UnsafeEndpointError);
+    expect(lookup).toHaveBeenCalled();
+  });
+
+  it('ohne allowPrivate bleibt das strikte Standardverhalten unveraendert', async () => {
+    await expect(assertSafeTestEndpoint('http://192.168.24.8:8010/')).rejects.toThrow(
+      UnsafeEndpointError,
+    );
+    await expect(assertSafeTestEndpoint('http://127.0.0.1:11434/')).rejects.toThrow(
+      UnsafeEndpointError,
+    );
+    await expect(assertSafeTestEndpoint('http://localhost/')).rejects.toThrow(
+      UnsafeEndpointError,
+    );
+    await expect(assertSafeTestEndpoint('http://8.8.8.8/')).resolves.toBeUndefined();
   });
 });
