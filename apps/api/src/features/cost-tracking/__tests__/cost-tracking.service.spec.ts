@@ -10,11 +10,13 @@ function createMockDb() {
     insurancePolicy: { findFirst: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
     policyCostEntry: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
     auditEvent: { create: ReturnType<typeof vi.fn> };
+    objectShare: { findMany: ReturnType<typeof vi.fn> };
   } = {
     householdMembership: { findUnique: vi.fn() },
     insurancePolicy: { findFirst: vi.fn(), findMany: vi.fn() },
     policyCostEntry: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), delete: vi.fn() },
     auditEvent: { create: vi.fn() },
+    objectShare: { findMany: vi.fn() },
   };
   db.$transaction = vi.fn((cb: (tx: typeof db) => unknown) => cb(db));
   return db;
@@ -46,10 +48,18 @@ describe('CostTrackingService', () => {
     );
   });
 
+  function mockMembership() {
+    mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+  }
+
+  function mockPolicy(policy: Record<string, unknown> = {}) {
+    mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, ...policy });
+  }
+
   describe('create', () => {
     it('erstellt eine Kostenposition und protokolliert Audit', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockMembership();
+      mockPolicy();
       mockDb.policyCostEntry.create.mockResolvedValue({
         id: entryId,
         policyId,
@@ -75,6 +85,58 @@ describe('CostTrackingService', () => {
       );
     });
 
+    it('BugFix-08: beendet den Vorgaenger automatisch bei Kosten-Erhoehung (validFrom)', async () => {
+      mockMembership();
+      mockPolicy();
+      // Bestehender Eintrag ab 01.01.2024 (offen), neue Erhoehung ab 01.01.2025.
+      // findMany spiegelt die Sicht der interaktiven Transaktion wider: Der
+      // eben erzeugte Eintrag ist bereits sichtbar und darf NICHT als sein
+      // eigener Vorgaenger beendet werden.
+      mockDb.policyCostEntry.create.mockResolvedValue({
+        id: entryId,
+        policyId,
+        validFrom: new Date('2025-01-01'),
+        grossAmount: 150,
+        frequency: 'MONTHLY',
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 100,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2024-01-01'),
+          validTo: null,
+        },
+        {
+          id: entryId,
+          grossAmount: 150,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2025-01-01'),
+          validTo: null,
+        },
+      ]);
+
+      await service.create(householdId, userId, policyId, {
+        validFrom: '2025-01-01',
+        grossAmount: 150,
+        frequency: PaymentFrequency.MONTHLY,
+      });
+
+      // Vorgaenger (c1) wird auf letzte Millisekunde vor dem neuen validFrom
+      // gesetzt – NICHT der neu erzeugte Eintrag selbst.
+      expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c1' },
+          data: expect.objectContaining({ validTo: new Date('2024-12-31T23:59:59.999Z') }),
+        }),
+      );
+      expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ diffJson: expect.objectContaining({ predecessorEnded: true }) }),
+        }),
+      );
+    });
+
     it('verweigert Erstellung ohne Household-Mitgliedschaft', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
@@ -88,7 +150,7 @@ describe('CostTrackingService', () => {
     });
 
     it('verweigert Erstellung bei fehlender Policy', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockMembership();
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -101,13 +163,27 @@ describe('CostTrackingService', () => {
     });
 
     it('verweigert Erstellung bei validTo <= validFrom', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockMembership();
+      mockPolicy();
 
       await expect(
         service.create(householdId, userId, policyId, {
           validFrom: '2025-06-01',
           validTo: '2025-01-01',
+          grossAmount: 100,
+          frequency: PaymentFrequency.MONTHLY,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('verweigert Erstellung bei doppeltem validFrom', async () => {
+      mockMembership();
+      mockPolicy();
+      mockDb.policyCostEntry.findFirst.mockResolvedValue({ id: 'c1' });
+
+      await expect(
+        service.create(householdId, userId, policyId, {
+          validFrom: '2025-01-01',
           grossAmount: 100,
           frequency: PaymentFrequency.MONTHLY,
         }),
@@ -162,9 +238,14 @@ describe('CostTrackingService', () => {
 
   describe('update', () => {
     it('aktualisiert einen CostEntry und protokolliert Audit', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'ADMIN' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue({ id: entryId, policyId });
+      mockMembership();
+      mockPolicy();
+      mockDb.policyCostEntry.findFirst.mockResolvedValue({
+        id: entryId,
+        policyId,
+        validFrom: new Date('2025-01-01'),
+        validTo: null,
+      });
       mockDb.policyCostEntry.update.mockResolvedValue({
         id: entryId,
         grossAmount: 1500,
@@ -184,8 +265,8 @@ describe('CostTrackingService', () => {
     });
 
     it('verweigert Aktualisierung bei validTo <= validFrom', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'ADMIN' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockMembership();
+      mockPolicy();
       mockDb.policyCostEntry.findFirst.mockResolvedValue({
         id: entryId,
         policyId,
@@ -201,13 +282,214 @@ describe('CostTrackingService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('BugFix-08: synchronisiert den Vorgaenger bei validFrom-Aenderung neu', async () => {
+      mockMembership();
+      mockPolicy();
+      // findFirst: 1) bearbeiteter Eintrag, 2) Kollisionscheck, 3) restorePredecessor.
+      mockDb.policyCostEntry.findFirst
+        .mockResolvedValueOnce({
+          id: entryId,
+          policyId,
+          validFrom: new Date('2025-06-01'),
+          validTo: null,
+          grossAmount: 150,
+          frequency: 'MONTHLY',
+        })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockDb.policyCostEntry.update.mockResolvedValue({
+        id: entryId,
+        grossAmount: 150,
+        frequency: 'MONTHLY',
+      });
+      // findMany spiegelt die Transaktionssicht: auch der bearbeitete Eintrag
+      // ist sichtbar und darf NICHT als sein eigener Vorgaenger beendet werden.
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 100,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2024-01-01'),
+          validTo: null,
+        },
+        {
+          id: entryId,
+          grossAmount: 150,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2025-06-01'),
+          validTo: null,
+        },
+      ]);
+
+      await service.update(householdId, userId, policyId, entryId, {
+        validFrom: '2025-07-01',
+      });
+
+      // c1 wird auf letzte Millisekunde vor dem neuen validFrom beendet –
+      // nicht der bearbeitete Eintrag selbst.
+      expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c1' },
+          data: expect.objectContaining({ validTo: new Date('2025-06-30T23:59:59.999Z') }),
+        }),
+      );
+    });
+
+    it('BugFix-08: validFrom nach hinten verschoben schliesst die Luecke (Vorgaenger wird wieder geoeffnet)', async () => {
+      mockMembership();
+      mockPolicy();
+      // findFirst: 1) bearbeiteter Eintrag, 2) Kollisionscheck, 3) restorePredecessor.
+      mockDb.policyCostEntry.findFirst
+        .mockResolvedValueOnce({
+          id: entryId,
+          policyId,
+          validFrom: new Date('2025-01-01'),
+          validTo: null,
+          grossAmount: 150,
+          frequency: 'MONTHLY',
+        })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'c1' });
+      // update: 1) Eintrag selbst, 2) c1 wieder geoeffnet, 3) c1 am neuen validFrom beendet.
+      mockDb.policyCostEntry.update
+        .mockResolvedValueOnce({ id: entryId, grossAmount: 150, frequency: 'MONTHLY' })
+        .mockResolvedValueOnce({ id: 'c1', validTo: null })
+        .mockResolvedValueOnce({ id: 'c1', validTo: new Date('2026-12-31T23:59:59.999Z') });
+      // Transaktionssicht NACH restorePredecessor: c1 ist wieder geoeffnet
+      // (validTo null) und existiert neben dem bearbeiteten Eintrag c2.
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          grossAmount: 100,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2024-01-01'),
+          validTo: null,
+        },
+        {
+          id: entryId,
+          grossAmount: 150,
+          frequency: 'MONTHLY',
+          validFrom: new Date('2025-01-01'),
+          validTo: null,
+        },
+      ]);
+
+      await service.update(householdId, userId, policyId, entryId, {
+        validFrom: '2027-01-01',
+      });
+
+      // 1) c1 wird zuerst wieder geoeffnet (kein Zeitraum ohne Eintrag) ...
+      expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c1' },
+          data: expect.objectContaining({ validTo: null }),
+        }),
+      );
+      // 2) ... und anschliessend am NEUEN validFrom beendet (deckt 2025+2026 ab).
+      expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c1' },
+          data: expect.objectContaining({ validTo: new Date('2026-12-31T23:59:59.999Z') }),
+        }),
+      );
+    });
+
+    it('BugFix-08: validFrom hinter eigenes auto-beendetes validTo verschoben entfernt das veraltete validTo (Middle-Entry, Review 3)', async () => {
+      mockMembership();
+      mockPolicy();
+      // c2 wurde durch c3 automatisch beendet: validTo = 2025-05-31T23:59:59.999.
+      // findFirst: 1) bearbeiteter Eintrag, 2) Auto-End-Signatur (c3 beginnt
+      // 1ms nach c2.validTo), 3) Kollisionscheck, 4) restorePredecessor.
+      mockDb.policyCostEntry.findFirst
+        .mockResolvedValueOnce({
+          id: entryId,
+          policyId,
+          validFrom: new Date('2025-01-01'),
+          validTo: new Date('2025-05-31T23:59:59.999Z'),
+          grossAmount: 150,
+          frequency: 'MONTHLY',
+        })
+        .mockResolvedValueOnce({ id: 'c3' })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'c1' });
+      // update: 1) c2 selbst (veraltetes validTo entfernt), 2) c1 wieder
+      // geoeffnet, 3) c3 am neuen validFrom beendet.
+      mockDb.policyCostEntry.update
+        .mockResolvedValueOnce({ id: entryId, grossAmount: 150, frequency: 'MONTHLY', validTo: null })
+        .mockResolvedValueOnce({ id: 'c1', validTo: null })
+        .mockResolvedValueOnce({ id: 'c3', validTo: new Date('2025-12-31T23:59:59.999Z') });
+      // Transaktionssicht nach restorePredecessor: c1 offen, c2 ausgeschlossen,
+      // c3 offen.
+      mockDb.policyCostEntry.findMany.mockResolvedValue([
+        { id: 'c1', grossAmount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: null },
+        { id: entryId, grossAmount: 150, frequency: 'MONTHLY', validFrom: new Date('2025-01-01'), validTo: null },
+        { id: 'c3', grossAmount: 200, frequency: 'MONTHLY', validFrom: new Date('2025-06-01'), validTo: null },
+      ]);
+
+      await service.update(householdId, userId, policyId, entryId, {
+        validFrom: '2026-01-01',
+      });
+
+      // 1) c2: das veraltete (auto-beendete) validTo entfaellt – der Eintrag
+      // ist ab dem neuen validFrom aktiv.
+      expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: entryId },
+          data: expect.objectContaining({ validFrom: new Date('2026-01-01'), validTo: null }),
+        }),
+      );
+      // 2) c1 wird wieder geoeffnet (deckt bis zur naechsten Erhoehung).
+      expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'c1' }, data: expect.objectContaining({ validTo: null }) }),
+      );
+      // 3) c3 wird am neuen validFrom beendet – kein Zeitraum ohne Eintrag.
+      expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c3' },
+          data: expect.objectContaining({ validTo: new Date('2025-12-31T23:59:59.999Z') }),
+        }),
+      );
+    });
+
+    it('BugFix-08: manuell gesetztes validTo wird bei validFrom-Verschiebung nicht stillschweigend entfernt (Review 4)', async () => {
+      mockMembership();
+      mockPolicy();
+      // Manuell gesetztes validTo (2025-06-30) OHNE Nachfolger-Signatur:
+      // kein Eintrag beginnt exakt 1ms spaeter (2025-07-01).
+      mockDb.policyCostEntry.findFirst
+        .mockResolvedValueOnce({
+          id: entryId,
+          policyId,
+          validFrom: new Date('2025-01-01'),
+          validTo: new Date('2025-06-30'),
+          grossAmount: 150,
+          frequency: 'MONTHLY',
+        })
+        .mockResolvedValueOnce(null);
+
+      await expect(
+        service.update(householdId, userId, policyId, entryId, {
+          validFrom: '2026-01-01',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('remove', () => {
     it('loescht einen CostEntry und protokolliert Audit', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue({ id: entryId, policyId });
+      mockMembership();
+      mockPolicy();
+      // findFirst: 1) zu loeschender Eintrag, 2) restorePredecessor (keiner beendet).
+      mockDb.policyCostEntry.findFirst
+        .mockResolvedValueOnce({
+          id: entryId,
+          policyId,
+          validFrom: new Date('2025-01-01'),
+          grossAmount: 100,
+          frequency: 'MONTHLY',
+        })
+        .mockResolvedValueOnce(null);
       mockDb.policyCostEntry.delete.mockResolvedValue({ id: entryId });
 
       const result = await service.remove(householdId, userId, policyId, entryId);
@@ -222,297 +504,277 @@ describe('CostTrackingService', () => {
         }),
       );
     });
-  });
 
-  describe('getAnnualCost', () => {
-    it('berechnet Jahreskosten bei MONTHLY-Frequenz', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue({
-        id: entryId,
-        policyId,
-        grossAmount: 100,
-        netAmount: 90,
-        frequency: 'MONTHLY',
-        validFrom: new Date('2024-01-01'),
-        validTo: null,
-      });
-
-      const result = await service.getAnnualCost(householdId, user, policyId);
-
-      expect(result).not.toBeNull();
-      expect(result!.annualGross).toBe(1200);
-      expect(result!.annualNet).toBe(1080);
-      expect(result!.calculationBasis.frequency).toBe('MONTHLY');
-    });
-
-    it('berechnet Jahreskosten bei ANNUAL-Frequenz', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue({
-        id: entryId,
-        policyId,
-        grossAmount: 5000,
-        netAmount: 4800,
-        frequency: 'ANNUAL',
-        validFrom: new Date('2024-01-01'),
-        validTo: null,
-      });
-
-      const result = await service.getAnnualCost(householdId, user, policyId);
-
-      expect(result!.annualGross).toBe(5000);
-      expect(result!.annualNet).toBe(4800);
-    });
-
-    it('berechnet Jahreskosten bei QUARTERLY-Frequenz', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue({
-        id: entryId,
-        policyId,
-        grossAmount: 300,
-        frequency: 'QUARTERLY',
-        validFrom: new Date('2024-01-01'),
-        validTo: null,
-      });
-
-      const result = await service.getAnnualCost(householdId, user, policyId);
-
-      expect(result!.annualGross).toBe(1200);
-    });
-
-    it('berechnet Jahreskosten bei SEMI_ANNUAL-Frequenz', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue({
-        id: entryId,
-        policyId,
-        grossAmount: 600,
-        frequency: 'SEMI_ANNUAL',
-        validFrom: new Date('2024-01-01'),
-        validTo: null,
-      });
-
-      const result = await service.getAnnualCost(householdId, user, policyId);
-
-      expect(result!.annualGross).toBe(1200);
-    });
-
-    it('gibt null bei keinem CostEntry zurueck', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue(null);
-
-      const result = await service.getAnnualCost(householdId, user, policyId);
-
-      expect(result).toBeNull();
-    });
-
-    it('beruecksichtigt mehrere CostEntries (aktuellster zaehlt)', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue({
-        id: 'newer-entry',
-        policyId,
-        grossAmount: 200,
-        frequency: 'MONTHLY',
-        validFrom: new Date('2025-06-01'),
-        validTo: null,
-      });
-
-      const result = await service.getAnnualCost(householdId, user, policyId);
-
-      expect(result!.annualGross).toBe(2400);
-      expect(result!.calculationBasis.entryId).toBe('newer-entry');
-    });
-
-    it('bevorzugt aktiven Entry vor abgelaufenem (auch bei neuerem validFrom)', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+    it('BugFix-08: Loeschen einer Erhoehung oeffnet den Vorgaenger wieder (keine Luecke)', async () => {
+      mockMembership();
+      mockPolicy();
+      // findFirst: 1) zu loeschender Eintrag (Erhoehung ab 2025-01-01),
+      // 2) restorePredecessor findet den automatisch beendeten Vorgaenger c1.
       mockDb.policyCostEntry.findFirst
         .mockResolvedValueOnce({
-          id: 'active-entry',
+          id: entryId,
           policyId,
-          grossAmount: 200,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2024-06-01'),
+          validFrom: new Date('2025-01-01'),
           validTo: null,
-        });
-
-      const result = await service.getAnnualCost(householdId, user, policyId);
-
-      expect(result!.annualGross).toBe(2400);
-      expect(result!.calculationBasis.entryId).toBe('active-entry');
-      expect(mockDb.policyCostEntry.findFirst).toHaveBeenCalledTimes(1);
-    });
-
-    it('nutzt abgelaufenen Entry, wenn kein aktiver existiert', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          id: 'expired-entry',
-          policyId,
-          grossAmount: 100,
+          grossAmount: 150,
           frequency: 'MONTHLY',
-          validFrom: new Date('2023-01-01'),
-          validTo: new Date('2023-12-31'),
-        });
+        })
+        .mockResolvedValueOnce({ id: 'c1' });
+      mockDb.policyCostEntry.delete.mockResolvedValue({ id: entryId });
+      mockDb.policyCostEntry.update.mockResolvedValue({ id: 'c1', validTo: null });
 
-      const result = await service.getAnnualCost(householdId, user, policyId);
+      await service.remove(householdId, userId, policyId, entryId);
 
-      expect(result!.annualGross).toBeCloseTo(1200, 0);
-      expect(result!.calculationBasis.entryId).toBe('expired-entry');
-    });
-
-    it('proratiert bei unterjaehrigem CostEntry mit validTo', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue({
-        id: entryId,
-        policyId,
-        grossAmount: 1200,
-        frequency: 'ANNUAL',
-        validFrom: new Date('2025-07-01'),
-        validTo: new Date('2025-12-31'),
-      });
-
-      const result = await service.getAnnualCost(householdId, user, policyId);
-
-      expect(result).not.toBeNull();
-      expect(result!.annualGross).toBeCloseTo(604.93, 1);
+      // c1 (beendet am 2024-12-31T23:59:59.999) wird wieder geoeffnet.
+      expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c1' },
+          data: expect.objectContaining({ validTo: null }),
+        }),
+      );
     });
   });
 
-  describe('getYearComparison', () => {
-    it('wirft BadRequestException bei NaN-Jahr', async () => {
+  describe('getSchedule (BugFix-08: Perioden-Tabelle incurred/expected)', () => {
+    function mockScheduleData(
+      policy: Record<string, unknown>,
+      entries: Array<Record<string, unknown>>,
+    ) {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, ...policy });
+      mockDb.policyCostEntry.findMany.mockResolvedValue(entries);
+    }
+
+    it('paidToDate = Summe der vollen begonnenen Perioden (keine Tagesanteile)', async () => {
+      mockScheduleData(
+        { startDate: new Date('2024-01-15'), paymentFrequency: PaymentFrequency.MONTHLY },
+        [
+          {
+            id: 'c1',
+            grossAmount: 100,
+            netAmount: null,
+            frequency: 'MONTHLY',
+            validFrom: new Date('2024-01-15'),
+            validTo: null,
+          },
+        ],
+      );
+
+      // Fixer Zeitpunkt: 3 volle Perioden begonnen (15.01., 15.02., 15.03.).
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      expect(result.current?.frequency).toBe('MONTHLY');
+      expect(result.paidToDate).toBe(300);
+      // Vergangenheit = incurred, Zukunft = expected (projiziert aus aktivem Eintrag).
+      expect(result.periods[0].status).toBe('incurred');
+      expect(result.periods[0].amount).toBe(100);
+      expect(result.periods[2].periodLabel).toBe('03/2024');
+      expect(result.periods[2].status).toBe('incurred');
+      expect(result.periods[3].status).toBe('expected');
+      expect(result.periods[3].amount).toBe(100);
+    });
+
+    it('nutzt die Jahresfrequenz der Versicherung (jaehrlich, 01/2024, ...)', async () => {
+      mockScheduleData(
+        { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.ANNUAL },
+        [
+          {
+            id: 'c1',
+            grossAmount: 500,
+            netAmount: null,
+            frequency: 'ANNUAL',
+            validFrom: new Date('2024-01-01'),
+            validTo: null,
+          },
+        ],
+      );
+
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      expect(result.paidToDate).toBe(500);
+      expect(result.periods[0].periodLabel).toBe('01/2024');
+      expect(result.periods[0].status).toBe('incurred');
+      expect(result.current?.annualGross).toBe(500);
+    });
+
+    it('BugFix-08: Frequenzwechsel – Erhoehung ab 06/2024 fliesst in alle Folgeperioden ein', async () => {
+      mockScheduleData(
+        { startDate: new Date('2024-01-15'), paymentFrequency: PaymentFrequency.MONTHLY },
+        [
+          {
+            id: 'c1',
+            grossAmount: 100,
+            netAmount: null,
+            frequency: 'MONTHLY',
+            validFrom: new Date('2024-01-15'),
+            validTo: new Date('2024-06-14'),
+          },
+          {
+            id: 'c2',
+            grossAmount: 120,
+            netAmount: null,
+            frequency: 'MONTHLY',
+            validFrom: new Date('2024-06-15'),
+            validTo: null,
+          },
+        ],
+      );
+
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-08-31T12:00:00.000Z'),
+      );
+
+      // 5 Perioden zu 100 (01-05/2024) + 3 Perioden zu 120 (06-08/2024).
+      expect(result.paidToDate).toBe(5 * 100 + 3 * 120);
+      expect(result.periods[5].periodLabel).toBe('06/2024');
+      expect(result.periods[5].amount).toBe(120);
+      expect(result.periods[6].amount).toBe(120);
+      expect(result.current?.grossAmount).toBe(120);
+    });
+
+    it('BugFix-08: Kosten-Erhoehung mitten im Jahr (increase-mid-year)', async () => {
+      mockScheduleData(
+        { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
+        [
+          {
+            id: 'c1',
+            grossAmount: 100,
+            netAmount: null,
+            frequency: 'MONTHLY',
+            validFrom: new Date('2024-01-01'),
+            validTo: new Date('2024-05-31'),
+          },
+          {
+            id: 'c2',
+            grossAmount: 150,
+            netAmount: null,
+            frequency: 'MONTHLY',
+            validFrom: new Date('2024-06-01'),
+            validTo: null,
+          },
+        ],
+      );
+
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-12-15T12:00:00.000Z'),
+      );
+
+      // Alle 12 Perioden 2024 begonnen: 5 * 100 + 7 * 150.
+      expect(result.paidToDate).toBe(5 * 100 + 7 * 150);
+      expect(result.periods[4].amount).toBe(100);
+      expect(result.periods[5].amount).toBe(150);
+    });
+
+    it('skaliert Eintraege, deren Frequenz von der Abrechnungsfrequenz abweicht', async () => {
+      // Versicherung MONTHLY, Kosten-Eintrag QUARTERLY (300): jede Monatsperiode
+      // schuldet 300/3 = 100 – Jahres-Summe bleibt konsistent.
+      mockScheduleData(
+        { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
+        [
+          {
+            id: 'c1',
+            grossAmount: 300,
+            netAmount: null,
+            frequency: 'QUARTERLY',
+            validFrom: new Date('2024-01-01'),
+            validTo: null,
+          },
+        ],
+      );
+
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      expect(result.paidToDate).toBe(300);
+      for (const period of result.periods.slice(0, 3)) {
+        expect(period.amount).toBe(100);
+      }
+    });
+
+    it('realigned Perioden nach kurzen Monaten am Anker (Schaltjahr 2024)', async () => {
+      mockScheduleData(
+        { startDate: new Date('2024-01-31'), paymentFrequency: PaymentFrequency.MONTHLY },
+        [
+          {
+            id: 'c1',
+            grossAmount: 100,
+            netAmount: null,
+            frequency: 'MONTHLY',
+            validFrom: new Date('2024-01-31'),
+            validTo: null,
+          },
+        ],
+      );
+
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-31T12:00:00.000Z'),
+      );
+
+      expect(result.periods[0].periodStart).toBe('2024-01-31T00:00:00.000Z');
+      expect(result.periods[1].periodStart).toBe('2024-02-29T00:00:00.000Z');
+      expect(result.periods[2].periodStart).toBe('2024-03-31T00:00:00.000Z');
+    });
+
+    it('liefert leere Periodenliste ohne CostEntries', async () => {
+      mockScheduleData(
+        { startDate: new Date('2024-01-15'), paymentFrequency: PaymentFrequency.MONTHLY },
+        [],
+      );
+
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      expect(result.paidToDate).toBe(0);
+      expect(result.current).toBeNull();
+      expect(result.periods).toEqual([]);
+    });
+
+    it('wirft NotFoundException bei fehlender Policy', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
+
       await expect(
-        service.getYearComparison(householdId, user, policyId, NaN),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('berechnet Vorjahresvergleich mit vorhandenen Daten', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst
-        .mockResolvedValueOnce({
-          id: 'current',
-          policyId,
-          grossAmount: 200,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2025-01-01'),
-          validTo: null,
-        })
-        .mockResolvedValueOnce({
-          id: 'previous',
-          policyId,
-          grossAmount: 180,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2024-01-01'),
-          validTo: null,
-        });
-
-      const result = await service.getYearComparison(householdId, user, policyId, 2025);
-
-      expect(result).not.toBeNull();
-      expect(result!.currentYear.annualGross).toBe(2400);
-      expect(result!.previousYear!.annualGross).toBe(2160);
-      expect(result!.absoluteChange).toBe(240);
-      expect(result!.percentageChange).toBeCloseTo(11.11, 1);
-      expect(result!.increased).toBe(true);
-    });
-
-    it('gibt null bei keinem CostEntry fuer das Jahr', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst.mockResolvedValue(null);
-
-      const result = await service.getYearComparison(householdId, user, policyId, 2025);
-
-      expect(result).toBeNull();
-    });
-
-    it('gibt Ergebnis ohne Vorjahresdaten', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst
-        .mockResolvedValueOnce({
-          id: 'current',
-          policyId,
-          grossAmount: 100,
-          frequency: 'ANNUAL',
-          validFrom: new Date('2025-01-01'),
-          validTo: null,
-        })
-        .mockResolvedValueOnce(null);
-
-      const result = await service.getYearComparison(householdId, user, policyId, 2025);
-
-      expect(result).not.toBeNull();
-      expect(result!.currentYear.annualGross).toBe(100);
-      expect(result!.previousYear).toBeNull();
-      expect(result!.absoluteChange).toBeNull();
-    });
-
-    it('findet naechstgelegenen Eintrag vor dem Jahr als Fallback', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
-          id: 'before-2024',
-          policyId,
-          grossAmount: 100,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2023-06-01'),
-          validTo: new Date('2023-12-31'),
-        });
-
-      const result = await service.getYearComparison(householdId, user, policyId, 2025);
-
-      expect(result).not.toBeNull();
-      expect(result!.currentYear.annualGross).toBeCloseTo(703.56, 1);
-    });
-
-    it('setzt increased=true bei gleichen Kosten (keine Aenderung)', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyCostEntry.findFirst
-        .mockResolvedValueOnce({
-          id: 'current',
-          policyId,
-          grossAmount: 100,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2025-01-01'),
-          validTo: null,
-        })
-        .mockResolvedValueOnce({
-          id: 'previous',
-          policyId,
-          grossAmount: 100,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2024-01-01'),
-          validTo: null,
-        });
-
-      const result = await service.getYearComparison(householdId, user, policyId, 2025);
-
-      expect(result!.absoluteChange).toBe(0);
-      expect(result!.percentageChange).toBe(0);
-      expect(result!.increased).toBe(true);
+        service.getSchedule(householdId, user, policyId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
-  describe('getHouseholdSummary', () => {
-    it('aggregiert Jahreskosten ueber alle Policies', async () => {
+  describe('getHouseholdSummary (BugFix-08 Q5: Haushaltsuebersicht)', () => {
+    it('aggregiert paidToDate, Monat, Jahr und perYear-Buckets ueber alle Policies', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([
         {
           id: 'p1',
           householdId,
           type: 'HAFTPFLICHT',
+          insurerName: 'P1',
           costEntries: [
             { id: 'c1', grossAmount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: null },
           ],
@@ -521,28 +783,73 @@ describe('CostTrackingService', () => {
           id: 'p2',
           householdId,
           type: 'HAUSRAT',
+          insurerName: 'P2',
           costEntries: [
             { id: 'c2', grossAmount: 500, frequency: 'ANNUAL', validFrom: new Date('2024-01-01'), validTo: null },
           ],
         },
       ]);
 
-      const result = await service.getHouseholdSummary(householdId, user);
+      const result = await service.getHouseholdSummary(
+        householdId,
+        user,
+        new Date('2025-03-01T12:00:00.000Z'),
+      );
 
       expect(result.policyCount).toBe(2);
-      expect(result.totalAnnualGross).toBe(1700);
-      expect(result.perType['HAFTPFLICHT']).toBe(1200);
-      expect(result.perType['HAUSRAT']).toBe(500);
+      // p1: 15 Monatsperioden begonnen (01/2024-03/2025) -> 1500, p2: 2 Jahresperioden -> 1000.
+      expect(result.totals.paidToDate).toBe(2500);
+      expect(result.totals.perYear).toBe(1700);
+      // 100 (MONTHLY) + 500/12 (ANNUAL) = 141.67.
+      expect(result.totals.perMonth).toBe(141.67);
+      // Historische Buckets: 2024 -> 1200 + 500, 2025 -> 3 * 100 + 500.
+      expect(result.perYear).toEqual([
+        { year: 2024, amount: 1700 },
+        { year: 2025, amount: 800 },
+      ]);
+      expect(result.policies[0].paidToDate).toBe(1500);
+      expect(result.policies[0].perMonth).toBe(100);
+    });
+
+    it('bugFix-08: perYear-Bucket beachtet Kosten-Erhoehung mitten im Jahr', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
+      mockDb.insurancePolicy.findMany.mockResolvedValue([
+        {
+          id: 'p1',
+          householdId,
+          type: 'KFZ',
+          insurerName: 'P1',
+          costEntries: [
+            { id: 'c1', grossAmount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: new Date('2024-06-30') },
+            { id: 'c2', grossAmount: 150, frequency: 'MONTHLY', validFrom: new Date('2024-07-01'), validTo: null },
+          ],
+        },
+      ]);
+
+      const result = await service.getHouseholdSummary(
+        householdId,
+        user,
+        new Date('2024-12-31T12:00:00.000Z'),
+      );
+
+      // 6 * 100 + 6 * 150 = 1500 im Jahr 2024.
+      expect(result.perYear).toEqual([{ year: 2024, amount: 1500 }]);
+      expect(result.totals.paidToDate).toBe(1500);
     });
 
     it('ignoriert archivierte Policies', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([]);
 
-      const result = await service.getHouseholdSummary(householdId, user);
+      const result = await service.getHouseholdSummary(
+        householdId,
+        user,
+        new Date('2024-03-01T12:00:00.000Z'),
+      );
 
       expect(result.policyCount).toBe(0);
-      expect(result.totalAnnualGross).toBe(0);
+      expect(result.totals.paidToDate).toBe(0);
+      expect(result.totals.perYear).toBe(0);
       expect(mockDb.insurancePolicy.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { householdId, archivedAt: null },
@@ -553,301 +860,72 @@ describe('CostTrackingService', () => {
     it('behandelt Policies ohne CostEntries', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([
-        {
-          id: 'p1',
-          householdId,
-          type: 'HAFTPFLICHT',
-          costEntries: [],
-        },
+        { id: 'p1', householdId, type: 'HAFTPFLICHT', insurerName: 'P1', costEntries: [] },
         {
           id: 'p2',
           householdId,
           type: 'HAUSRAT',
+          insurerName: 'P2',
           costEntries: [
             { id: 'c2', grossAmount: 1000, frequency: 'ANNUAL', validFrom: new Date('2024-01-01'), validTo: null },
           ],
         },
       ]);
 
-      const result = await service.getHouseholdSummary(householdId, user);
+      const result = await service.getHouseholdSummary(
+        householdId,
+        user,
+        new Date('2024-03-01T12:00:00.000Z'),
+      );
 
       expect(result.policyCount).toBe(2);
-      expect(result.totalAnnualGross).toBe(1000);
-      expect(result.perType['HAFTPFLICHT']).toBe(0);
-      expect(result.perType['HAUSRAT']).toBe(1000);
+      expect(result.policies[0].paidToDate).toBe(0);
+      expect(result.policies[0].entryCount).toBe(0);
+      expect(result.totals.paidToDate).toBe(1000);
     });
 
-    it('initialisiert perType fuer alle Policy-Typen, auch ohne CostEntries', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findMany.mockResolvedValue([
-        {
-          id: 'p1',
-          householdId,
-          type: 'KFZ',
-          costEntries: [],
-        },
-      ]);
+    it('READ_ONLY: summiert nur explizit freigegebene Policies (AP-16)', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
+      const readOnlyUser = { ...user, role: GlobalRole.READ_ONLY };
+      // Keine Freigaben -> getReadablePolicyIds liefert [].
+      mockDb.objectShare.findMany.mockResolvedValue([]);
+      mockDb.insurancePolicy.findMany.mockResolvedValue([]);
 
-      const result = await service.getHouseholdSummary(householdId, user);
-
-      expect(result.policyCount).toBe(1);
-      expect(result.perType).toHaveProperty('KFZ');
-      expect(result.perType['KFZ']).toBe(0);
-    });
-
-    it('bevorzugt aktiven vor abgelaufenem CostEntry', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
-      mockDb.insurancePolicy.findMany.mockResolvedValue([
-        {
-          id: 'p1',
-          householdId,
-          type: 'HAFTPFLICHT',
-          costEntries: [
-            { id: 'c1', grossAmount: 100, frequency: 'MONTHLY', validFrom: new Date('2023-01-01'), validTo: new Date('2023-12-31') },
-            { id: 'c2', grossAmount: 200, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: null },
-          ],
-        },
-      ]);
-
-      const result = await service.getHouseholdSummary(householdId, user);
-
-      expect(result.policyCount).toBe(1);
-      expect(result.totalAnnualGross).toBe(2400);
-    });
-  });
-
-  describe('getPaidHistory (BugFix-06: Abrechnungsperioden seit Beginn)', () => {
-    function mockMembershipAndPolicy(policy: Record<string, unknown>) {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, ...policy });
-    }
-
-    it('zahlt je begonnener Monatsperiode einen vollen Beitrag (keine Tagesanteile)', async () => {
-      mockMembershipAndPolicy({
-        startDate: new Date('2024-01-15'),
-        paymentFrequency: PaymentFrequency.MONTHLY,
-      });
-      mockDb.policyCostEntry.findMany.mockResolvedValue([
-        {
-          id: 'c1',
-          grossAmount: 100,
-          netAmount: null,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2024-01-15'),
-          validTo: null,
-        },
-      ]);
-
-      // Fixer Zeitpunkt: 3 volle Perioden begonnen (15.01., 15.02., 15.03.),
-      // laufende Periode zaehlt (Beitrag faellig zu Periodenbeginn) -> 3 * 100.
-      const result = await service.getPaidHistory(
+      const result = await service.getHouseholdSummary(
         householdId,
-        user,
-        policyId,
-        new Date('2024-03-20T12:00:00.000Z'),
+        readOnlyUser,
+        new Date('2024-03-01T12:00:00.000Z'),
       );
 
-      expect(result.frequency).toBe('MONTHLY');
-      expect(result.periods.length).toBe(3);
-      expect(result.periods[0].periodLabel).toBe('01/2024');
-      expect(result.periods[0].dueAmount).toBe(100);
-      expect(result.periods[0].paidAmount).toBe(100);
-      expect(result.periods[0].status).toBe('paid');
-      expect(result.periods[1].periodLabel).toBe('02/2024');
-      expect(result.periods[2].periodLabel).toBe('03/2024');
-      expect(result.periods[2].status).toBe('current');
-      // paidAmount == dueAmount fuer jede begonnene Periode (faellig am Beginn).
-      for (const period of result.periods) {
-        expect(period.paidAmount).toBe(period.dueAmount);
-      }
+      expect(result.policyCount).toBe(0);
+      expect(mockDb.insurancePolicy.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { householdId, archivedAt: null, id: { in: [] } },
+        }),
+      );
     });
 
-    it('nutzt die Jahresfrequenz der Versicherung (jaehrlich, 01/2024, ...)', async () => {
-      mockMembershipAndPolicy({
-        startDate: new Date('2024-01-01'),
-        paymentFrequency: PaymentFrequency.ANNUAL,
-      });
-      mockDb.policyCostEntry.findMany.mockResolvedValue([
-        {
-          id: 'c1',
-          grossAmount: 500,
-          netAmount: null,
-          frequency: 'ANNUAL',
-          validFrom: new Date('2024-01-01'),
-          validTo: null,
-        },
+    it('READ_ONLY: nutzt freigegebene Policy-IDs als Filter', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
+      const readOnlyUser = { ...user, role: GlobalRole.READ_ONLY };
+      mockDb.objectShare.findMany.mockResolvedValue([
+        { scopeType: 'INSURANCE', scopeRef: 'p1', sourceUserId: userId },
       ]);
+      mockDb.insurancePolicy.findMany
+        .mockResolvedValueOnce([{ id: 'p1', householdId, archivedAt: null, type: 'KFZ', insurerName: 'P1' }]) // getReadablePolicyIds
+        .mockResolvedValueOnce([]); // Summary ohne Treffer (Freigabe deckt nichts ab)
 
-      const result = await service.getPaidHistory(
+      const result = await service.getHouseholdSummary(
         householdId,
-        user,
-        policyId,
-        new Date('2024-03-20T12:00:00.000Z'),
+        readOnlyUser,
+        new Date('2024-03-01T12:00:00.000Z'),
       );
 
-      expect(result.frequency).toBe('ANNUAL');
-      expect(result.periods.length).toBe(1);
-      expect(result.periods[0].periodLabel).toBe('01/2024');
-      expect(result.periods[0].dueAmount).toBe(500);
-      expect(result.periods[0].status).toBe('current');
-    });
-
-    it('beruecksichtigt Frequenzwechsel (Beitragserhoehung mid-period)', async () => {
-      mockMembershipAndPolicy({
-        startDate: new Date('2024-01-15'),
-        paymentFrequency: PaymentFrequency.MONTHLY,
-      });
-      mockDb.policyCostEntry.findMany.mockResolvedValue([
-        {
-          id: 'c1',
-          grossAmount: 100,
-          netAmount: null,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2024-01-15'),
-          validTo: new Date('2024-06-14'),
-        },
-        {
-          id: 'c2',
-          grossAmount: 120,
-          netAmount: null,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2024-06-15'),
-          validTo: null,
-        },
-      ]);
-
-      const result = await service.getPaidHistory(
-        householdId,
-        user,
-        policyId,
-        new Date('2024-08-31T12:00:00.000Z'),
-      );
-
-      expect(result.periods[0].dueAmount).toBe(100); // 01/2024
-      expect(result.periods[5].periodLabel).toBe('06/2024');
-      expect(result.periods[5].dueAmount).toBe(120); // neue Beitragshoehe ab 06/2024
-      // Nachfolgende Perioden ebenfalls mit neuem Beitrag.
-      expect(result.periods[6].dueAmount).toBe(120);
-    });
-
-    it('skaliert Eintraege, deren Frequenz von der Abrechnungsfrequenz abweicht', async () => {
-      // Versicherung MONTHLY, Kosten-Eintrag QUARTERLY (300): jede Monatsperiode
-      // schuldet 300/3 = 100 – Jahres-Summe bleibt konsistent (4 * 300 = 12 * 100).
-      mockMembershipAndPolicy({
-        startDate: new Date('2024-01-01'),
-        paymentFrequency: PaymentFrequency.MONTHLY,
-      });
-      mockDb.policyCostEntry.findMany.mockResolvedValue([
-        {
-          id: 'c1',
-          grossAmount: 300,
-          netAmount: null,
-          frequency: 'QUARTERLY',
-          validFrom: new Date('2024-01-01'),
-          validTo: null,
-        },
-      ]);
-
-      const result = await service.getPaidHistory(
-        householdId,
-        user,
-        policyId,
-        new Date('2024-03-20T12:00:00.000Z'),
-      );
-
-      expect(result.frequency).toBe('MONTHLY');
-      expect(result.periods.length).toBe(3);
-      for (const period of result.periods) {
-        expect(period.dueAmount).toBe(100);
-        expect(period.paidAmount).toBe(100);
-      }
-    });
-
-    it('realigned Perioden nach kurzen Monaten am Anker (Schaltjahr 2024)', async () => {
-      // Anker 31.01.2024: +1 Monat -> 29.02.2024, +2 Monate -> 31.03.2024
-      // (kein Drift auf den 29. des Folgemonats).
-      mockMembershipAndPolicy({
-        startDate: new Date('2024-01-31'),
-        paymentFrequency: PaymentFrequency.MONTHLY,
-      });
-      mockDb.policyCostEntry.findMany.mockResolvedValue([
-        {
-          id: 'c1',
-          grossAmount: 100,
-          netAmount: null,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2024-01-31'),
-          validTo: null,
-        },
-      ]);
-
-      const result = await service.getPaidHistory(
-        householdId,
-        user,
-        policyId,
-        new Date('2024-03-31T12:00:00.000Z'),
-      );
-
-      expect(result.periods.length).toBe(3);
-      expect(result.periods[0].periodLabel).toBe('01/2024');
-      expect(result.periods[0].periodStart).toBe('2024-01-31T00:00:00.000Z');
-      expect(result.periods[1].periodLabel).toBe('02/2024');
-      expect(result.periods[1].periodStart).toBe('2024-02-29T00:00:00.000Z');
-      expect(result.periods[2].periodLabel).toBe('03/2024');
-      expect(result.periods[2].periodStart).toBe('2024-03-31T00:00:00.000Z');
-    });
-
-    it('wirft NotFoundException bei fehlender Policy', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
-
-      await expect(
-        service.getPaidHistory(householdId, user, policyId),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('liefert leere Periodenliste ohne CostEntries', async () => {
-      mockMembershipAndPolicy({
-        startDate: new Date('2024-01-15'),
-        paymentFrequency: PaymentFrequency.MONTHLY,
-      });
-      mockDb.policyCostEntry.findMany.mockResolvedValue([]);
-
-      const result = await service.getPaidHistory(householdId, user, policyId);
-
-      expect(result.periods).toEqual([]);
-      expect(result.frequency).toBe('MONTHLY');
-    });
-  });
-
-  describe('getOverview paidToDate (BugFix-06: periodenbasiert)', () => {
-    it('berechnet paidToDate je Abrechnungsperiode statt tagesanteilig', async () => {
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({
-        id: policyId,
-        householdId,
-        startDate: new Date('2024-01-01'),
-        paymentFrequency: PaymentFrequency.MONTHLY,
-      });
-      mockDb.policyCostEntry.findMany.mockResolvedValue([
-        {
-          id: 'c1',
-          grossAmount: 100,
-          netAmount: null,
-          frequency: 'MONTHLY',
-          validFrom: new Date('2024-01-01'),
-          validTo: null,
-        },
-      ]);
-
-      const result = await service.getOverview(householdId, user, policyId);
-
-      expect(result).not.toBeNull();
-      // Periodenbasiert: ganze Monatsbetraege (kein Tagesbruchteil).
-      expect(result!.paidToDate % 100).toBe(0);
-      expect(result!.paidToDate).toBeGreaterThanOrEqual(100);
-      expect(mockDb.insurancePolicy.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: policyId, householdId } }),
+      expect(result.policyCount).toBe(0);
+      expect(mockDb.insurancePolicy.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { householdId, archivedAt: null, id: { in: ['p1'] } },
+        }),
       );
     });
   });
@@ -861,11 +939,11 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Zugriff ohne Mitgliedschaft bei getAnnualCost', async () => {
+    it('verweigert Zugriff ohne Mitgliedschaft bei getSchedule', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.getAnnualCost(householdId, user, policyId),
+        service.getSchedule(householdId, user, policyId),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -874,6 +952,39 @@ describe('CostTrackingService', () => {
 
       await expect(
         service.getHouseholdSummary(householdId, user),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('READ_ONLY: verweigert findAll ohne explizite Freigabe (AP-16)', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.objectShare.findMany.mockResolvedValue([]);
+      const readOnlyUser = { ...user, role: GlobalRole.READ_ONLY };
+
+      await expect(
+        service.findAll(householdId, readOnlyUser, policyId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('READ_ONLY: verweigert findOne ohne explizite Freigabe (AP-16)', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.objectShare.findMany.mockResolvedValue([]);
+      const readOnlyUser = { ...user, role: GlobalRole.READ_ONLY };
+
+      await expect(
+        service.findOne(householdId, readOnlyUser, policyId, entryId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('READ_ONLY: verweigert getSchedule ohne explizite Freigabe (AP-16)', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.objectShare.findMany.mockResolvedValue([]);
+      const readOnlyUser = { ...user, role: GlobalRole.READ_ONLY };
+
+      await expect(
+        service.getSchedule(householdId, readOnlyUser, policyId),
       ).rejects.toThrow(ForbiddenException);
     });
   });

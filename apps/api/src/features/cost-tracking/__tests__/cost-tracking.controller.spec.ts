@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { CostTrackingController, CostTrackingHouseholdController } from '../cost-tracking.controller';
+import { ROLES_KEY } from '../../identity/roles.decorator';
 import { GlobalRole, UserStatus } from '@prisma/client';
 import { PaymentFrequency } from '@prisma/client';
 import type { AuthenticatedUser } from '../../identity/auth.service';
@@ -10,9 +11,7 @@ type ServiceLike = {
   findOne: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
-  getAnnualCost: ReturnType<typeof vi.fn>;
-  getYearComparison: ReturnType<typeof vi.fn>;
-  getPaidHistory: ReturnType<typeof vi.fn>;
+  getSchedule: ReturnType<typeof vi.fn>;
   getHouseholdSummary: ReturnType<typeof vi.fn>;
 };
 
@@ -23,9 +22,7 @@ function createMockService(): ServiceLike {
     findOne: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
-    getAnnualCost: vi.fn(),
-    getYearComparison: vi.fn(),
-    getPaidHistory: vi.fn(),
+    getSchedule: vi.fn(),
     getHouseholdSummary: vi.fn(),
   };
 }
@@ -75,6 +72,17 @@ describe('CostTrackingController', () => {
     expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
+  it('getSchedule delegiert an Service (BugFix-08: Perioden-Tabelle)', async () => {
+    const service = createMockService();
+    const controller = new CostTrackingController(service as never);
+    service.getSchedule.mockResolvedValue({ policyId, paidToDate: 1200, periods: [] });
+
+    const result = await controller.getSchedule(householdId, policyId, mockUser);
+
+    expect(result.paidToDate).toBe(1200);
+    expect(service.getSchedule).toHaveBeenCalledWith(householdId, mockUser, policyId);
+  });
+
   it('findOne delegiert an Service', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
@@ -111,41 +119,23 @@ describe('CostTrackingController', () => {
     expect(result.success).toBe(true);
     expect(service.remove).toHaveBeenCalledWith(householdId, mockUser.id, policyId, entryId);
   });
+});
 
-  it('getAnnualCost delegiert an Service', async () => {
-    const service = createMockService();
-    const controller = new CostTrackingController(service as never);
-    service.getAnnualCost.mockResolvedValue({ policyId, annualGross: 1200 });
-
-    const result = await controller.getAnnualCost(householdId, policyId, mockUser);
-
-    expect(result).not.toBeNull();
-    expect(result!.annualGross).toBe(1200);
-    expect(service.getAnnualCost).toHaveBeenCalledWith(householdId, mockUser, policyId);
+describe('CostTrackingController Rollen-Guards', () => {
+  it('Schreib-Endpunkte erlauben nur USER/ADMIN (READ_ONLY ausgeschlossen)', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.create)).toEqual([GlobalRole.USER, GlobalRole.ADMIN]);
+    expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.update)).toEqual([GlobalRole.USER, GlobalRole.ADMIN]);
+    expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.remove)).toEqual([GlobalRole.USER, GlobalRole.ADMIN]);
   });
 
-  it('getYearComparison delegiert an Service', async () => {
-    const service = createMockService();
-    const controller = new CostTrackingController(service as never);
-    service.getYearComparison.mockResolvedValue({ policyId, absoluteChange: 100 });
-
-    const result = await controller.getYearComparison(householdId, policyId, mockUser, '2025');
-
-    expect(result).not.toBeNull();
-    expect(result!.absoluteChange).toBe(100);
-    expect(service.getYearComparison).toHaveBeenCalledWith(householdId, mockUser, policyId, 2025);
+  it('Lese-Endpunkte erlauben auch READ_ONLY (Freigabe wird im Service erzwungen, AP-16)', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.findAll)).toContain(GlobalRole.READ_ONLY);
+    expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.getSchedule)).toContain(GlobalRole.READ_ONLY);
+    expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.findOne)).toContain(GlobalRole.READ_ONLY);
   });
 
-  // BugFix-06 (Teil 3): paid-history delegiert an Service.
-  it('getPaidHistory delegiert an Service', async () => {
-    const service = createMockService();
-    const controller = new CostTrackingController(service as never);
-    service.getPaidHistory.mockResolvedValue({ policyId, periods: [] });
-
-    const result = await controller.getPaidHistory(householdId, policyId, mockUser);
-
-    expect(result.periods).toEqual([]);
-    expect(service.getPaidHistory).toHaveBeenCalledWith(householdId, mockUser, policyId);
+  it('Household-Summary erlaubt auch READ_ONLY (Filterung im Service)', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, CostTrackingHouseholdController.prototype.getSummary)).toContain(GlobalRole.READ_ONLY);
   });
 });
 
@@ -155,11 +145,15 @@ describe('CostTrackingHouseholdController', () => {
   it('getSummary delegiert an Service', async () => {
     const service = createMockService();
     const controller = new CostTrackingHouseholdController(service as never);
-    service.getHouseholdSummary.mockResolvedValue({ totalAnnualGross: 5000, perType: {}, policyCount: 3 });
+    service.getHouseholdSummary.mockResolvedValue({
+      totals: { paidToDate: 5000, perMonth: 400, perYear: 4800 },
+      perYear: [],
+      policyCount: 3,
+    });
 
     const result = await controller.getSummary(householdId, mockUser);
 
-    expect(result.totalAnnualGross).toBe(5000);
+    expect(result.totals.paidToDate).toBe(5000);
     expect(service.getHouseholdSummary).toHaveBeenCalledWith(householdId, mockUser);
   });
 });
