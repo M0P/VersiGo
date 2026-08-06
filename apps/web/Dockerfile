@@ -32,6 +32,12 @@ COPY --from=deps /app/turbo.json ./turbo.json
 
 COPY apps/web ./apps/web
 
+# BugFix-07 (Q7b): Branding-Ueberschreibung. Dateien im Repo-Ordner
+# `branding/` (icon.svg / favicon.svg) ueberschreiben die Default-Assets
+# in apps/web/public/branding/ direkt im Build – fuer ein eigenes Icon ist
+# ein Rebuild erforderlich, kein Source-Code-Aenderung.
+COPY branding/ ./apps/web/public/branding/
+
 RUN --mount=type=cache,id=versigo-pnpm-store-web,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     cd apps/web && pnpm run build

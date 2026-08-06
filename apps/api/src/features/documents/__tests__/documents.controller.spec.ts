@@ -33,6 +33,7 @@ type ServiceLike = {
   getFilePath: ReturnType<typeof vi.fn>;
   getDocumentAndPath: ReturnType<typeof vi.fn>;
   sanitizeFilename: ReturnType<typeof vi.fn>;
+  linkPaperlessDocument: ReturnType<typeof vi.fn>;
 };
 
 function createMockService(): ServiceLike {
@@ -45,6 +46,7 @@ function createMockService(): ServiceLike {
     getFilePath: vi.fn(),
     getDocumentAndPath: vi.fn(),
     sanitizeFilename: vi.fn((name: string) => name),
+    linkPaperlessDocument: vi.fn(),
   };
 }
 
@@ -94,6 +96,19 @@ describe('DocumentsController', () => {
 
     expect(result).toEqual(expected);
     expect(service.upload).toHaveBeenCalledWith(householdId, mockUser.id, policyId, mockFile, { category: 'vertrag' });
+  });
+
+  // BugFix-07 (Q3): POST /paperless bindet ein Paperless-Dokument.
+  it('linkPaperless delegiert an Service', async () => {
+    const service = createMockService();
+    const controller = new DocumentsController(service as never);
+    const expected = { id: 'link-1', storageType: 'PAPERLESS_LINK', storageRef: '42' };
+    service.linkPaperlessDocument.mockResolvedValue(expected);
+
+    const result = await controller.linkPaperless(householdId, policyId, mockUser, { paperlessDocumentId: 42 });
+
+    expect(result).toEqual(expected);
+    expect(service.linkPaperlessDocument).toHaveBeenCalledWith(householdId, mockUser.id, policyId, 42);
   });
 
   it('findAll delegiert an Service', async () => {

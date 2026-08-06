@@ -47,7 +47,7 @@
 > **Wichtig für Upgrades von vorherigen Versionen:**
 
 ### Datenbank-Migrationen
-- `npx prisma migrate deploy` wird beim Container-Start automatisch ausgeführt (idempotent)
+- Der `migration`-Service führt `prisma migrate deploy` beim Stack-Start automatisch aus (idempotent)
 - Keine manuellen Schritte erforderlich
 - Migrationen sind **additiv only** (keine Breaking Changes am Schema)
 

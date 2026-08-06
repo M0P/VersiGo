@@ -10,48 +10,13 @@ import { Alert } from '../../../components/ui/alert';
 import { Loading } from '../../../components/ui/loading';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { NAV_SECTIONS } from '../../../components/ui/nav-config';
+import { AdminFeaturesSection, FEATURE_KEYS, type SystemConfigEntry, type ConnectivityResult } from '../../../components/admin/features-section';
 import { useI18n, formatDate } from '../../../i18n';
 import { getApiBaseUrl } from '@/lib/runtime-config';
 
 const API_BASE = getApiBaseUrl();
 
 type Source = 'UI' | 'ENV' | 'DEFAULT';
-type SettingType = 'boolean' | 'number' | 'string';
-
-/**
- * Admin-UI-Ansicht eines katalogisierten System-Settings (AP-17).
- * Die Struktur entspricht exakt `SystemConfigEntryDto` der API.
- */
-type SystemConfigEntry = {
-  key: string;
-  category: 'runtime' | 'restart' | 'secret' | 'bootstrap';
-  type: SettingType;
-  group: string;
-  description: string;
-  validationHint: string | null;
-  allowedValues: string[] | null;
-  min: number | null;
-  max: number | null;
-  connectivityTestable: boolean;
-  secret: boolean;
-  effectiveValue: string | number | boolean | null;
-  secretSet: boolean | null;
-  source: Source;
-  reason: string;
-  uiValuePresent: boolean;
-  uiValueInvalid: boolean;
-  restartRequired: boolean;
-  /** m2: erst nach Neustart aktiver UI-Wert (Restart-Kategorie). */
-  pendingRestartValue: string | number | boolean | null;
-  uiUpdatedAt: string | null;
-  uiUpdatedBy: string | null;
-};
-
-type ConnectivityResult = {
-  success: boolean;
-  message: string;
-  timestamp: string;
-};
 
 const SOURCE_BADGE: Record<Source, string> = {
   UI: 'badge-accent',
@@ -119,10 +84,17 @@ export default function AdminSettingsPage(): ReactElement {
     loadEntries();
   }, []);
 
+  // BugFix-07 (Q1): Der Katalog unterhalb der Feature-Karten zeigt keine
+  // Schluessel, die bereits von den Karten verwaltet werden (keine Duplikate).
+  const catalogEntries = useMemo(
+    () => entries.filter((entry) => !FEATURE_KEYS.includes(entry.key)),
+    [entries],
+  );
+
   // --- Filterung (Suche + Quelle + Probleme + Neustartbedarf) ---
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return entries.filter((entry) => {
+    return catalogEntries.filter((entry) => {
       if (query) {
         const haystack = `${entry.key} ${entry.group} ${entry.description}`.toLowerCase();
         if (!haystack.includes(query)) return false;
@@ -132,7 +104,7 @@ export default function AdminSettingsPage(): ReactElement {
       if (onlyRestart && !entry.restartRequired) return false;
       return true;
     });
-  }, [entries, search, sourceFilter, onlyProblems, onlyRestart]);
+  }, [catalogEntries, search, sourceFilter, onlyProblems, onlyRestart]);
 
   // Gruppierung in Katalog-Reihenfolge (Reihenfolge der API-Antwort).
   const grouped = useMemo(() => {
@@ -147,7 +119,7 @@ export default function AdminSettingsPage(): ReactElement {
 
   const hasActiveFilters = search.trim() !== '' || sourceFilter !== 'ALL' || onlyProblems || onlyRestart;
 
-  const refreshEntry = async (key: string) => {
+  const refreshEntry = async (key: string): Promise<SystemConfigEntry | null> => {
     try {
       const res = await fetch(`${API_BASE}/admin/system-config/${encodeURIComponent(key)}`, {
         credentials: 'include',
@@ -156,9 +128,11 @@ export default function AdminSettingsPage(): ReactElement {
       const updated: SystemConfigEntry = await res.json();
       setEntries((prev) => prev.map((e) => (e.key === updated.key ? updated : e)));
       setTestState((prev) => ({ ...prev, [updated.key]: { testing: false, result: null } }));
+      return updated;
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('common.unknownError');
       setError(message);
+      return null;
     }
   };
 
@@ -293,6 +267,17 @@ export default function AdminSettingsPage(): ReactElement {
 
       {error && <Alert variant="danger" title={t('common.error')}>{error}</Alert>}
 
+      {/* BugFix-07 (Q1): Feature-Karten (vorher /admin/features) – oben,
+          darunter der vollstaendige Katalog ohne doppelte Schluessel. */}
+      <SectionHeader title={t('admin.features.title')} />
+      <AdminFeaturesSection
+        entries={entries}
+        onEntryRefresh={refreshEntry}
+        onError={(message) => {
+          if (message) setError(message);
+        }}
+      />
+
       {/* BugFix-06 (Teil 3.4): Dienste-Neustart fuer Restart-Kategorie-Settings */}
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <div className="settings-restart-row">
@@ -314,6 +299,10 @@ export default function AdminSettingsPage(): ReactElement {
           </div>
         )}
       </Card>
+
+      {/* BugFix-07 (Q1): Katalog unterhalb der Feature-Karten. */}
+      <SectionHeader title={t('admin.settings.catalogTitle')} />
+      <p className="form-hint">{t('admin.settings.catalogDescription')}</p>
 
       {/* Werkzeugleiste: Suche + Filter */}
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>

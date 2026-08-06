@@ -13,6 +13,7 @@ import { NAV_SECTIONS } from '@/components/ui/nav-config';
 import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import { normalizePortalUrl } from '@/lib/portal-url';
 
 const API_BASE = getApiBaseUrl();
 
@@ -104,7 +105,7 @@ export default function EditPolicyPage(): ReactElement {
       const payload = {
         type: form.type,
         insurerName: form.insurerName,
-        insurerPortalUrl: form.insurerPortalUrl || undefined,
+        insurerPortalUrl: form.insurerPortalUrl ? normalizePortalUrl(form.insurerPortalUrl) : undefined,
         contractNumber: form.contractNumber,
         tariffName: form.tariffName || undefined,
         status: form.status,

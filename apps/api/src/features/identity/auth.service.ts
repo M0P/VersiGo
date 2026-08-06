@@ -6,6 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { DatabaseService } from '@versigo/foundation';
+import type { Prisma } from '@prisma/client';
 import {
   GlobalRole,
   InsurancePolicyType,
@@ -14,6 +15,10 @@ import {
   UserStatus,
 } from '@prisma/client';
 import { PasswordHashingService } from './password-hashing.service';
+// BugFix-07 (Code-Review R3): Nur Funktions-Nutzung auf Methoden-Ebene — die
+// Lade-Reihenfolge des Zyklus `auth.service <-> oidc.strategy` darf nicht
+// veraendert werden (Details am Import in oidc.strategy.ts).
+import { normalizeIssuerUrl } from './oidc.strategy';
 
 export interface AuthenticatedUser {
   id: string;
@@ -140,6 +145,106 @@ export class AuthService {
     }
 
     return this.toAuthenticatedUser(user);
+  }
+
+  /**
+   * BugFix-07 (Self-Service-Verknuepfung): Liefert die aktuelle OIDC-Bindung
+   * eines Kontos (null, wenn keine besteht). Nur der eigene User darf seine
+   * Bindung lesen (Aufruf erfolgt aus dem authentifizierten AuthController).
+   */
+  async getOidcBinding(userId: string): Promise<{ oidcIssuer: string; oidcSubject: string } | null> {
+    const user = await this.db.user.findUnique({
+      where: { id: userId },
+      select: { oidcIssuer: true, oidcSubject: true },
+    });
+    if (!user || !user.oidcIssuer || !user.oidcSubject) {
+      return null;
+    }
+    return { oidcIssuer: user.oidcIssuer, oidcSubject: user.oidcSubject };
+  }
+
+  /**
+   * BugFix-07 (Self-Service-Verknuepfung): Bindet die beim Link-Callback
+   * bestaetigte OIDC-Identitaet an den angemeldeten User. Ersetzt eine
+   * bestehende Bindung desselben Kontos; ist die Identitaet bereits an ein
+   * ANDERES Konto gebunden, wird ConflictException geworfen (UNIQUE-
+   * Constraint (oidcIssuer, oidcSubject)). Keine Provisionierung: Ohne
+   * existierendes Konto gibt es nichts zu binden.
+   */
+  async bindOidcIdentityForUser(
+    userId: string,
+    oidcIssuer: string,
+    oidcSubject: string,
+  ): Promise<{ oidcIssuer: string; oidcSubject: string }> {
+    // BugFix-07 (Code-Review, R2): Gemeinsame Normalisierung statt Inline-
+    // Duplikat, damit Admin-Bindung, Self-Service-Bindung und Login-Vergleich
+    // nie divergieren (ADR-007).
+    const normalizedIssuer = normalizeIssuerUrl(oidcIssuer);
+    try {
+      const result = await this.db.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true } });
+        if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+
+        await tx.user.update({
+          where: { id: userId },
+          data: { oidcIssuer: normalizedIssuer, oidcSubject },
+        });
+        return { oidcIssuer: normalizedIssuer, oidcSubject };
+      });
+
+      await this.auditOidcSelf(userId, 'OIDC_BOUND_SELF', { oidcIssuer: normalizedIssuer });
+      return result;
+    } catch (error) {
+      // P2002: (oidcIssuer, oidcSubject) ist bereits an ein anderes Konto gebunden
+      if ((error as { code?: string }).code === 'P2002') {
+        throw new ConflictException(
+          'Diese OIDC-Identitaet ist bereits an ein anderes Konto gebunden',
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * BugFix-07 (Self-Service-Verknuepfung): Loest die OIDC-Bindung des
+   * angemeldeten Kontos (nur die Bindung, nie das Konto). Wirft
+   * ConflictException, wenn keine Bindung besteht.
+   */
+  async unbindOidcIdentityForUser(userId: string): Promise<void> {
+    await this.db.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { oidcIssuer: true },
+      });
+      if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+      if (!user.oidcIssuer) {
+        throw new ConflictException('Konto hat keine OIDC-Bindung');
+      }
+
+      await tx.user.update({ where: { id: userId }, data: { oidcIssuer: null, oidcSubject: null } });
+    });
+
+    await this.auditOidcSelf(userId, 'OIDC_UNBOUND_SELF', {});
+  }
+
+  private async auditOidcSelf(
+    actorUserId: string,
+    action: string,
+    diff: Record<string, unknown>,
+  ): Promise<void> {
+    await this.db.auditEvent
+      .create({
+        data: {
+          actorUserId,
+          entityType: 'User',
+          entityId: actorUserId,
+          action,
+          diffJson: diff as Prisma.InputJsonValue,
+        },
+      })
+      .catch(() => {
+        /* audit is non-critical */
+      });
   }
 
   /**

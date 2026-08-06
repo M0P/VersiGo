@@ -3,7 +3,6 @@ import { HttpService } from '@nestjs/axios';
 import { Logger } from '@nestjs/common';
 import { SettingsResolverService } from '@versigo/foundation';
 import { PaperlessNgxService } from '../paperless-ngx.service';
-import { NoOpPaperlessAdapter } from '../paperless-ngx.noop';
 import { of, throwError } from 'rxjs';
 import { AxiosError } from 'axios';
 import type { AxiosResponse } from 'axios';
@@ -333,35 +332,5 @@ describe('PaperlessNgxService', () => {
 
       expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('kein HTTPS'));
     });
-  });
-});
-
-describe('NoOpPaperlessAdapter', () => {
-  let noop: NoOpPaperlessAdapter;
-
-  beforeEach(() => {
-    noop = new NoOpPaperlessAdapter();
-  });
-
-  it('getDeepLink gibt null zurueck', async () => {
-    expect(await noop.getDeepLink(42)).toBeNull();
-  });
-
-  it('getDocumentMetadata gibt null zurueck', async () => {
-    expect(await noop.getDocumentMetadata(42)).toBeNull();
-  });
-
-  it('syncDocument gibt Fehler zurueck', async () => {
-    const result = await noop.syncDocument(42);
-    expect(result.success).toBe(false);
-    expect(result.error).toBe('Paperless deaktiviert');
-  });
-
-  it('searchDocuments gibt leeres Array zurueck', async () => {
-    expect(await noop.searchDocuments('test')).toEqual([]);
-  });
-
-  it('healthCheck gibt false zurueck', async () => {
-    expect(await noop.healthCheck()).toBe(false);
   });
 });

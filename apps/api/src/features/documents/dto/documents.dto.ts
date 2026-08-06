@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsDateString, MinLength } from 'class-validator';
+import { IsString, IsOptional, IsDateString, MinLength, IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UploadDocumentDto {
   @IsOptional()
@@ -25,4 +26,13 @@ export class UpdateDocumentMetadataDto {
   @IsOptional()
   @IsDateString()
   documentDate?: string;
+}
+
+// BugFix-07 (Q3): Paperless-Dokument per ID an eine Versicherung binden.
+export class CreatePaperlessLinkDto {
+  @IsInt()
+  @Min(1)
+  @Max(2_147_483_647)
+  @Type(() => Number)
+  paperlessDocumentId!: number;
 }

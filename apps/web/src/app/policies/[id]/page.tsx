@@ -17,6 +17,7 @@ import PortalLinksTab from './portal-links-tab';
 import CostsOverviewCard from './costs-overview-card';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import { normalizePortalUrl } from '@/lib/portal-url';
 
 const API_BASE = getApiBaseUrl();
 
@@ -131,7 +132,7 @@ export default function PolicyDetailPage(): ReactElement {
                 <>
                   <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('policies.insurerPortalUrl')}</dt>
                   <dd style={{ margin: 0 }}>
-                    <a href={policy.insurerPortalUrl} target="_blank" rel="noopener noreferrer">{policy.insurerPortalUrl}</a>
+                    <a href={normalizePortalUrl(policy.insurerPortalUrl)} target="_blank" rel="noopener noreferrer">{policy.insurerPortalUrl}</a>
                   </dd>
                 </>
               )}

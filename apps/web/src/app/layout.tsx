@@ -1,8 +1,24 @@
 import type { ReactElement, ReactNode } from 'react';
+import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import '../styles/globals.css';
 import { Providers } from './providers';
 import { isSupportedLanguage, DEFAULT_LANGUAGE, type Language } from '../i18n';
+
+// BugFix-07 (Q7b): Branding ueber /branding/ – Defaults in
+// apps/web/public/branding/, ueberschreibbar ueber den Repo-Ordner
+// branding/ (Rebuild erforderlich, siehe Dockerfile).
+export const metadata: Metadata = {
+  title: {
+    default: 'VersiGo',
+    template: '%s · VersiGo',
+  },
+  icons: {
+    icon: '/branding/icon.svg',
+    shortcut: '/branding/favicon.svg',
+    apple: '/branding/icon.svg',
+  },
+};
 
 type RootLayoutProps = {
   children: ReactNode;

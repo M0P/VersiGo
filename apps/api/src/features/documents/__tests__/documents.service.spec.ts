@@ -38,6 +38,17 @@ function createMockConfig() {
 
 type MockDb = ReturnType<typeof createMockDb>;
 
+// BugFix-07 (Q3): Mock des PAPERLESS_ADAPTERs.
+function createMockPaperless() {
+  return {
+    getDeepLink: vi.fn().mockResolvedValue('https://paperless.example.com/documents/42/'),
+    getDocumentMetadata: vi.fn(),
+    syncDocument: vi.fn(),
+    searchDocuments: vi.fn().mockResolvedValue([]),
+    healthCheck: vi.fn().mockResolvedValue(false),
+  };
+}
+
 const mockFile: UploadedFile = {
   fieldname: 'file',
   originalname: 'test.pdf',
@@ -72,6 +83,7 @@ describe('DocumentsService', () => {
       mockDb as never,
       createMockConfig() as never,
       new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+      createMockPaperless(),
     );
   });
 
@@ -209,6 +221,160 @@ describe('DocumentsService', () => {
       expect(mockDb.policyDocument.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { policyId, archivedAt: null }, take: 200 }),
       );
+    });
+
+    // BugFix-07 (Q3): PAPERLESS_LINK-Dokumente erhalten einen Deep-Link.
+    it('ergaenzt den Paperless-Deep-Link fuer PAPERLESS_LINK-Dokumente', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: 'd1', policyId, fileName: 'intern.pdf', storageType: 'INTERNAL', storageRef: null },
+        { id: 'd2', policyId, fileName: 'paperless.pdf', storageType: 'PAPERLESS_LINK', storageRef: '42' },
+      ]);
+
+      const result = await service.findAll(householdId, user, policyId);
+
+      expect(result[0]).not.toHaveProperty('deepLink');
+      expect(result[1]).toMatchObject({ storageType: 'PAPERLESS_LINK', deepLink: 'https://paperless.example.com/documents/42/' });
+    });
+  });
+
+  describe('linkPaperlessDocument (BugFix-07, Q3)', () => {
+    it('bindet ein Paperless-Dokument als PAPERLESS_LINK und auditiert', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue({
+        title: 'KFZ-Versicherung 2026',
+        tags: [],
+        correspondent: 'Muster Versicherung',
+        documentType: 'Vertrag',
+        notes: null,
+        createdAt: '2026-01-15T10:00:00.000Z',
+        modifiedAt: null,
+      });
+      const serviceWithPaperless = new DocumentsService(
+        mockDb as never,
+        createMockConfig() as never,
+        new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+        paperless,
+      );
+      mockDb.policyDocument.findFirst.mockResolvedValue(null);
+      mockDb.policyDocument.create.mockResolvedValue({
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        fileName: 'KFZ-Versicherung 2026',
+        storageRef: '42',
+        category: 'Vertrag',
+        documentDate: new Date('2026-01-15T10:00:00.000Z'),
+      });
+
+      const result = await serviceWithPaperless.linkPaperlessDocument(
+        householdId,
+        userId,
+        policyId,
+        42,
+      );
+
+      expect(paperless.getDocumentMetadata).toHaveBeenCalledWith(42);
+      expect(mockDb.policyDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            policyId,
+            storageType: 'PAPERLESS_LINK',
+            storageRef: '42',
+            category: 'Vertrag',
+          }),
+        }),
+      );
+      expect(result.id).toBe('link-1');
+      expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: 'PAPERLESS_LINK_CREATED' }),
+        }),
+      );
+    });
+
+    it('dedupliziert: erneutes Verbinden liefert den bestehenden Eintrag', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue({ title: 'X', tags: [], correspondent: null, documentType: null, notes: null, createdAt: null, modifiedAt: null });
+      const serviceWithPaperless = new DocumentsService(
+        mockDb as never,
+        createMockConfig() as never,
+        new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+        paperless,
+      );
+      const existing = { id: 'link-1', policyId, storageType: 'PAPERLESS_LINK', storageRef: '42' };
+      mockDb.policyDocument.findFirst.mockResolvedValue(existing);
+
+      const result = await serviceWithPaperless.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      expect(result).toEqual(existing);
+      expect(mockDb.policyDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('wirft NotFoundException, wenn das Dokument in Paperless fehlt', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue(null);
+      const serviceWithPaperless = new DocumentsService(
+        mockDb as never,
+        createMockConfig() as never,
+        new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+        paperless,
+      );
+
+      await expect(
+        serviceWithPaperless.linkPaperlessDocument(householdId, userId, policyId, 999),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockDb.policyDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('BugFix-07 (Code-Review): P2002-Race zwischen parallelen Links wird idempotent aufgeloest', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue({
+        title: 'Rennen 2026',
+        tags: [],
+        correspondent: null,
+        documentType: null,
+        notes: null,
+        createdAt: null,
+        modifiedAt: null,
+      });
+      const serviceWithPaperless = new DocumentsService(
+        mockDb as never,
+        createMockConfig() as never,
+        new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+        paperless,
+      );
+
+      // Check-then-Insert: Erster Check (innerhalb der Transaktion) findet
+      // nichts; der parallele Request gewinnt das Rennen und verursacht beim
+      // create einen P2002 (partieller Unique-Index aus der Migration
+      // 20260806140000_bugfix07_paperless_link_dedupe).
+      const existing = { id: 'link-1', policyId, storageType: 'PAPERLESS_LINK', storageRef: '42' };
+      mockDb.policyDocument.findFirst
+        .mockResolvedValueOnce(null) // Transaktions-Check: nichts vorhanden
+        .mockResolvedValueOnce(existing); // P2002-Rueckgriff: Sieger gefunden
+      mockDb.policyDocument.create.mockRejectedValue({ code: 'P2002' });
+
+      const result = await serviceWithPaperless.linkPaperlessDocument(
+        householdId,
+        userId,
+        policyId,
+        42,
+      );
+
+      expect(result).toEqual(existing);
+      expect(mockDb.policyDocument.create).toHaveBeenCalledTimes(1);
+      // Kein zweites CREATE/Audit fuer den verlierenden Writer.
+      expect(mockDb.auditEvent.create).not.toHaveBeenCalled();
     });
   });
 

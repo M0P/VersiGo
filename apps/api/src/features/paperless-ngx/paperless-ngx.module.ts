@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { SettingsFoundationModule } from '@versigo/foundation';
 import { PaperlessNgxService } from './paperless-ngx.service';
+import { PaperlessController } from './paperless-ngx.controller';
 import { PAPERLESS_ADAPTER } from './paperless-ngx.interface';
 
 /**
@@ -24,6 +25,7 @@ const adapterProvider = {
 
 @Module({
   imports: [HttpModule, SettingsFoundationModule],
+  controllers: [PaperlessController],
   providers: [PaperlessNgxService, adapterProvider],
   exports: [PAPERLESS_ADAPTER],
 })

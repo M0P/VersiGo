@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { plainToInstance } from 'class-transformer';
 import { validate, type ValidationError } from 'class-validator';
-import { CreatePortalAccountLinkDto, UpdatePortalAccountLinkDto } from '../dto/policy-registry.dto';
+import { CreatePortalAccountLinkDto, UpdatePortalAccountLinkDto, CreatePolicyDto, UpdatePolicyDto } from '../dto/policy-registry.dto';
 
 /**
  * Prueft die DTO-Validierung des HTTP-Pfads (AP-18): Verschachtelte
@@ -194,5 +194,74 @@ describe('PortalCredentialsDto / Portal-Link DTOs (AP-18)', () => {
       { whitelist: true },
     );
     expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
+// BugFix-07 (Befund 1): insurerPortalUrl auf CreatePolicyDto/UpdatePolicyDto
+// durchlaeuft dieselbe https://-Normalisierung + http(s)-Validierung wie die
+// Portal-Link-URLs. Vorher wurde die URL unverarbeitet gespeichert und ein
+// `www.portal.de`-Eingang erzeugte im Web einen relativen/ungueltigen Link.
+describe('insurerPortalUrl (BugFix-07, Befund 1)', () => {
+  async function policyErrors(
+    dtoClass: typeof CreatePolicyDto | typeof UpdatePolicyDto,
+    raw: object,
+  ): Promise<ValidationError[]> {
+    return validate(plainToInstance(dtoClass, raw as object));
+  }
+
+  function basePolicy(): object {
+    return {
+      type: 'HAFTPFLICHT',
+      insurerName: 'Muster-Versicherung',
+      contractNumber: 'VN-123',
+      startDate: '2024-01-01',
+    };
+  }
+
+  it('ergaenzt https:// bei fehlendem Schema (Create)', async () => {
+    const dto = plainToInstance(CreatePolicyDto, {
+      ...basePolicy(),
+      insurerPortalUrl: 'www.portal.de/login',
+    });
+    expect(dto.insurerPortalUrl).toBe('https://www.portal.de/login');
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('laesst http(s) unveraendert (Create)', async () => {
+    const dto = plainToInstance(CreatePolicyDto, {
+      ...basePolicy(),
+      insurerPortalUrl: 'http://portal.example.com',
+    });
+    expect(dto.insurerPortalUrl).toBe('http://portal.example.com');
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('lehnt javascript:/data:-Eingaenge auch nach Normalisierung ab (Create)', async () => {
+    for (const raw of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>']) {
+      const errors = await policyErrors(CreatePolicyDto, { ...basePolicy(), insurerPortalUrl: raw });
+      expect(errors.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('lehnt ueberlange insurerPortalUrl ab (MaxLength 2048, Create + Update)', async () => {
+    const create = await policyErrors(CreatePolicyDto, {
+      ...basePolicy(),
+      insurerPortalUrl: `https://portal.example.com/${'a'.repeat(2100)}`,
+    });
+    expect(create.some((e) => Object.values(e.constraints ?? {}).some((m) => m.includes('2048')))).toBe(true);
+
+    const update = await policyErrors(UpdatePolicyDto, {
+      insurerPortalUrl: `https://portal.example.com/${'a'.repeat(2100)}`,
+    });
+    expect(update.some((e) => Object.values(e.constraints ?? {}).some((m) => m.includes('2048')))).toBe(true);
+  });
+
+  it('Update: ergaenzt https:// und erlaubt ein leeres Update', async () => {
+    const dto = plainToInstance(UpdatePolicyDto, { insurerPortalUrl: 'www.portal.de' });
+    expect(dto.insurerPortalUrl).toBe('https://www.portal.de');
+    expect(await validate(dto)).toHaveLength(0);
+
+    const untouched = plainToInstance(UpdatePolicyDto, { insurerName: 'neu' });
+    expect(await validate(untouched)).toHaveLength(0);
   });
 });

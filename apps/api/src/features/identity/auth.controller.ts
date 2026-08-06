@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpException,
@@ -25,6 +26,9 @@ type SessionRequest = Request & {
     userId?: string;
     oidcCodeVerifier?: string;
     oidcState?: string;
+    // BugFix-07: Self-Service-Verknuepfung – der Callback bindet die
+    // Identitaet an den bereits angemeldeten User statt einzuloggen.
+    oidcLinkMode?: boolean;
     regenerate: (callback: (err?: Error | null) => void) => void;
     destroy: (callback: () => void) => void;
   };
@@ -54,6 +58,10 @@ export class AuthController {
     const { url, codeVerifier, state } = await this.oidc.getAuthorizationUrl();
     req.session.oidcCodeVerifier = codeVerifier;
     req.session.oidcState = state;
+    // BugFix-07 (Code-Review, R2): Ein vom Self-Service-Link-Flow (POST
+    // /auth/oidc/link) zurueckgelassener oidcLinkMode darf den spaeteren
+    // Login-Callback nicht in den Link-Modus versetzen; hier defensiv loeschen.
+    delete req.session.oidcLinkMode;
     res.redirect(url);
   }
 
@@ -61,11 +69,18 @@ export class AuthController {
   @Get('config')
   async getAuthConfig(): Promise<{
     oidcEnabled: boolean;
+    oidcReady: boolean;
+    oidcConfigured: boolean;
+    oidcError: string | null;
     localEnabled: boolean;
     registrationEnabled: boolean;
   }> {
-    const [oidcEnabled, localEnabled] = await Promise.all([
-      this.oidc.isEnabled(),
+    const [oidcStatus, oidcConfigured, localEnabled] = await Promise.all([
+      // BugFix-07 (Befund 2): getStatus() trennt "Capability aktiv, aber
+      // Client/Discovery fehlgeschlagen oder Neustart fehlt" (oidcReady=false
+      // + oidcError) von "OIDC komplett deaktiviert" (oidcEnabled=false).
+      this.oidc.getStatus(),
+      this.capabilities.isEnabled('oidc'),
       this.capabilities.isEnabled('local'),
     ]);
     return {
@@ -73,7 +88,20 @@ export class AuthController {
       // sondern muss anzeigen, ob die Strategie tatsaechlich einsatzbereit ist
       // (Discovery erfolgreich, Client gesetzt). Sonst wuerde die Login-Seite
       // den OIDC-Button anbieten, obwohl /auth/login 501 liefert.
-      oidcEnabled,
+      oidcEnabled: oidcStatus.ready,
+      oidcReady: oidcStatus.ready,
+      // BugFix-07: Roh-Capability, damit die UI "deaktiviert" (kein Button,
+      // keine Warnung) von "aktiviert, aber Neustart/Discovery fehlt"
+      // (Warnung + kein Button) unterscheiden kann.
+      oidcConfigured,
+      // BugFix-07 (Code-Review, Minor): Der Oeffentliche Endpunkt darf keine
+      // internen Diagnose-Details (Discovery-URL, Issuer-Konfiguration etc.)
+      // leaken. Nur ein generischer Hinweis; die Detail-Fehlerbehandlung
+      // bleibt im Server-Log und im authentifizierten GET /auth/oidc/link
+      // (Settings-Area) sichtbar.
+      oidcError: oidcStatus.error
+        ? 'OIDC ist nicht verfuegbar (Details im Server-Log)'
+        : null,
       localEnabled,
       registrationEnabled: localEnabled,
     };
@@ -231,6 +259,40 @@ export class AuthController {
       return;
     }
 
+    // BugFix-07: Self-Service-Verknuepfung. Der Callback laeuft im
+    // "Link-Modus", wenn POST /auth/oidc/link ihn gestartet hat: Die
+    // bestaetigte Identitaet (iss, sub) wird an den bereits angemeldeten
+    // User gebunden – KEINE Session-Rotation, KEIN Login. Ohne angemeldeten
+    // User ist der Link-Modus ungueltig (der Flow wurde von einer
+    // ausgeloggten Session gestartet oder die Session wurde ersetzt).
+    if (req.session.oidcLinkMode) {
+      const userId = req.session.userId;
+      delete req.session.oidcCodeVerifier;
+      delete req.session.oidcState;
+      delete req.session.oidcLinkMode;
+      if (!userId) {
+        res.redirect('/auth/login?error=not-authenticated');
+        return;
+      }
+      try {
+        const { issuer, subject } = await this.oidc.exchangeIdentity(
+          params,
+          codeVerifier,
+          expectedState,
+        );
+        await this.authService.bindOidcIdentityForUser(userId, issuer, subject);
+        res.redirect('/settings?oidc=linked');
+      } catch (error) {
+        // 409: Identitaet bereits an ein anderes Konto gebunden.
+        if (error instanceof ConflictException) {
+          res.redirect('/settings?error=oidc-link-conflict');
+          return;
+        }
+        res.redirect('/settings?error=oidc-link-failed');
+      }
+      return;
+    }
+
     try {
       const user = await this.oidc.validateCallback(params, codeVerifier, expectedState);
       req.session.regenerate((err?: Error | null) => {
@@ -246,6 +308,67 @@ export class AuthController {
     } catch {
       res.redirect('/auth/login?error=authentication-failed');
     }
+  }
+
+  /**
+   * BugFix-07: Self-Service-Verknuepfung (Q2). Status der OIDC-Bindung des
+   * angemeldeten Users. Authentifiziert (kein @Public).
+   */
+  @Get('oidc/link')
+  async getOidcLink(@CurrentUser() user: AuthenticatedUser): Promise<{
+    linked: boolean;
+    oidcIssuer: string | null;
+    oidcSubject: string | null;
+    oidcReady: boolean;
+    oidcError: string | null;
+  }> {
+    const [binding, status] = await Promise.all([
+      this.authService.getOidcBinding(user.id),
+      this.oidc.getStatus(),
+    ]);
+    return {
+      linked: binding !== null,
+      oidcIssuer: binding?.oidcIssuer ?? null,
+      oidcSubject: binding?.oidcSubject ?? null,
+      oidcReady: status.ready,
+      oidcError: status.error,
+    };
+  }
+
+  /**
+   * BugFix-07: Startet den Link-Flow. Liefert die Provider-URL; die
+   * Session merkt sich den Link-Modus, damit der Callback die Identitaet
+   * bindet statt einzuloggen. 501, wenn OIDC nicht einsatzbereit ist.
+   */
+  @Post('oidc/link')
+  @HttpCode(HttpStatus.OK)
+  async startOidcLink(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: SessionRequest,
+  ): Promise<{ url: string }> {
+    const status = await this.oidc.getStatus();
+    if (!status.ready) {
+      throw new HttpException(
+        'OIDC ist nicht konfiguriert oder der Client konnte nicht initialisiert werden',
+        HttpStatus.NOT_IMPLEMENTED,
+      );
+    }
+
+    const { url, codeVerifier, state } = await this.oidc.getAuthorizationUrl();
+    req.session.oidcCodeVerifier = codeVerifier;
+    req.session.oidcState = state;
+    req.session.oidcLinkMode = true;
+    return { url };
+  }
+
+  /**
+   * BugFix-07: Loest die OIDC-Bindung des angemeldeten Users (nur die
+   * Bindung, nie das Konto). 409, wenn keine Bindung besteht.
+   */
+  @Delete('oidc/link')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async unlinkOidc(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.authService.unbindOidcIdentityForUser(user.id);
   }
 
   @Post('logout')

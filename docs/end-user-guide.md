@@ -119,7 +119,31 @@ docker compose up -d --build   # rebuild and restart
 The `migration` service applies database updates automatically. Check the
 release notes of the new version for anything else you need to do.
 
-## 9. Troubleshooting
+## 9. Customization (branding)
+
+VersiGo ships with a neutral default brand (shield/checkmark). To use your own
+branding, replace the two files in the `branding/` directory in the project
+root (they are copied into the web image at build time):
+
+| File | Purpose |
+|------|---------|
+| `branding/icon.svg` | App icon – used as the browser favicon and metadata icon (e.g. in links, tabs) |
+| `branding/favicon.svg` | Favicon (fallback/shortcut icon) |
+
+```bash
+# replace the files, then rebuild the web container
+docker compose up -d --build web
+```
+
+Guidelines:
+
+- Use **square SVGs** (any size works; rendered at 32–512 px).
+- After replacing a file, hard-refresh the browser (Ctrl/Cmd+Shift+R) to see
+  the new icon.
+- The files are only read at **build time** – changing them without a rebuild
+  has no effect.
+
+## 10. Troubleshooting
 
 | Symptom | What to check |
 |---------|---------------|

@@ -11,6 +11,9 @@ import { localizeAuthError, useI18n } from '../../../i18n';
 
 type AuthConfig = {
   oidcEnabled: boolean;
+  oidcReady: boolean;
+  oidcConfigured: boolean;
+  oidcError: string | null;
   localEnabled: boolean;
   registrationEnabled: boolean;
 };
@@ -156,7 +159,13 @@ export default function LoginPage(): ReactElement {
     );
   }
 
-  const hasAnyAuth = config.oidcEnabled || config.localEnabled;
+  const hasAnyAuth = config.oidcConfigured || config.localEnabled;
+
+  // BugFix-07 (Befund 2): OIDC ist als Feature aktiviert, aber der Client
+  // ist nicht einsatzbereit (Discovery fehlgeschlagen oder Dienste-Neustart
+  // nach dem Aktivieren fehlt). Die Login-Seite blendet den Button dann aus
+  // und erklaert den Zustand statt eines stillen 501 beim Klick.
+  const oidcBroken = config.oidcConfigured && !config.oidcReady;
 
   if (!hasAnyAuth) {
     return (
@@ -240,7 +249,7 @@ export default function LoginPage(): ReactElement {
           <hr role="separator" aria-label={t('auth.or')} style={{ margin: 'var(--versigo-space-6) 0' }} />
         )}
 
-        {config.oidcEnabled && (
+        {config.oidcConfigured && config.oidcReady && (
           <div style={{ textAlign: 'center' }}>
             <p className="text-sm text-muted" style={{ marginBottom: 'var(--versigo-space-3)' }}>
               {t('auth.alternativeOidc')}
@@ -248,6 +257,15 @@ export default function LoginPage(): ReactElement {
             <a href={`${apiBaseUrl}/auth/login`}>
               <Button variant="outline" style={{ width: '100%' }}>{t('auth.oidcSignIn')}</Button>
             </a>
+          </div>
+        )}
+
+        {oidcBroken && (
+          <div style={{ marginTop: 'var(--versigo-space-6)' }}>
+            <Alert variant="warning" title={t('auth.oidcNotReadyTitle')}>
+              {t('auth.oidcNotReadyBody')}
+              {config.oidcError ? ` (${config.oidcError})` : ''}
+            </Alert>
           </div>
         )}
       </Card>

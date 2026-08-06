@@ -7,7 +7,7 @@ import { Card, CardHeader } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input, FormField } from '../../components/ui/form-field';
 import { Alert } from '../../components/ui/alert';
-import { Loading } from '../../components/ui/loading';
+import { Loading, InlineSpinner } from '../../components/ui/loading';
 import { NAV_SECTIONS } from '../../components/ui/nav-config';
 import { AppearanceSettings } from '../../components/ui/appearance-settings';
 import { LanguageSelector } from '../../components/ui/language-selector';
@@ -26,6 +26,15 @@ type Profile = {
   createdAt: string;
 };
 
+// BugFix-07 (Q2): Zustand der Self-Service-OIDC-Verknuepfung (GET /auth/oidc/link)
+type OidcLinkStatus = {
+  linked: boolean;
+  oidcIssuer: string | null;
+  oidcSubject: string | null;
+  oidcReady: boolean;
+  oidcError: string | null;
+};
+
 export default function SettingsPage(): ReactElement {
   const { user, loading: userLoading } = useCurrentUser();
   const { t, language } = useI18n();
@@ -39,6 +48,25 @@ export default function SettingsPage(): ReactElement {
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
+
+  // BugFix-07 (Q2): OIDC-Verknuepfung
+  const [oidcStatus, setOidcStatus] = useState<OidcLinkStatus | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
+  const [oidcMessage, setOidcMessage] = useState<string | null>(null);
+
+  const loadOidcStatus = () => {
+    fetch(`${API_BASE}/auth/oidc/link`, { credentials: 'include' })
+      .then((res) => {
+        if (res.status === 401) { window.location.href = '/login'; return Promise.resolve(null); }
+        if (!res.ok) return Promise.resolve(null);
+        return res.json();
+      })
+      .then((data: OidcLinkStatus | null) => {
+        if (data) setOidcStatus(data);
+      })
+      .catch(() => setOidcStatus(null));
+  };
 
   const loadProfile = () => {
     setLoadingProfile(true);
@@ -60,15 +88,23 @@ export default function SettingsPage(): ReactElement {
       .finally(() => setLoadingProfile(false));
   };
 
+  // BugFix-07: Nach dem Link-Callback (Redirect von /auth/callback) stehen
+  // Ergebnis und Fehler als Query-Parameter auf /settings bereit.
+  const readOidcCallbackResult = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('oidc') === 'linked') return t('settings.oidcLinkSuccess');
+    if (params.get('error') === 'oidc-link-conflict') return t('settings.oidcLinkConflict');
+    if (params.get('error') === 'oidc-link-failed') return t('settings.oidcLinkFailed');
+    return null;
+  };
+
   useEffect(() => {
-    // m1: READ_ONLY-Konten duerfen das Profil nicht abrufen (403) – sie
-    // sehen stattdessen die Warn-Banner-Ansicht statt eines /forbidden-
-    // Redirects. `t` ist bewusst NICHT in den Dependencies: ein
-    // Sprachwechsel erzeugt eine neue `t`-Referenz und wuerde sonst ein
-    // redundantes GET /user/profile ausloesen (Review-2, Minor #7).
     if (userLoading) return;
     if (user?.role === 'READ_ONLY') return;
     loadProfile();
+    loadOidcStatus();
+    setOidcMessage(readOidcCallbackResult());
   }, [userLoading, user]);
 
   // AP-16/AP-17/AP-21: READ_ONLY darf KEINE Profil-/Anzeige-Einstellungen
@@ -128,6 +164,55 @@ export default function SettingsPage(): ReactElement {
   };
 
   const profileLoading = loadingProfile || userLoading;
+
+  // BugFix-07 (Q2): Self-Service-OIDC-Verknuepfung. POST startet den
+  // Link-Flow (Session merkt sich den Link-Modus) und liefert die
+  // Provider-URL; der User wird dorthin geleitet und kommt nach der
+  // Bestaetigung ueber /auth/callback (Link-Modus) zurueck.
+  const handleLinkOidc = async () => {
+    setLinking(true);
+    setOidcMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/auth/oidc/link`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.status === 501) {
+        setOidcMessage(t('settings.oidcNotReady'));
+        return;
+      }
+      if (!res.ok) throw new Error(t('settings.oidcLinkFailed'));
+      const data = await res.json();
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(t('settings.oidcLinkFailed'));
+    } catch {
+      setOidcMessage(t('settings.oidcLinkFailed'));
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const handleUnlinkOidc = async () => {
+    if (!window.confirm(t('settings.oidcUnlinkButton') + '?')) return;
+    setUnlinking(true);
+    setOidcMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/auth/oidc/link`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(t('settings.oidcLinkFailed'));
+      setOidcMessage(t('settings.oidcUnlinkSuccess'));
+      await loadOidcStatus();
+    } catch {
+      setOidcMessage(t('settings.oidcLinkFailed'));
+    } finally {
+      setUnlinking(false);
+    }
+  };
 
   // AP-20 (UI-Completeness): DSGVO-Export der eigenen personenbezogenen
   // Daten (GET /privacy/export, AP-19 API). Das JSON wird als Datei
@@ -248,6 +333,54 @@ export default function SettingsPage(): ReactElement {
           <LanguageSelector />
 
           <AppearanceSettings />
+
+          {/* BugFix-07 (Q2): Self-Service-OIDC-Verknuepfung. Zustand kommt
+              von GET /auth/oidc/link; das Ergebnis des Link-Callbacks wird
+              ueber die Query-Parameter von /settings angezeigt. */}
+          <Card style={{ marginTop: 'var(--versigo-space-6)' }}>
+            <CardHeader>
+              <SectionHeader title={t('settings.oidcLinkTitle')} />
+            </CardHeader>
+            <p style={{ marginBottom: 'var(--versigo-space-4)' }}>
+              {t('settings.oidcLinkBody')}
+            </p>
+
+            {oidcMessage && (
+              <div style={{ marginBottom: 'var(--versigo-space-4)' }}>
+                <Alert variant={oidcMessage === t('settings.oidcLinkSuccess') || oidcMessage === t('settings.oidcUnlinkSuccess') ? 'success' : 'warning'}>
+                  {oidcMessage}
+                </Alert>
+              </div>
+            )}
+
+            {oidcStatus?.linked && oidcStatus.oidcIssuer ? (
+              <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ flex: 1 }}>
+                  {t('settings.oidcLinked', { issuer: oidcStatus.oidcIssuer })}
+                </span>
+                <Button variant="secondary" onClick={handleUnlinkOidc} disabled={unlinking}>
+                  {unlinking ? <><InlineSpinner /> {t('settings.oidcUnlinkButton')}</> : t('settings.oidcUnlinkButton')}
+                </Button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 'var(--versigo-space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  {oidcStatus && !oidcStatus.oidcReady && (
+                    <p className="text-sm text-muted" style={{ margin: 0 }}>
+                      {t('settings.oidcNotReady')}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="primary"
+                  onClick={handleLinkOidc}
+                  disabled={linking || (oidcStatus !== null && !oidcStatus.oidcReady)}
+                >
+                  {linking ? <><InlineSpinner /> {t('settings.oidcLinkButton')}</> : t('settings.oidcLinkButton')}
+                </Button>
+              </div>
+            )}
+          </Card>
 
           {/* AP-20 (UI-Completeness): DSGVO-Export (GET /privacy/export).
               Nur USER/ADMIN – die READ_ONLY-Ansicht oben hat diesen

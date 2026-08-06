@@ -5,6 +5,16 @@ import {
   SettingsResolverService,
   type AppConfig,
 } from '@versigo/foundation';
+// WICHTIG (BugFix-07, Code-Review R3): `AuthService` muss ein VALUE-Import
+// bleiben — mit `emitDecoratorMetadata: true` referenziert `design:paramtypes`
+// die Klasse zur Laufzeit fuer die NestJS-DI. Nicht auf `import type`
+// umstellen (wuerde die DI-Aufloesung beim Bootstrap brechen). Damit ist die
+// Kante `oidc.strategy -> auth.service` zur Laufzeit real und bildet zusammen
+// mit `auth.service.ts`'s Import von `normalizeIssuerUrl` einen zyklischen
+// Modulgraphen, dessen Sicherheit von der Lade-Reihenfolge abhaengt (heute
+// verifiziert: voller API-Boot + 813 Tests gruen). `auth.service.ts` darf
+// daher KEINE Modul-Auswertungszeit-Abhaengigkeit von oidc.strategy-Exports
+// einfuehren (nur Methoden-Level-Nutzung wie normalizeIssuerUrl).
 import { AuthService, AuthenticatedUser } from './auth.service';
 import { relaxedFetch } from '../../common/connectivity/relaxed-fetch';
 
@@ -56,6 +66,9 @@ export function normalizeIssuerUrl(issuer: string): string {
 export class OidcStrategy implements OnModuleInit {
   private readonly logger = new Logger(OidcStrategy.name);
   private client: Configuration | null = null;
+  /** BugFix-07: Diagnose-Daten fuer GET /auth/config (oidcReady/oidcError). */
+  private initError: string | null = null;
+  private initAttempted = false;
 
   constructor(
     private readonly config: AppConfigService,
@@ -90,6 +103,7 @@ export class OidcStrategy implements OnModuleInit {
   }
 
   private async discoverClient(): Promise<void> {
+    this.initAttempted = true;
     try {
       const issuerUrl = this.config.get('OIDC_ISSUER_URL');
       if (!issuerUrl) {
@@ -138,9 +152,44 @@ export class OidcStrategy implements OnModuleInit {
         );
       }
       this.logger.log(`OIDC-Client konfiguriert fuer Issuer ${issuerUrl}`);
+      this.initError = null;
     } catch (err) {
-      this.logger.error('OIDC-Client-Initialisierung fehlgeschlagen', (err as Error).message);
+      this.initError = err instanceof Error ? err.message : String(err);
+      this.logger.error('OIDC-Client-Initialisierung fehlgeschlagen', this.initError);
     }
+  }
+
+  /**
+   * BugFix-07 (Befund 2): Diagnose fuer die Login-Seite und die
+   * Self-Service-Verknuepfung. Liefert, ob der OIDC-Client tatsaechlich
+   * einsatzbereit ist (Capability aktiv UND Discovery/Client-Setup ok) und
+   * eine fehlertolerante Kurzbeschreibung, warum nicht. `ready === false`
+   * ist der einzige Grund, warum die Login-Seite den OIDC-Button ausblendet –
+   * vor BugFix-07 fehlte diese Unterscheidung, sodass z.B. nach dem
+   * Aktivieren von OIDC ohne Neustart (Restart-Kategorie) oder bei einem
+   * Discovery-Fehler kein erklaerbarer Zustand entstand.
+   */
+  async getStatus(): Promise<{ ready: boolean; error: string | null }> {
+    if (!(await this.capabilities.isEnabled('oidc'))) {
+      return { ready: false, error: null };
+    }
+    if (this.client !== null) {
+      return { ready: true, error: null };
+    }
+    // Capability ist aktiv, aber der Client fehlt. `initAttempted` trennt
+    // "Boot noch nicht durchgelaufen" (unwahrscheinlich, aber moeglich)
+    // von "Discovery/Client-Setup fehlgeschlagen".
+    return {
+      ready: false,
+      error: this.initAttempted
+        ? (this.initError ?? 'OIDC-Client-Initialisierung fehlgeschlagen')
+        : 'OIDC-Client wird noch initialisiert',
+    };
+  }
+
+  async isEnabled(): Promise<boolean> {
+    // BugFix-05: async (Resolver-basierte Capability-Aufloesung).
+    return (await this.capabilities.isEnabled('oidc')) && this.client !== null;
   }
 
   /**
@@ -164,11 +213,6 @@ export class OidcStrategy implements OnModuleInit {
       );
       return { allowPrivate: false, allowSelfSigned: false };
     }
-  }
-
-  async isEnabled(): Promise<boolean> {
-    // BugFix-05: async (Resolver-basierte Capability-Aufloesung).
-    return (await this.capabilities.isEnabled('oidc')) && this.client !== null;
   }
 
   /**
@@ -220,11 +264,45 @@ export class OidcStrategy implements OnModuleInit {
       throw new UnauthorizedException('OIDC nicht konfiguriert');
     }
 
+    const { issuer, subject } = await this.exchangeAndGetClaims(currentUrl, codeVerifier, expectedState);
+
+    const user = await this.authService.findByOidcIdentity(normalizeIssuerUrl(issuer), subject);
+    if (!user) {
+      // Generischer Fehler: verraet weder Existenz noch Bindungsstatus.
+      throw new UnauthorizedException('OIDC-Anmeldung fehlgeschlagen');
+    }
+
+    return user;
+  }
+
+  /**
+   * BugFix-07: Fuehrt den PKCE-Code-Austausch durch und extrahiert die
+   * Identitaets-Claims (iss, sub) OHNE Bindungs-Aufloesung. Wird vom
+   * Self-Service-Link-Callback genutzt, der eine noch ungebundene
+   * Identitaet an den angemeldeten Session-User binden muss. Der Ablauf
+   * (state-Check + PKCE) ist identisch zur Login-Validierung.
+   */
+  async exchangeIdentity(
+    currentUrl: URL,
+    codeVerifier: string,
+    expectedState: string,
+  ): Promise<{ issuer: string; subject: string }> {
+    if (!this.client) {
+      throw new UnauthorizedException('OIDC nicht konfiguriert');
+    }
+    return this.exchangeAndGetClaims(currentUrl, codeVerifier, expectedState);
+  }
+
+  private async exchangeAndGetClaims(
+    currentUrl: URL,
+    codeVerifier: string,
+    expectedState: string,
+  ): Promise<{ issuer: string; subject: string }> {
     let tokenSet: Awaited<ReturnType<typeof authorizationCodeGrant>>;
     try {
       // authorizationCodeGrant validiert intern den state-Parameter
       // (checks.expectedState) und fuehrt den PKCE-Code-Austausch durch.
-      tokenSet = await authorizationCodeGrant(this.client, currentUrl, {
+      tokenSet = await authorizationCodeGrant(this.client!, currentUrl, {
         expectedState,
         pkceCodeVerifier: codeVerifier,
       });
@@ -244,15 +322,6 @@ export class OidcStrategy implements OnModuleInit {
       throw new UnauthorizedException('OIDC-Token enthaelt keinen iss-Wert');
     }
 
-    // Normalisierung der Trailing-Slash-Varianz: Die Bindung (Admin-Eingabe)
-    // und claims.iss muessen unabhaengig von einem abschliessenden Slash
-    // uebereinstimmen.
-    const user = await this.authService.findByOidcIdentity(normalizeIssuerUrl(issuer), claims.sub);
-    if (!user) {
-      // Generischer Fehler: verraet weder Existenz noch Bindungsstatus.
-      throw new UnauthorizedException('OIDC-Anmeldung fehlgeschlagen');
-    }
-
-    return user;
+    return { issuer, subject: claims.sub };
   }
 }

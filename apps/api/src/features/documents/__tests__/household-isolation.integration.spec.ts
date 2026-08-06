@@ -91,6 +91,8 @@ describe('Documents Household-Isolation (Integration)', () => {
       mockDb as never,
       createMockConfig() as never,
       new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+      // BugFix-07 (Q3): Paperless-Adapter – hier nur als Dummy noetig.
+      { getDeepLink: vi.fn(), getDocumentMetadata: vi.fn(), syncDocument: vi.fn(), searchDocuments: vi.fn(), healthCheck: vi.fn() } as never,
     );
   });
 

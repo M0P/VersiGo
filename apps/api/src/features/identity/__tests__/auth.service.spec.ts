@@ -13,6 +13,7 @@ function createMockDb() {
       findFirst: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     },
     credential: {
       create: vi.fn(),
@@ -196,6 +197,105 @@ describe('AuthService.findByOidcIdentity', () => {
     });
     const result = await service.findByOidcIdentity('https://issuer.example.com', 'sub-123');
     expect(result).toBeNull();
+  });
+});
+
+describe('AuthService Self-Service-OIDC-Verknuepfung (BugFix-07)', () => {
+  let mockDb: MockDb;
+  let mockPasswordHashing: MockPasswordHashing;
+  let service: AuthService;
+
+  beforeEach(() => {
+    mockDb = createMockDb();
+    mockPasswordHashing = createMockPasswordHashing();
+    service = new AuthService(mockDb as never, mockPasswordHashing as never);
+    mockDb.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(mockDb));
+  });
+
+  describe('getOidcBinding', () => {
+    it('liefert die Bindung des Kontos', async () => {
+      mockDb.user.findUnique.mockResolvedValue({
+        oidcIssuer: 'https://issuer.example.com',
+        oidcSubject: 'sub-1',
+      });
+
+      const result = await service.getOidcBinding('user-1');
+      expect(result).toEqual({
+        oidcIssuer: 'https://issuer.example.com',
+        oidcSubject: 'sub-1',
+      });
+      expect(mockDb.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        select: { oidcIssuer: true, oidcSubject: true },
+      });
+    });
+
+    it('liefert null ohne Bindung', async () => {
+      mockDb.user.findUnique.mockResolvedValue({ oidcIssuer: null, oidcSubject: null });
+      await expect(service.getOidcBinding('user-1')).resolves.toBeNull();
+    });
+  });
+
+  describe('bindOidcIdentityForUser', () => {
+    it('bindet die Identitaet (normalisierter Issuer) und auditiert', async () => {
+      mockDb.user.findUnique.mockResolvedValue({ id: 'user-1' });
+
+      const result = await service.bindOidcIdentityForUser(
+        'user-1',
+        'https://issuer.example.com/',
+        'sub-1',
+      );
+
+      expect(result).toEqual({
+        oidcIssuer: 'https://issuer.example.com',
+        oidcSubject: 'sub-1',
+      });
+      expect(mockDb.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { oidcIssuer: 'https://issuer.example.com', oidcSubject: 'sub-1' },
+      });
+      const auditCall = mockDb.auditEvent.create.mock.calls[0][0];
+      expect(auditCall.data.action).toBe('OIDC_BOUND_SELF');
+      expect(auditCall.data.actorUserId).toBe('user-1');
+    });
+
+    it('wirft ConflictException, wenn die Identitaet bereits an ein anderes Konto gebunden ist', async () => {
+      mockDb.user.findUnique.mockResolvedValue({ id: 'user-1' });
+      mockDb.user.update.mockRejectedValue({ code: 'P2002' });
+
+      await expect(
+        service.bindOidcIdentityForUser('user-1', 'https://issuer.example.com', 'sub-1'),
+      ).rejects.toThrow('Diese OIDC-Identitaet ist bereits an ein anderes Konto gebunden');
+    });
+
+    it('wirft NotFoundException bei unbekanntem User', async () => {
+      mockDb.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.bindOidcIdentityForUser('user-999', 'https://issuer.example.com', 'sub-1'),
+      ).rejects.toThrow('Benutzer nicht gefunden');
+    });
+  });
+
+  describe('unbindOidcIdentityForUser', () => {
+    it('loest die Bindung und auditiert OIDC_UNBOUND_SELF', async () => {
+      mockDb.user.findUnique.mockResolvedValue({ oidcIssuer: 'https://issuer.example.com' });
+
+      await service.unbindOidcIdentityForUser('user-1');
+
+      expect(mockDb.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { oidcIssuer: null, oidcSubject: null },
+      });
+      const auditCall = mockDb.auditEvent.create.mock.calls[0][0];
+      expect(auditCall.data.action).toBe('OIDC_UNBOUND_SELF');
+    });
+
+    it('wirft ConflictException ohne bestehende Bindung', async () => {
+      mockDb.user.findUnique.mockResolvedValue({ oidcIssuer: null });
+      await expect(service.unbindOidcIdentityForUser('user-1')).rejects.toThrow(
+        'Konto hat keine OIDC-Bindung',
+      );
+    });
   });
 });
 

@@ -6,14 +6,19 @@ import type { AuthenticatedUser } from '../auth.service';
 
 type OidcStrategyLike = {
   isEnabled: ReturnType<typeof vi.fn>;
+  getStatus: ReturnType<typeof vi.fn>;
   getAuthorizationUrl: ReturnType<typeof vi.fn>;
   callbackParams: ReturnType<typeof vi.fn>;
   validateCallback: ReturnType<typeof vi.fn>;
+  exchangeIdentity: ReturnType<typeof vi.fn>;
 };
 
 type AuthServiceLike = {
   localLogin: ReturnType<typeof vi.fn>;
   registerLocalAccount: ReturnType<typeof vi.fn>;
+  getOidcBinding: ReturnType<typeof vi.fn>;
+  bindOidcIdentityForUser: ReturnType<typeof vi.fn>;
+  unbindOidcIdentityForUser: ReturnType<typeof vi.fn>;
 };
 
 type CapabilitiesLike = {
@@ -31,6 +36,7 @@ type SessionLike = {
   userId?: string;
   oidcCodeVerifier?: string;
   oidcState?: string;
+  oidcLinkMode?: boolean;
   regenerate: (callback: (err?: Error | null) => void) => void;
   destroy: (callback: () => void) => void;
 };
@@ -63,6 +69,7 @@ const mockUser: AuthenticatedUser = {
 function createMockOidc(): OidcStrategyLike {
   return {
     isEnabled: vi.fn().mockResolvedValue(true),
+    getStatus: vi.fn().mockResolvedValue({ ready: true, error: null }),
     getAuthorizationUrl: vi.fn().mockReturnValue({
       url: 'https://provider.example.com/auth',
       codeVerifier: 'verifier',
@@ -70,6 +77,10 @@ function createMockOidc(): OidcStrategyLike {
     }),
     callbackParams: vi.fn().mockReturnValue({ code: 'auth-code', state: 'state' }),
     validateCallback: vi.fn().mockResolvedValue(mockUser),
+    exchangeIdentity: vi.fn().mockResolvedValue({
+      issuer: 'https://provider.example.com',
+      subject: 'sub-1',
+    }),
   };
 }
 
@@ -77,6 +88,12 @@ function createMockAuthService(): AuthServiceLike {
   return {
     localLogin: vi.fn(),
     registerLocalAccount: vi.fn().mockResolvedValue(undefined),
+    getOidcBinding: vi.fn().mockResolvedValue(null),
+    bindOidcIdentityForUser: vi.fn().mockResolvedValue({
+      oidcIssuer: 'https://provider.example.com',
+      oidcSubject: 'sub-1',
+    }),
+    unbindOidcIdentityForUser: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -182,7 +199,7 @@ describe('AuthController', () => {
       const controller = createController({ oidc });
       const regenerate = vi.fn();
       const req = {
-        session: { regenerate },
+        session: { regenerate, oidcLinkMode: true },
       } as unknown as RequestLike;
       const res = {
         redirect: vi.fn(),
@@ -196,6 +213,10 @@ describe('AuthController', () => {
       expect(res.redirect).toHaveBeenCalledWith('https://provider.example.com/auth');
       expect(req.session.oidcCodeVerifier).toBe('verifier');
       expect(req.session.oidcState).toBe('state');
+      // BugFix-07 (Code-Review, R2): Stale oidcLinkMode aus einem abgebrochenen
+      // Self-Service-Link-Flow darf den Login-Callback nicht in den Link-Modus
+      // versetzen.
+      expect(req.session.oidcLinkMode).toBeUndefined();
     });
 
     it('gibt 501 wenn OIDC deaktiviert ist (bleibt unabhaengig von lokaler Auth)', async () => {
@@ -223,33 +244,225 @@ describe('AuthController', () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockImplementation(async (key: string) => key === 'local');
       const oidc = createMockOidc();
-      oidc.isEnabled.mockResolvedValue(false);
+      oidc.getStatus.mockResolvedValue({ ready: false, error: null });
       const controller = createController({ capabilities, oidc });
 
       const result = await controller.getAuthConfig();
-      expect(result).toEqual({ oidcEnabled: false, localEnabled: true, registrationEnabled: true });
+      expect(result).toEqual({
+        oidcEnabled: false,
+        oidcReady: false,
+        oidcConfigured: false,
+        oidcError: null,
+        localEnabled: true,
+        registrationEnabled: true,
+      });
     });
 
     it('zeigt beide Methoden wenn aktiviert', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const oidc = createMockOidc();
-      oidc.isEnabled.mockResolvedValue(true);
+      oidc.getStatus.mockResolvedValue({ ready: true, error: null });
       const controller = createController({ capabilities, oidc });
 
       const result = await controller.getAuthConfig();
-      expect(result).toEqual({ oidcEnabled: true, localEnabled: true, registrationEnabled: true });
+      expect(result).toEqual({
+        oidcEnabled: true,
+        oidcReady: true,
+        oidcConfigured: true,
+        oidcError: null,
+        localEnabled: true,
+        registrationEnabled: true,
+      });
     });
 
     it('meldet OIDC als deaktiviert, wenn die Strategie trotz Capability nicht bereit ist (Discovery fehlgeschlagen)', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockImplementation(async (key: string) => key === 'oidc');
       const oidc = createMockOidc();
-      oidc.isEnabled.mockResolvedValue(false);
+      oidc.getStatus.mockResolvedValue({ ready: false, error: 'Discovery fehlgeschlagen' });
       const controller = createController({ capabilities, oidc });
 
       const result = await controller.getAuthConfig();
-      expect(result).toEqual({ oidcEnabled: false, localEnabled: false, registrationEnabled: false });
+      expect(result).toEqual({
+        oidcEnabled: false,
+        oidcReady: false,
+        oidcConfigured: true,
+        oidcError: 'OIDC ist nicht verfuegbar (Details im Server-Log)',
+        localEnabled: false,
+        registrationEnabled: false,
+      });
+    });
+
+    it('BugFix-07: meldet oidcReady=true NUR wenn der Client tatsaechlich bereit ist', async () => {
+      const capabilities = createMockCapabilities();
+      capabilities.isEnabled.mockImplementation(async (key: string) => key === 'oidc');
+      const oidc = createMockOidc();
+      // Capability aktiv, Client aber nicht initialisiert (z.B. Neustart
+      // fehlt nach Aktivieren von OIDC) => Button darf NICHT erscheinen.
+      oidc.getStatus.mockResolvedValue({ ready: false, error: 'OIDC_ISSUER_URL fehlt' });
+      const controller = createController({ capabilities, oidc });
+
+      const result = await controller.getAuthConfig();
+      expect(result.oidcEnabled).toBe(false);
+      expect(result.oidcReady).toBe(false);
+      expect(result.oidcConfigured).toBe(true);
+      // BugFix-07 (Code-Review): Oeffentlicher Endpunkt leakt keine internen
+      // Diagnose-Details mehr, nur noch einen generischen Hinweis.
+      expect(result.oidcError).toBe('OIDC ist nicht verfuegbar (Details im Server-Log)');
+    });
+  });
+
+  describe('Self-Service-OIDC-Verknuepfung (BugFix-07)', () => {
+    it('GET /auth/oidc/link liefert den Bindungsstatus', async () => {
+      const authService = createMockAuthService();
+      authService.getOidcBinding.mockResolvedValue({
+        oidcIssuer: 'https://provider.example.com',
+        oidcSubject: 'sub-1',
+      });
+      const oidc = createMockOidc();
+      const controller = createController({ authService, oidc });
+
+      const result = await controller.getOidcLink(mockUser);
+      expect(result).toEqual({
+        linked: true,
+        oidcIssuer: 'https://provider.example.com',
+        oidcSubject: 'sub-1',
+        oidcReady: true,
+        oidcError: null,
+      });
+    });
+
+    it('GET /auth/oidc/link meldet linked=false ohne Bindung', async () => {
+      const controller = createController();
+      const result = await controller.getOidcLink(mockUser);
+      expect(result.linked).toBe(false);
+      expect(result.oidcIssuer).toBeNull();
+    });
+
+    it('POST /auth/oidc/link setzt den Link-Modus und liefert die Provider-URL', async () => {
+      const oidc = createMockOidc();
+      const controller = createController({ oidc });
+      const session: SessionLike & { oidcLinkMode?: boolean } = {
+        oidcCodeVerifier: undefined,
+        oidcState: undefined,
+        oidcLinkMode: false,
+        regenerate: vi.fn(),
+        destroy: vi.fn(),
+      };
+      const req = { session } as unknown as RequestLike;
+
+      const result = await controller.startOidcLink(mockUser, req as never);
+      expect(result.url).toBe('https://provider.example.com/auth');
+      expect(session.oidcCodeVerifier).toBe('verifier');
+      expect(session.oidcState).toBe('state');
+      expect(session.oidcLinkMode).toBe(true);
+    });
+
+    it('POST /auth/oidc/link gibt 501, wenn OIDC nicht einsatzbereit ist', async () => {
+      const oidc = createMockOidc();
+      oidc.getStatus.mockResolvedValue({ ready: false, error: 'Discovery fehlgeschlagen' });
+      const controller = createController({ oidc });
+      const req = { session: {} } as unknown as RequestLike;
+
+      await expect(controller.startOidcLink(mockUser, req as never)).rejects.toMatchObject({
+        status: HttpStatus.NOT_IMPLEMENTED,
+      });
+    });
+
+    it('DELETE /auth/oidc/link loest die Bindung des angemeldeten Users', async () => {
+      const authService = createMockAuthService();
+      const controller = createController({ authService });
+      await controller.unlinkOidc(mockUser);
+      expect(authService.unbindOidcIdentityForUser).toHaveBeenCalledWith('user-1');
+    });
+
+    it('Callback im Link-Modus bindet die Identitaet an den Session-User (ohne Session-Rotation)', async () => {
+      const oidc = createMockOidc();
+      const authService = createMockAuthService();
+      const controller = createController({ oidc, authService });
+      const regenerate = vi.fn((cb: () => void) => cb());
+      const destroy = vi.fn((cb: () => void) => cb());
+      const session: SessionLike & { oidcLinkMode?: boolean } = {
+        userId: 'user-1',
+        oidcCodeVerifier: 'verifier',
+        oidcState: 'state',
+        oidcLinkMode: true,
+        regenerate,
+        destroy,
+      };
+      const req = { session } as unknown as RequestLike;
+      const res = {
+        redirect: vi.fn(),
+        clearCookie: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+        json: vi.fn(),
+      } as ResponseLike;
+
+      await controller.callback(req as never, res as never);
+
+      expect(oidc.exchangeIdentity).toHaveBeenCalled();
+      expect(authService.bindOidcIdentityForUser).toHaveBeenCalledWith(
+        'user-1',
+        'https://provider.example.com',
+        'sub-1',
+      );
+      // Keine Session-Rotation im Link-Modus (User bleibt eingeloggt).
+      expect(regenerate).not.toHaveBeenCalled();
+      expect(res.redirect).toHaveBeenCalledWith('/settings?oidc=linked');
+      expect(session.oidcLinkMode).toBeUndefined();
+    });
+
+    it('Callback im Link-Modus ohne Session-User lehnt ab (kein Binden an Unbekannte)', async () => {
+      const oidc = createMockOidc();
+      const authService = createMockAuthService();
+      const controller = createController({ oidc, authService });
+      const session = {
+        oidcCodeVerifier: 'verifier',
+        oidcState: 'state',
+        oidcLinkMode: true,
+        regenerate: vi.fn(),
+        destroy: vi.fn(),
+      };
+      const req = { session } as unknown as RequestLike;
+      const res = {
+        redirect: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as ResponseLike;
+
+      await controller.callback(req as never, res as never);
+
+      expect(authService.bindOidcIdentityForUser).not.toHaveBeenCalled();
+      expect(res.redirect).toHaveBeenCalledWith('/auth/login?error=not-authenticated');
+    });
+
+    it('Callback im Link-Modus leitet bei Konflikt (Identitaet anderweitig gebunden) zu /settings?error=oidc-link-conflict', async () => {
+      const oidc = createMockOidc();
+      const authService = createMockAuthService();
+      authService.bindOidcIdentityForUser.mockRejectedValue(
+        new ConflictException('Diese OIDC-Identitaet ist bereits an ein anderes Konto gebunden'),
+      );
+      const controller = createController({ oidc, authService });
+      const session = {
+        userId: 'user-1',
+        oidcCodeVerifier: 'verifier',
+        oidcState: 'state',
+        oidcLinkMode: true,
+        regenerate: vi.fn(),
+        destroy: vi.fn(),
+      };
+      const req = { session } as unknown as RequestLike;
+      const res = {
+        redirect: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as ResponseLike;
+
+      await controller.callback(req as never, res as never);
+
+      expect(res.redirect).toHaveBeenCalledWith('/settings?error=oidc-link-conflict');
     });
   });
 

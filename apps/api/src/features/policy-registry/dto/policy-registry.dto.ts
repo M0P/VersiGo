@@ -44,7 +44,11 @@ export class CreatePolicyDto {
   insurerName!: string;
 
   @IsOptional()
-  @IsString()
+  // BugFix-07 (Befund 1): Gleiche Normalisierung wie bei Portal-Links –
+  // fehlt das Schema, wird https:// vorangestellt; nur http(s) ist erlaubt.
+  @PortalUrlTransform()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  @MaxLength(2048)
   insurerPortalUrl?: string;
 
   @IsString()
@@ -110,7 +114,11 @@ export class UpdatePolicyDto {
   insurerName?: string;
 
   @IsOptional()
-  @IsString()
+  // BugFix-07 (Befund 1): Gleiche Normalisierung wie bei Portal-Links –
+  // fehlt das Schema, wird https:// vorangestellt; nur http(s) ist erlaubt.
+  @PortalUrlTransform()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  @MaxLength(2048)
   insurerPortalUrl?: string;
 
   @IsOptional()

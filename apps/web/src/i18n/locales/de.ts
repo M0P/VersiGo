@@ -50,7 +50,9 @@ export const de = {
     adminUsers: 'Benutzerverwaltung',
     audit: 'Audit-Log',
     monitoring: 'Monitoring',
-    features: 'Funktionen',
+    // BugFix-07 (Q1): Feature-Verwaltung ist in die Systemeinstellungen
+    // integriert (/admin/features leitet dorthin um).
+    adminSettings: 'Systemeinstellungen',
     openNavigation: 'Navigation öffnen',
     closeNavigation: 'Navigation schliessen',
     themeToggleDark: 'Wechsel zu dunklem Modus',
@@ -135,6 +137,11 @@ export const de = {
       'Ihr Konto wurde noch nicht durch einen Administrator freigeschaltet. Sie koennen sich erst anmelden, sobald Ihr Konto den Status „aktiv“ hat. Bitte versuchen Sie es spaeter erneut.',
     pendingToLogin: 'Zur Anmeldung',
     checkStatus: 'Status pruefen',
+    // BugFix-07 (Befund 2): OIDC als Feature aktiviert, Client aber nicht
+    // einsatzbereit (Neustart fehlt oder Discovery fehlgeschlagen).
+    oidcNotReadyTitle: 'OIDC ist nicht einsatzbereit',
+    oidcNotReadyBody:
+      'Der OIDC-Dienst ist aktiviert, konnte aber nicht initialisiert werden. Bitte starten Sie die Dienste im Admin-Bereich neu oder prüfen Sie die Konfiguration (Issuer, Client, Callback-URL).',
     callbackProcessing: 'Anmeldung wird verarbeitet...',
   },
   forbidden: {
@@ -231,6 +238,22 @@ export const de = {
     confirmDeleteDocument: 'Dieses Dokument wirklich löschen?',
     noDocumentsTitle: 'Keine Dokumente',
     noDocumentsBody: 'Noch keine Dokumente hochgeladen.',
+    // BugFix-07 (Q3): Paperless-Verknuepfung
+    paperlessConnect: 'Paperless-Dokument verbinden',
+    paperlessConnectTitle: 'Paperless-Dokumente verknüpfen',
+    paperlessConnectBody:
+      'Suchen Sie in Paperless-ngx und verknüpfen Sie Dokumente mit dieser Versicherung.',
+    paperlessSearchPlaceholder: 'In Paperless suchen...',
+    paperlessSearchHint: 'Mindestens 2 Zeichen eingeben, um zu suchen.',
+    paperlessNoResults: 'Keine passenden Dokumente gefunden.',
+    paperlessSearchError: 'Die Paperless-Suche ist derzeit nicht verfügbar.',
+    paperlessNotConfigured:
+      'Paperless ist nicht konfiguriert (PAPERLESS_ENABLED, -URL und -API-Token fehlen).',
+    paperlessConnectButton: 'Verbinden',
+    paperlessConnecting: 'Verbinde…',
+    paperlessAlreadyLinked: 'Bereits verbunden',
+    paperlessOpenInPaperless: 'In Paperless öffnen',
+    paperlessLinkedDocument: 'Paperless-Dokument',
     // Portal links
     addPortalLink: 'Portal-Link hinzufügen',
     providerKey: 'Anbieter',
@@ -447,6 +470,21 @@ export const de = {
     exporting: 'Exportiert...',
     exportError: 'Fehler beim Export der Daten',
     exportSuccess: 'Ihr Datenexport wurde heruntergeladen.',
+    // BugFix-07 (Q2): Self-Service-OIDC-Verknuepfung
+    oidcLinkTitle: 'Anmeldung mit OIDC',
+    oidcLinkBody:
+      'Verknüpfen Sie Ihr Konto mit Ihrem Identity-Provider, um sich ohne Passwort anzumelden. Der Provider bestätigt Ihre Identität nur beim Verknüpfen.',
+    oidcLinkButton: 'Identity-Provider verknüpfen',
+    oidcUnlinkButton: 'Verknüpfung trennen',
+    oidcLinked: 'Mit {issuer} verknüpft',
+    oidcNotReady:
+      'OIDC ist als Funktion aktiviert, aber der Client ist nicht einsatzbereit (Neustart fehlt oder Discovery fehlgeschlagen). Die Verknüpfung ist derzeit nicht möglich.',
+    oidcLinkConflict:
+      'Diese OIDC-Identität ist bereits mit einem anderen Konto verknüpft.',
+    oidcLinkFailed:
+      'Die Verknüpfung ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
+    oidcLinkSuccess: 'Ihr Konto wurde mit dem Identity-Provider verknüpft.',
+    oidcUnlinkSuccess: 'Die OIDC-Verknüpfung wurde entfernt.',
   },
   appearance: {
     title: 'Design-Anpassung',
@@ -631,6 +669,10 @@ export const de = {
         'API und Worker jetzt neu starten?\n\nDie Dienste sind kurzzeitig nicht erreichbar. Neustart-Kategorie-Einstellungen werden anschließend angewendet.',
       restartTriggered: 'Neustart ausgelöst. API und Worker werden neu gestartet...',
       restartError: 'Fehler beim Auslösen des Neustarts',
+      // BugFix-07 (Q1): Katalog-Header auf der zusammengelegten Seite.
+      catalogTitle: 'Alle Systemeinstellungen',
+      catalogDescription:
+        'Alle weiteren katalogisierten Einstellungen – die von den Funktionen verwalteten Schlüssel erscheinen hier nicht doppelt.',
     },
     // BugFix-04: Audit-Log UI (vorher nur API: GET /admin/audit/events)
     audit: {

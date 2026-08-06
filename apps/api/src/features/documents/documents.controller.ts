@@ -24,7 +24,7 @@ import type { UploadedFile as UploadedFileType } from './documents.types';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
 import { Roles } from '../identity/roles.decorator';
-import { UploadDocumentDto, UpdateDocumentMetadataDto } from './dto/documents.dto';
+import { UploadDocumentDto, UpdateDocumentMetadataDto, CreatePaperlessLinkDto } from './dto/documents.dto';
 import type { AuthenticatedUser } from '../identity/auth.service';
 
 @Controller('households/:householdId/policies/:policyId/documents')
@@ -52,6 +52,24 @@ export class DocumentsController {
     @Body() dto: UploadDocumentDto,
   ) {
     return this.service.upload(householdId, user.id, policyId, file, dto);
+  }
+
+  @Post('paperless')
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
+  async linkPaperless(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreatePaperlessLinkDto,
+  ) {
+    // BugFix-07 (Q3): Bindet ein Paperless-Dokument als PolicyDocument
+    // (storageType PAPERLESS_LINK), dedupliziert pro (policyId, storageRef).
+    return this.service.linkPaperlessDocument(
+      householdId,
+      user.id,
+      policyId,
+      dto.paperlessDocumentId,
+    );
   }
 
   @Get()

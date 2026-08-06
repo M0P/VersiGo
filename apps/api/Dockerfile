@@ -5,9 +5,11 @@
 # ============================================================
 # AP-20: Der Runner erhaelt ausschliesslich Produktions-Dependencies,
 # gebaut per `pnpm deploy --prod` (keine Dev-Werkzeuge wie typescript,
-# eslint, vitest, @nestjs/cli; Prisma-CLI + @prisma/client sind bewusst
-# Laufzeit-Abhaengigkeiten, da docker/start.sh `prisma migrate deploy`
-# ausfuehrt). Der volle Quellcode landet nicht im Runtime-Image.
+# eslint, vitest, @nestjs/cli).
+# BugFix-07 (Q6): Die Prisma-CLI + Schema-Engines sind NICHT mehr Teil der
+# Laufzeit-Images – Migrationen laufen ausschliesslich ueber den Compose-
+# Service "migration" (Build-Target `migration` weiter unten). Der Runner
+# enthaelt nur noch den generierten @prisma/client inkl. Query-Engine.
 
 # ---- Base Stage ----
 FROM node:24-alpine AS base
@@ -64,6 +66,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/api/package.json apps/api/package.json
 # Gebautes Foundation-Paket (dist) fuer das Packen beim Deploy
 COPY --from=build /app/packages/foundation ./packages/foundation
+# Schema + Migrationen fuer den migration-Service (BugFix-07 Q6)
+COPY --from=build /app/prisma ./prisma
 
 RUN --mount=type=cache,id=versigo-pnpm-store-api,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
@@ -71,7 +75,47 @@ RUN --mount=type=cache,id=versigo-pnpm-store-api,target=/pnpm/store \
     # TypeScript ist bei prisma nur ein optionaler Peer (wird nur fuer
     # prisma.config.ts benoetigt, das wir nicht verwenden) und nicht Teil
     # der Laufzeit-Dependencies. Entfernen spart ~23 MB im Runner-Image.
-    rm -rf /app/out/node_modules/.pnpm/typescript@* /app/out/node_modules/typescript
+    rm -rf /app/out/node_modules/.pnpm/typescript@* /app/out/node_modules/typescript && \
+    # BugFix-07 Q6: Prisma-Client IN den Deploy-Output generieren (Schema in
+    # den Output-Kontext legen, damit das Root-node_modules gefunden wird).
+    # Der generierte Client (Query-Engine) landet im Store-Verzeichnis
+    # .pnpm/@prisma+client@*/node_modules/.prisma/client – das ist der Pfad,
+    # den @prisma/client zur Laufzeit laedt (der Client hat KEINE eigenen
+    # Dependencies, nur Peers).
+    mkdir -p /app/out/prisma && cp /app/prisma/schema.prisma /app/out/prisma/schema.prisma && \
+    cd /app/out && node node_modules/prisma/build/index.js generate --schema=/app/out/prisma/schema.prisma && \
+    rm -rf /app/out/prisma && \
+    # Laufzeit-Kopie OHNE Prisma-CLI + Schema-Engines. WICHTIG: Die
+    # Bereinigung muss VOR dem COPY in den Runner passieren – ein spaeteres
+    # `rm` in einer RUN-Schicht wuerde die Image-Groesse NICHT reduzieren,
+    # da OCI-Layer geloeschte Dateien in der darunterliegenden Schicht
+    # behalten (gemessen: 496 MB statt ~340 MB).
+    cp -a /app/out /app/out-runtime && \
+    rm -rf /app/out-runtime/node_modules/.pnpm/prisma@* \
+           /app/out-runtime/node_modules/prisma \
+           /app/out-runtime/node_modules/.bin/prisma \
+           /app/out-runtime/node_modules/.bin/prisma.cmd \
+           /app/out-runtime/node_modules/@prisma/engines \
+           /app/out-runtime/node_modules/.pnpm/@prisma+engines@*
+
+# ---- Migration Stage (Compose-Service "migration", BugFix-07 Q6) ----
+# One-shot-Ausfuehrung von `prisma migrate deploy` – der kanonische
+# Migrationspfad bei Fresh-Clone/Upgrade. Bewusst vom Laufzeit-Runner
+# getrennt: api/worker enthalten die Prisma-CLI nicht mehr.
+FROM node:24-alpine AS migration
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --chown=appuser:appgroup --from=prod-deps /app/out/node_modules ./node_modules
+COPY --chown=appuser:appgroup --from=prod-deps /app/out/package.json ./package.json
+COPY --chown=appuser:appgroup --from=build /app/prisma ./prisma
+
+USER appuser
+
+# Direkter Node-Aufruf der CLI (kein npx) – Einstieg identisch zum
+# `prisma generate` im Runner.
+CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy", "--schema=/app/prisma/schema.prisma"]
 
 # ---- Runner Stage ----
 FROM node:24-alpine AS runner
@@ -83,13 +127,15 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 ENV NODE_ENV=production \
     NODE_PATH=/app/node_modules/.pnpm/node_modules
 
-# Produktions-Dependencies (nur Laufzeit, inkl. Prisma-CLI fuer
-# `npx prisma migrate deploy` in docker/start.sh)
+# Produktions-Dependencies (nur Laufzeit) – bereinigte Kopie OHNE Prisma-CLI
+# und Schema-Engines (BugFix-07 Q6): die Bereinigung passierte bereits in
+# prod-deps VOR dem COPY, damit die geloeschten Pakete nie in einen
+# Runner-Layer gelangen (sonst bliebe die Image-Groesse unveraendert).
 # --chown statt nachtraeglichem `chown -R`: das erspart eine riesige
 # Metadaten-Layer-Schicht im Image (chown -R ueber node_modules erzeugt
 # einen Layer in der Groesse des Inhalts).
-COPY --chown=appuser:appgroup --from=prod-deps /app/out/node_modules ./node_modules
-COPY --chown=appuser:appgroup --from=prod-deps /app/out/package.json ./package.json
+COPY --chown=appuser:appgroup --from=prod-deps /app/out-runtime/node_modules ./node_modules
+COPY --chown=appuser:appgroup --from=prod-deps /app/out-runtime/package.json ./package.json
 
 # Prisma schema
 COPY --chown=appuser:appgroup --from=build /app/prisma ./prisma
@@ -97,12 +143,6 @@ COPY --chown=appuser:appgroup --from=build /app/prisma ./prisma
 # Gebauter Anwendungscode (kein Quellcode)
 COPY --chown=appuser:appgroup --from=build /app/apps/api/dist ./apps/api/dist
 COPY --chown=appuser:appgroup --from=build /app/apps/api/package.json ./apps/api/package.json
-
-# Generate Prisma Client at image build time (ensures complete client with engine binary).
-# Die generierten Client-Dateien landen im .pnpm-Store und werden anschliessend
-# gezielt auf den appuser gechownt (kein vollstaendiges `chown -R /app`).
-RUN node ./node_modules/prisma/build/index.js generate --schema=/app/prisma/schema.prisma && \
-    chown -R appuser:appgroup /app/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma /app/node_modules/.prisma 2>/dev/null || true
 
 COPY --chown=appuser:appgroup docker/start.sh ./start.sh
 

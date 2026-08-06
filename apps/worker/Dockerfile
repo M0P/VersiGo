@@ -4,10 +4,11 @@
 # Worker Service - Production Build
 # ============================================================
 # AP-20: Der Runner erhaelt ausschliesslich Produktions-Dependencies,
-# gebaut per `pnpm deploy --prod` (keine Dev-Werkzeuge; Prisma-CLI +
-# @prisma/client sind bewusst Laufzeit-Abhaengigkeiten, da
-# docker/start.sh `prisma migrate deploy` ausfuehrt). Der volle
-# Quellcode landet nicht im Runtime-Image.
+# gebaut per `pnpm deploy --prod` (keine Dev-Werkzeuge).
+# BugFix-07 (Q6): Die Prisma-CLI + Schema-Engines sind NICHT mehr Teil der
+# Laufzeit-Images – Migrationen laufen ausschliesslich ueber den Compose-
+# Service "migration". Der Runner enthaelt nur noch den generierten
+# @prisma/client inkl. Query-Engine.
 
 # ---- Base Stage ----
 FROM node:24-alpine AS base
@@ -62,6 +63,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/worker/package.json apps/worker/package.json
 # Gebautes Foundation-Paket (dist) fuer das Packen beim Deploy
 COPY --from=build /app/packages/foundation ./packages/foundation
+# Schema fuer die Client-Generierung im Deploy-Output (BugFix-07 Q6)
+COPY --from=build /app/prisma ./prisma
 
 RUN --mount=type=cache,id=versigo-pnpm-store-worker,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
@@ -69,7 +72,25 @@ RUN --mount=type=cache,id=versigo-pnpm-store-worker,target=/pnpm/store \
     # TypeScript ist bei prisma nur ein optionaler Peer (wird nur fuer
     # prisma.config.ts benoetigt, das wir nicht verwenden) und nicht Teil
     # der Laufzeit-Dependencies. Entfernen spart ~23 MB im Runner-Image.
-    rm -rf /app/out/node_modules/.pnpm/typescript@* /app/out/node_modules/typescript
+    rm -rf /app/out/node_modules/.pnpm/typescript@* /app/out/node_modules/typescript && \
+    # BugFix-07 Q6: Prisma-Client IN den Deploy-Output generieren. @prisma/client
+    # ist im Worker-Deploy nur ueber das gepackte Foundation-Paket verfuegbar
+    # (kein Top-Level-Link) – daher zunaechst ein TEMPORAERER Symlink fuer die
+    # Generierung; der Runner erstellt seinen eigenen Symlink zur Laufzeit.
+    mkdir -p /app/out/prisma && cp /app/prisma/schema.prisma /app/out/prisma/schema.prisma && \
+    mkdir -p /app/out/node_modules/@prisma && \
+    ln -sfn "$(ls -d /app/out/node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client | head -1)" /app/out/node_modules/@prisma/client && \
+    cd /app/out && node node_modules/prisma/build/index.js generate --schema=/app/out/prisma/schema.prisma && \
+    rm -rf /app/out/node_modules/@prisma/client /app/out/prisma && \
+    # Laufzeit-Kopie OHNE Prisma-CLI + Schema-Engines (Bereinigung VOR dem
+    # COPY in den Runner – sonst wuerde die Image-Groesse nicht sinken).
+    cp -a /app/out /app/out-runtime && \
+    rm -rf /app/out-runtime/node_modules/.pnpm/prisma@* \
+           /app/out-runtime/node_modules/prisma \
+           /app/out-runtime/node_modules/.bin/prisma \
+           /app/out-runtime/node_modules/.bin/prisma.cmd \
+           /app/out-runtime/node_modules/@prisma/engines \
+           /app/out-runtime/node_modules/.pnpm/@prisma+engines@*
 
 # ---- Runner Stage ----
 FROM node:24-alpine AS runner
@@ -81,13 +102,13 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 ENV NODE_ENV=production \
     NODE_PATH=/app/node_modules/.pnpm/node_modules
 
-# Produktions-Dependencies (nur Laufzeit, inkl. Prisma-CLI fuer
-# `npx prisma migrate deploy` in docker/start.sh)
+# Produktions-Dependencies (nur Laufzeit) – bereinigte Kopie OHNE Prisma-CLI
+# und Schema-Engines (BugFix-07 Q6, Bereinigung erfolgte in prod-deps).
 # --chown statt nachtraeglichem `chown -R`: das erspart eine riesige
 # Metadaten-Layer-Schicht im Image (chown -R ueber node_modules erzeugt
 # einen Layer in der Groesse des Inhalts).
-COPY --chown=appuser:appgroup --from=prod-deps /app/out/node_modules ./node_modules
-COPY --chown=appuser:appgroup --from=prod-deps /app/out/package.json ./package.json
+COPY --chown=appuser:appgroup --from=prod-deps /app/out-runtime/node_modules ./node_modules
+COPY --chown=appuser:appgroup --from=prod-deps /app/out-runtime/package.json ./package.json
 
 # Prisma schema
 COPY --chown=appuser:appgroup --from=build /app/prisma ./prisma
@@ -96,16 +117,12 @@ COPY --chown=appuser:appgroup --from=build /app/prisma ./prisma
 COPY --chown=appuser:appgroup --from=build /app/apps/worker/dist ./apps/worker/dist
 COPY --chown=appuser:appgroup --from=build /app/apps/worker/package.json ./apps/worker/package.json
 
-# Generate Prisma Client at image build time (ensures complete client with engine binary).
 # @prisma/client ist im Worker-Deploy nur ueber das gepackte Foundation-Paket
-# verfuegbar (kein Top-Level-Link, da kein direktes Dependency) — daher wird
-# zunaechst der Store-Pfad verknuepft, damit `prisma generate` den Client findet.
-# Die generierten Client-Dateien werden anschliessend gezielt auf den appuser
-# gechownt (kein vollstaendiges `chown -R /app`).
+# verfuegbar (kein Top-Level-Link, da kein direktes Dependency) – daher wird
+# der Store-Pfad zur Laufzeit top-level verknuepft. Der generierte Client
+# (Query-Engine) wurde bereits in prod-deps in den Store generiert.
 RUN mkdir -p /app/node_modules/@prisma && \
-    ln -sfn "$(ls -d /app/node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client | head -1)" /app/node_modules/@prisma/client && \
-    node ./node_modules/prisma/build/index.js generate --schema=/app/prisma/schema.prisma && \
-    chown -R appuser:appgroup /app/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma /app/node_modules/.prisma 2>/dev/null || true
+    ln -sfn "$(ls -d /app/node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client | head -1)" /app/node_modules/@prisma/client
 
 COPY --chown=appuser:appgroup docker/start.sh ./start.sh
 

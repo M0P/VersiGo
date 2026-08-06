@@ -1,4 +1,11 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  Inject,
+} from '@nestjs/common';
 import { DatabaseService, AppConfigService } from '@versigo/foundation';
 import type { Prisma } from '@prisma/client';
 import * as fs from 'fs/promises';
@@ -7,6 +14,7 @@ import * as crypto from 'crypto';
 import { UploadDocumentDto, UpdateDocumentMetadataDto } from './dto/documents.dto';
 import { UploadedFile } from './documents.types';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
+import { PAPERLESS_ADAPTER, IPaperlessAdapter } from '../paperless-ngx/paperless-ngx.interface';
 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -49,6 +57,9 @@ export class DocumentsService {
     private readonly db: DatabaseService,
     private readonly config: AppConfigService,
     private readonly authService: AuthService,
+    // BugFix-07 (Q3): Adapter fuer Paperless-Links. Degradiert selbst
+    // kontrolliert (null/leere Ergebnisse), wenn Paperless deaktiviert ist.
+    @Inject(PAPERLESS_ADAPTER) private readonly paperless: IPaperlessAdapter,
   ) {
     this.storagePath = path.resolve(config.get('DOCUMENTS_STORAGE_PATH'));
   }
@@ -259,11 +270,113 @@ export class DocumentsService {
     // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
-    return this.db.policyDocument.findMany({
+    const documents = await this.db.policyDocument.findMany({
       where: { policyId, archivedAt: null },
       orderBy: { uploadedAt: 'desc' },
       take: 200,
     });
+
+    // BugFix-07 (Q3): Fuer PAPERLESS_LINK-Dokumente den Deep-Link in die
+    // Paperless-UI mitliefern (fehlertolerant – bei Paperless-Ausfall bleibt
+    // der Link null und die UI zeigt nur die Metadaten an).
+    return Promise.all(
+      documents.map(async (doc) => {
+        if (doc.storageType !== 'PAPERLESS_LINK' || !doc.storageRef) return doc;
+        const deepLink = await this.paperless.getDeepLink(Number(doc.storageRef)).catch(() => null);
+        return { ...doc, deepLink };
+      }),
+    );
+  }
+
+  /**
+   * BugFix-07 (Q3): Bindet ein Paperless-Dokument als PolicyDocument
+   * (storageType PAPERLESS_LINK, storageRef = paperlessId). Dedupliziert pro
+   * (policyId, storageRef): Ein erneutes Verbinden desselben Dokuments
+   * liefert idempotent den bestehenden Eintrag zurueck. Das Dokument muss in
+   * Paperless existieren und der Adapter konfiguriert sein.
+   *
+   * Race-sicher (BugFix-07, Code-Review): Check-then-Insert laeuft innerhalb
+   * EINER Transaktion. Parallel verbundene Requests, die beide den Check
+   * bestehen, werden durch den partiellen Unique-Index
+   * (policyId, storageRef) WHERE archivedAt IS NULL AND
+   * storageType = 'PAPERLESS_LINK' (Migration ..._bugfix07_paperless_link_dedupe)
+   * abgefangen: Der verlierende Writer erhaelt P2002 und es wird idempotent
+   * der bestehende Eintrag zurueckgegeben.
+   */
+  async linkPaperlessDocument(
+    householdId: string,
+    userId: string,
+    policyId: string,
+    paperlessDocumentId: number,
+  ) {
+    await this.assertPolicyAccess(householdId, userId, policyId);
+
+    const metadata = await this.paperless.getDocumentMetadata(paperlessDocumentId);
+    if (!metadata) {
+      throw new NotFoundException(
+        'Dokument in Paperless nicht gefunden oder Paperless nicht konfiguriert',
+      );
+    }
+
+    try {
+      return await this.db.$transaction(async (tx) => {
+        const existing = await tx.policyDocument.findFirst({
+          where: {
+            policyId,
+            storageType: 'PAPERLESS_LINK',
+            storageRef: String(paperlessDocumentId),
+            archivedAt: null,
+          },
+        });
+        if (existing) return existing;
+
+        const document = await tx.policyDocument.create({
+          data: {
+            policyId,
+            storageType: 'PAPERLESS_LINK',
+            fileName: metadata.title?.trim() || `Paperless-Dokument ${paperlessDocumentId}`,
+            mimeType: null,
+            fileSize: null,
+            storageRef: String(paperlessDocumentId),
+            category: metadata.documentType,
+            documentDate: metadata.createdAt ? new Date(metadata.createdAt) : null,
+            createdByUserId: userId,
+          },
+        });
+
+        await tx.auditEvent.create({
+          data: {
+            actorUserId: userId,
+            entityType: 'PolicyDocument',
+            entityId: document.id,
+            action: 'PAPERLESS_LINK_CREATED',
+            diffJson: {
+              policyId,
+              paperlessDocumentId,
+              title: document.fileName,
+              category: document.category ?? null,
+            } as Prisma.InputJsonValue,
+          },
+        });
+
+        return document;
+      });
+    } catch (error) {
+      // P2002 (Unique-Verletzung des partiellen Index) = ein paralleler
+      // Request hat denselben Link bereits angelegt: idempotent aufloesen.
+      if ((error as { code?: string }).code === 'P2002') {
+        const existing = await this.db.policyDocument.findFirst({
+          where: {
+            policyId,
+            storageType: 'PAPERLESS_LINK',
+            storageRef: String(paperlessDocumentId),
+            archivedAt: null,
+          },
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
   }
 
   async findOne(householdId: string, user: AuthenticatedUser, policyId: string, docId: string) {

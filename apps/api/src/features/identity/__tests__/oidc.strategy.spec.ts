@@ -309,6 +309,49 @@ describe('OidcStrategy', () => {
     });
   });
 
+  describe('getStatus (BugFix-07)', () => {
+    it('meldet ready=true, wenn Capability aktiv und Client initialisiert', async () => {
+      const { strategy, capabilities } = createStrategy();
+      capabilities.isEnabled.mockResolvedValue(true);
+      setClient(strategy, {});
+
+      await expect(strategy.getStatus()).resolves.toEqual({ ready: true, error: null });
+    });
+
+    it('meldet ready=false ohne Fehler, wenn OIDC komplett deaktiviert ist', async () => {
+      const { strategy, capabilities } = createStrategy();
+      capabilities.isEnabled.mockResolvedValue(false);
+
+      await expect(strategy.getStatus()).resolves.toEqual({ ready: false, error: null });
+    });
+
+    it('meldet den Init-Fehler, wenn die Capability aktiv, der Client aber nicht bereit ist', async () => {
+      const { strategy, config, capabilities } = createStrategy();
+      capabilities.isEnabled.mockResolvedValue(true);
+      config.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'OIDC_ISSUER_URL':
+            return 'https://idp.example.com';
+          case 'OIDC_CALLBACK_URL':
+            return 'https://app.example.com/auth/callback';
+          case 'OIDC_CLIENT_ID':
+            return 'versigo';
+          default:
+            return undefined;
+        }
+      });
+      mockedDiscovery.mockRejectedValue(new Error('network down'));
+
+      await strategy.onModuleInit();
+
+      await expect(strategy.getStatus()).resolves.toEqual({
+        ready: false,
+        error: 'network down',
+      });
+      await expect(strategy.isEnabled()).resolves.toBe(false);
+    });
+  });
+
   describe('callbackParams', () => {
     it('baut die vollstaendige Callback-URL aus dem Express-Request', () => {
       const { strategy } = createStrategy();

@@ -404,6 +404,15 @@ model PolicyDocument {
   @@map("policy_documents")
 }
 
+// BugFix-07 (Code-Review): Race-feste Deduplizierung von Paperless-Links.
+// Migration 20260806140000_bugfix07_paperless_link_dedupe legt einen
+// PARTIELLEN Unique-Index an, den Prisma nicht im Schema abbilden kann:
+//   CREATE UNIQUE INDEX "policy_documents_policyId_storageRef_key"
+//     ON "policy_documents" ("policyId", "storageRef")
+//     WHERE "archivedAt" IS NULL AND "storageType" = 'PAPERLESS_LINK';
+// Er garantiert max. einen aktiven Link pro (policyId, storageRef) und
+// laesst ein erneutes Verknuepfen nach dem Archivieren zu.
+
 enum DocumentStorageType {
   INTERNAL
   PAPERLESS_LINK

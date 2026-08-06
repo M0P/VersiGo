@@ -53,7 +53,9 @@ export const en = {
     adminUsers: 'User administration',
     audit: 'Audit log',
     monitoring: 'Monitoring',
-    features: 'Features',
+    // BugFix-07 (Q1): Feature management is part of the system settings
+    // (/admin/features redirects there).
+    adminSettings: 'System settings',
     openNavigation: 'Open navigation',
     closeNavigation: 'Close navigation',
     themeToggleDark: 'Switch to dark mode',
@@ -139,6 +141,11 @@ export const en = {
       'Your account has not yet been approved by an administrator. You can only sign in once your account has the status "active". Please try again later.',
     pendingToLogin: 'Go to sign-in',
     checkStatus: 'Check status',
+    // BugFix-07 (Befund 2): OIDC feature enabled, but client not ready
+    // (restart missing or discovery failed).
+    oidcNotReadyTitle: 'OIDC is not ready',
+    oidcNotReadyBody:
+      'The OIDC service is enabled but could not be initialized. Please restart the services in the admin area or check the configuration (issuer, client, callback URL).',
     callbackProcessing: 'Processing sign-in...',
   },
   forbidden: {
@@ -235,6 +242,22 @@ export const en = {
     confirmDeleteDocument: 'Really delete this document?',
     noDocumentsTitle: 'No documents',
     noDocumentsBody: 'No documents uploaded yet.',
+    // BugFix-07 (Q3): Paperless linking
+    paperlessConnect: 'Link Paperless document',
+    paperlessConnectTitle: 'Link Paperless documents',
+    paperlessConnectBody:
+      'Search Paperless-ngx and link documents to this policy.',
+    paperlessSearchPlaceholder: 'Search Paperless...',
+    paperlessSearchHint: 'Type at least 2 characters to search.',
+    paperlessNoResults: 'No matching documents found.',
+    paperlessSearchError: 'The Paperless search is currently unavailable.',
+    paperlessNotConfigured:
+      'Paperless is not configured (PAPERLESS_ENABLED, URL and API token missing).',
+    paperlessConnectButton: 'Link',
+    paperlessConnecting: 'Linking...',
+    paperlessAlreadyLinked: 'Already linked',
+    paperlessOpenInPaperless: 'Open in Paperless',
+    paperlessLinkedDocument: 'Paperless document',
     // Portal links
     addPortalLink: 'Add portal link',
     providerKey: 'Provider',
@@ -454,6 +477,19 @@ export const en = {
     exporting: 'Exporting...',
     exportError: 'Error while exporting the data',
     exportSuccess: 'Your data export has been downloaded.',
+    // BugFix-07 (Q2): Self-service OIDC account linking
+    oidcLinkTitle: 'Sign in with OIDC',
+    oidcLinkBody:
+      'Link your account with your identity provider to sign in without a password. The provider confirms your identity only when linking.',
+    oidcLinkButton: 'Link identity provider',
+    oidcUnlinkButton: 'Unlink',
+    oidcLinked: 'Linked with {issuer}',
+    oidcNotReady:
+      'OIDC is enabled as a feature, but the client is not ready (restart missing or discovery failed). Linking is currently not possible.',
+    oidcLinkConflict: 'This OIDC identity is already linked to another account.',
+    oidcLinkFailed: 'Linking failed. Please try again.',
+    oidcLinkSuccess: 'Your account has been linked with the identity provider.',
+    oidcUnlinkSuccess: 'The OIDC link has been removed.',
   },
   appearance: {
     title: 'Appearance customization',
@@ -638,6 +674,10 @@ export const en = {
         'Restart API and worker now?\n\nThe services will be briefly unavailable. Restart-category settings are applied afterwards.',
       restartTriggered: 'Restart triggered. API and worker are being restarted...',
       restartError: 'Error while triggering the restart',
+      // BugFix-07 (Q1): Katalog-Header auf der zusammengelegten Seite.
+      catalogTitle: 'All system settings',
+      catalogDescription:
+        'All other catalogued settings – keys managed by the features do not appear here again.',
     },
     // BugFix-04: Audit-Log UI (vorher nur API: GET /admin/audit/events)
     audit: {

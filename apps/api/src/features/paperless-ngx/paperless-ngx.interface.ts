@@ -5,8 +5,9 @@
  * blockieren. Fehler in der Paperless-Kommunikation werden geloggt,
  * aber nicht weitergereicht.
  *
- * Wenn Paperless deaktiviert ist, wird eine NoOp-Implementierung
- * injiziert, die fuer jede Methode null zurueckgibt.
+ * Wenn Paperless deaktiviert ist (oder keine Token hinterlegt sind),
+ * liefert der Adapter selbst null zurueck; eine separate NoOp-Implementierung
+ * existiert nicht mehr (BugFix-07: toten Code entfernt).
  */
 
 export interface PaperlessDocumentRef {

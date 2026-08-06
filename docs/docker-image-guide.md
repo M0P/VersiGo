@@ -1,29 +1,30 @@
 # Docker Image Guide – Build, Tag, Push, Deploy, Upgrade, Rollback, Restore
 
-**Version:** 1.1.0 (BugFix-04/06)  
-**Date:** 2026-08-05  
-**Applies to:** `versigo-api`, `versigo-worker`, `versigo-web` (and `versigo-test` for CI)
+**Version:** 1.2.0 (BugFix-07)  
+**Date:** 2026-08-06  
+**Applies to:** `versigo-api`, `versigo-worker`, `versigo-web` (and `versigo-test` for CI, `versigo-migration`)
 
 ---
 
 ## 1. Overview
 
-VersiGo is built as **three runtime images** that contain **production
-dependencies only** (AP-20, BugFix-04):
+VersiGo is built as **four runtime images** that contain **production
+dependencies only** (AP-20, BugFix-04, BugFix-07 Q6):
 
-| Image | Dockerfile | Base | Contents | Size (BugFix-04) |
+| Image | Dockerfile | Base | Contents | Size (BugFix-07) |
 |-------|------------|-------|----------|-------------------|
-| `versigo-api` | `apps/api/Dockerfile` | `node:24-alpine` | NestJS build (`dist`), Prisma (schema, migrations, CLI, client), `postgresql16-client`, `docker/start.sh` | **~493 MB** |
-| `versigo-worker` | `apps/worker/Dockerfile` | `node:24-alpine` | BullMQ worker build (`dist`), Prisma (CLI, client), `postgresql16-client`, `docker/start.sh` | **~487 MB** |
-| `versigo-web` | `apps/web/Dockerfile` | `node:24-alpine` | Next.js `output: "standalone"` (only rendered app code + tracing deps) | **~207 MB** |
+| `versigo-api` | `apps/api/Dockerfile` | `node:24-alpine` | NestJS build (`dist`), generated `@prisma/client` (query engine only), `postgresql16-client`, `docker/start.sh` | **~371 MB** |
+| `versigo-worker` | `apps/worker/Dockerfile` | `node:24-alpine` | BullMQ worker build (`dist`), generated `@prisma/client` (query engine only), `postgresql16-client`, `docker/start.sh` | **~365 MB** |
+| `versigo-web` | `apps/web/Dockerfile` | `node:24-alpine` | Next.js `output: "standalone"` + branding assets | **~207 MB** |
+| `versigo-migration` | `apps/api/Dockerfile` (`target: migration`) | `node:24-alpine` | Prisma CLI + schema + migrations (`prisma migrate deploy`), one-shot | **~431 MB** |
 
-**Before/After (AP-20 → BugFix-04):**
+**Before/After (AP-20 → BugFix-04 → BugFix-07):**
 
-| Image | Before AP-20 | After AP-20 | After BugFix-04 |
-|-------|--------------|-------------|-----------------|
-| `versigo-api` | 1.12 GB (incl. dev tools) | ~839 MB | **~493 MB** |
-| `versigo-worker` | 1.12 GB (incl. dev tools) | ~828 MB | **~487 MB** |
-| `versigo-web` | 240 MB | 240 MB | **~207 MB** |
+| Image | Before AP-20 | After AP-20 | After BugFix-04 | After BugFix-07 |
+|-------|--------------|-------------|-----------------|-----------------|
+| `versigo-api` | 1.12 GB (incl. dev tools) | ~839 MB | ~493 MB | **~371 MB** |
+| `versigo-worker` | 1.12 GB (incl. dev tools) | ~828 MB | ~487 MB | **~365 MB** |
+| `versigo-web` | 240 MB | 240 MB | ~207 MB | **~207 MB** |
 
 ### Why so slim?
 
@@ -32,9 +33,21 @@ dependencies only** (AP-20, BugFix-04):
   directory with runtime deps including the packed `@versigo/foundation`).
 - No TypeScript, no ESLint, no Vitest, no `@nestjs/cli`, no source code in the
   runtime image.
-- `prisma` + `typescript` (peer dependency of `prisma`) and `@prisma/client`
-  are **deliberate runtime dependencies**: `docker/start.sh` runs
-  `npx prisma migrate deploy`, and the app needs the generated Prisma client.
+- **BugFix-07 (Q6):** The Prisma **CLI + schema engines** are no longer part
+  of the api/worker runtime images (saves ~125 MB per image, measured).
+  Migrations run exclusively via the Compose service `migration`, which builds
+  the dedicated `migration` target of `apps/api/Dockerfile`. The api/worker
+  runners contain only the **generated `@prisma/client`** with its query
+  engine.
+  **Implementation detail:** the pruning happens in the `prod-deps` stage
+  **before** the `COPY` into the runner (`cp -a` of the deploy output into
+  `out-runtime`, then removal of `prisma@*` / `@prisma/engines@*`). A later
+  `rm` in a RUN layer would **not** reduce the image size, because OCI layers
+  retain deleted files in lower layers (measured: 496 MB without the early
+  pruning). The Prisma client is generated **into the deploy output** in the
+  same stage (`prisma generate`, output lands in the store's
+  `@prisma+client@*/node_modules/.prisma/client` — the path the client loads
+  at runtime; the client has no runtime dependencies of its own, only peers).
 - The Prisma client is generated **at image build time**
   (`prisma generate --schema=/app/prisma/schema.prisma`) so the image contains
   the full client with the query engine.
@@ -74,6 +87,8 @@ docker compose up --build -d
 podman build -f apps/api/Dockerfile    -t versigo-api:latest    .
 podman build -f apps/worker/Dockerfile -t versigo-worker:latest .
 podman build -f apps/web/Dockerfile    -t versigo-web:latest    .
+# migration service (Prisma CLI) – builds the `migration` target of the API Dockerfile:
+podman build --target migration -f apps/api/Dockerfile -t versigo-migration:latest .
 ```
 
 > **Podman note:** `docker compose up --build` **alone** is not enough on
@@ -123,10 +138,12 @@ TAG=v1.0.0-beta
 podman tag versigo-api:latest    "$REGISTRY/versigo-api:$TAG"
 podman tag versigo-worker:latest "$REGISTRY/versigo-worker:$TAG"
 podman tag versigo-web:latest    "$REGISTRY/versigo-web:$TAG"
+podman tag versigo-migration:latest "$REGISTRY/versigo-migration:$TAG"
 
 podman push "$REGISTRY/versigo-api:$TAG"
 podman push "$REGISTRY/versigo-worker:$TAG"
 podman push "$REGISTRY/versigo-web:$TAG"
+podman push "$REGISTRY/versigo-migration:$TAG"
 ```
 
 Also push the `latest` tags if the operating environment pulls without a
@@ -187,10 +204,16 @@ docker compose up --build -d
 > authentication be disabled again.
 
 On first start:
-1. `db` → migrations via the one-shot service `migration` (`npx prisma migrate deploy`)
-2. `api` → `docker/start.sh` waits for the DB, runs migrations again (idempotent) and starts
-3. `worker` → starts after DB/Redis
-4. `web` → starts after the API health check
+1. `db` → migrations via the one-shot service `migration` (`prisma migrate deploy`)
+2. `api`/`worker` → `docker/start.sh` waits for the DB **and** for the applied
+   migrations (the `migration` service), then starts
+3. `web` → starts after the API health check
+
+> **BugFix-07 (Q6):** `docker/start.sh` no longer runs `prisma migrate deploy`
+> itself — the api/worker runtime images do not contain the Prisma CLI. The
+> Compose `migration` service is the **canonical** migration path; the start
+> script only verifies that migrations have been applied before starting the
+> process (race protection on fresh clones).
 
 Verification:
 
@@ -208,15 +231,15 @@ curl http://localhost:3000/         # HTTP 200
 ```bash
 git pull                        # fetch the new code
 docker compose down             # stop containers (data stays in volumes)
-docker compose build api worker web   # build the new images
+docker compose build api worker web migration   # build the new images
 docker compose up -d            # start; the migration service runs migrations
 ```
 
 Important:
 
-- **Idempotent migrations:** `prisma migrate deploy` runs at every start
-  and only applies pending migrations. A restart after a partial upgrade is
-  not critical.
+- **Idempotent migrations:** `prisma migrate deploy` runs in the `migration`
+  service at every start and only applies pending migrations. A restart after
+  a partial upgrade is not critical.
 - **No automatic backward migrations** (downgrade DB migrations are not
   provided). For rollback, restore a backup instead (section 8).
 - **Podman machines:** always run `docker compose down` before `up`,
@@ -297,13 +320,16 @@ Quick content check without Compose (Podman):
 ```bash
 podman run --rm --entrypoint sh versigo-api:latest -c '
   ls apps/api/dist/apps/api/src/main.js &&      # build present
-  node -e "require(\"@versigo/foundation\")" &&  # workspace package resolvable
-  node node_modules/prisma/build/index.js --version | head -1   # Prisma CLI
+  node -e "require(\"@versigo/foundation\")"     # workspace package resolvable
 '
 
-# Dev tools must NOT be included:
+# Dev tools AND the Prisma CLI must NOT be in the api/worker images:
 podman run --rm --entrypoint sh versigo-api:latest -c \
-  'ls node_modules/.pnpm | grep -Ei "^(eslint|vitest|@nestjs\+cli)@" && echo "LEAK!" || echo "OK: no dev tools"'
+  'ls node_modules/.pnpm | grep -Ei "^(eslint|vitest|@nestjs\+cli|prisma)@" && echo "LEAK!" || echo "OK: no dev tools / prisma CLI"'
+
+# The Prisma CLI lives only in the migration image:
+podman run --rm --entrypoint sh versigo-migration:latest -c \
+  'node node_modules/prisma/build/index.js --version | head -1'
 ```
 
 ---
@@ -313,7 +339,7 @@ podman run --rm --entrypoint sh versigo-api:latest -c \
 | Symptom | Cause / Solution |
 |---------|------------------|
 | Container starts with old code | podman-compose recycles containers – run `docker compose down` **before** `up --build` |
-| `prisma` CLI missing in the image | `prisma` must be under `dependencies` in `apps/<app>/package.json` (peer `typescript` likewise) |
+| `prisma` CLI missing in the api/worker images | **Expected** (BugFix-07 Q6): the CLI is only in the `versigo-migration` image. Migrations run via the Compose `migration` service (`docker compose run --rm migration` for manual runs) |
 | `Cannot find module '@prisma/client'` | `prisma generate` did not run in the runner or the `@prisma/client` link is missing (worker: top-level link in the Dockerfile) |
 | Build fails with `no space left on device` | `podman system prune -a -f`, then rebuild |
 | `pnpm install --prod` creates an empty `node_modules` | pnpm-11.17.0 regression → the Dockerfiles use `pnpm deploy --prod --legacy` |

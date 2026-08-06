@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- VersiGo default favicon (BugFix-07, Q7b): compact shield-and-check.
+       Replace via the branding/ folder; the web image copies the branding
+       files over the defaults in apps/web/public/branding/. -->
+  <rect width="64" height="64" rx="14" fill="#3f7fbf"/>
+  <path d="M32 12l14 5.4V30c0 9-6 16-14 18.5C24 46 18 39 18 30V17.4z" fill="#ffffff" opacity="0.96"/>
+  <path d="M25.5 32l4.5 4.5 9-10" stroke="#3f7fbf" stroke-width="4.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
