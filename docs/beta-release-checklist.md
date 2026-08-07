@@ -12,8 +12,8 @@
 | # | Kategorie | Kriterium | Status | Nachweis |
 |---|-----------|-----------|--------|----------|
 | **1** | **Build** | Produktionsbuild ≤ 15 Min (Clean Build) | ✅ | ~8.5 Min gemessen |
-| **2** | **Build** | Images enthalten keine Dev-Tools/Dependencies | ✅ | API ~839 MB, Worker ~828 MB, Web 240 MB |
-| **3** | **Build** | Image-Größen dokumentiert (Vorher/Nachher) | ✅ | Vorher: API 1.12 GB, Worker 1.12 GB, Web 240 MB; Nachher: API ~839 MB, Worker ~828 MB, Web 240 MB (siehe `docs/docker-image-guide.md`) |
+| **2** | **Build** | Images enthalten keine Dev-Tools/Dependencies (auch kein Prisma-CLI-Graph: effect, @prisma/config – BugFix-10) | ✅ | API ~339 MB, Worker ~333 MB, Web ~206 MB |
+| **3** | **Build** | Image-Größen dokumentiert (Vorher/Nachher) | ✅ | Vorher: API 1.12 GB, Worker 1.12 GB, Web 240 MB; Nachher: API ~339 MB, Worker ~333 MB, Web ~206 MB, Migration ~297 MB (siehe `docs/docker-image-guide.md`) |
 | **4** | **Tests** | Lint: 0 Errors | ✅ | `pnpm run lint` |
 | **5** | **Tests** | TypeCheck: 0 Errors (Strict Mode) | ✅ | `pnpm run typecheck` |
 | **6** | **Tests** | Unit Tests: 100% Pass (596 API-Tests, 55 Test-Files, Web 42, Worker 4, Foundation 95) | ✅ | `pnpm run test` |
@@ -61,7 +61,7 @@
 | R-05 | OIDC: Kein Auto-Provisioning | Niedrig | ADR-007: Admin muss Binding setzen (Sicherheit) |
 | R-06 | Keine automatische DB-Rückwärtsmigration | Mittel | Restore via Backup dokumentiert |
 | R-07 | Single-Tenant only (Households) | Niedrig | Design-Entscheidung, kein Multi-Tenant |
-| R-08 | Image-Größe API/Worker ~1.1 GB (Ziel <1 GB) | **Gelöst** | Prod-only-Deps via `pnpm deploy --prod`: API ~839 MB, Worker ~828 MB (siehe `docs/docker-image-guide.md`) |
+| R-08 | Image-Größe API/Worker ~1.1 GB (Ziel <1 GB) | **Gelöst** | Prod-only-Deps via `pnpm deploy --prod` + Prisma-CLI-Graph als devOnly (BugFix-10): API ~339 MB, Worker ~333 MB, Migration ~297 MB (siehe `docs/docker-image-guide.md`) |
 | R-09 | Keine vollständige i18n (nur de/en) | Niedrig | AP-21 Scope erfüllt |
 | R-10 | Kein Browser-E2E (Playwright/Puppeteer) in `apps/web` | Niedrig | Kritische UI-Flows: Web-Unit-Tests (42), API-Smoke-Steps pro Rolle, Control-Matrix; kein neues E2E-Framework für Beta (bewusste Grenze) |
 | R-11 | Kein eigenständiges Accessibility-Tooling (z. B. axe); Tastatur/Fokus/Labels/Kontrast folgen dem Design-System | Niedrig | Semantische Buttons/Links, aria-labels, sichtbare Fokus-Styles im Design-System; manuelle Prüfung im Review, kein automatisierter a11y-Lauf (bewusste Grenze) |

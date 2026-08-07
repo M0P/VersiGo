@@ -91,6 +91,13 @@ jobs:
           file: ${{ matrix.file }}
           target: ${{ matrix.target }}
           push: true
+          # BugFix-10 (#2): zstd ist schneller und komprimiert besser als gzip
+          # (Docker Engine 24+ / Podman 5+, siehe README Voraussetzungen);
+          # provenance/sbom werden deaktiviert (kleinere Manifeste, keine
+          # attestations beim Docker-Hub-Push).
+          compression: zstd
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.push_latest == 'true' && format('{0}/{1}-{2}:latest', env.DOCKERHUB_NAMESPACE, env.IMAGE_PREFIX, matrix.service) || '' }}

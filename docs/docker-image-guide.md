@@ -1,6 +1,6 @@
 # Docker Image Guide – Build, Tag, Push, Deploy, Upgrade, Rollback, Restore
 
-**Version:** 1.3.0 (BugFix-09)  
+**Version:** 1.4.0 (BugFix-10)  
 **Date:** 2026-08-07  
 **Applies to:** `versigo-api`, `versigo-worker`, `versigo-web` (and `versigo-test` for CI, `versigo-migration`)
 
@@ -9,22 +9,23 @@
 ## 1. Overview
 
 VersiGo is built as **four runtime images** that contain **production
-dependencies only** (AP-20, BugFix-04, BugFix-07 Q6):
+dependencies only** (AP-20, BugFix-04, BugFix-07 Q6, BugFix-10):
 
-| Image | Dockerfile | Base | Contents | Size (BugFix-07) |
+| Image | Dockerfile | Base | Contents | Size (BugFix-10) |
 |-------|------------|-------|----------|-------------------|
-| `versigo-api` | `apps/api/Dockerfile` | `node:24-alpine` | NestJS build (`dist`), generated `@prisma/client` (query engine only), `postgresql16-client`, `docker/start.sh` | **~371 MB** |
-| `versigo-worker` | `apps/worker/Dockerfile` | `node:24-alpine` | BullMQ worker build (`dist`), generated `@prisma/client` (query engine only), `postgresql16-client`, `docker/start.sh` | **~365 MB** |
-| `versigo-web` | `apps/web/Dockerfile` | `node:24-alpine` | Next.js `output: "standalone"` + branding assets | **~207 MB** |
-| `versigo-migration` | `apps/api/Dockerfile` (`target: migration`) | `node:24-alpine` | Prisma CLI + schema + migrations (`prisma migrate deploy`), one-shot | **~431 MB** |
+| `versigo-api` | `apps/api/Dockerfile` | `node:24-alpine` | NestJS build (`dist`), generated `@prisma/client` (query engine only), `postgresql16-client`, `docker/start.sh` | **~339 MB** |
+| `versigo-worker` | `apps/worker/Dockerfile` | `node:24-alpine` | BullMQ worker build (`dist`), generated `@prisma/client` (query engine only), `postgresql16-client`, `docker/start.sh` | **~333 MB** |
+| `versigo-web` | `apps/web/Dockerfile` | `node:24-alpine` | Next.js `output: "standalone"` + branding assets | **~206 MB** |
+| `versigo-migration` | `apps/api/Dockerfile` (`target: migration`) | `node:24-alpine` | Prisma CLI + schema + migrations (`prisma migrate deploy`), one-shot | **~297 MB** |
 
-**Before/After (AP-20 → BugFix-04 → BugFix-07):**
+**Before/After (AP-20 → BugFix-04 → BugFix-07 → BugFix-10):**
 
-| Image | Before AP-20 | After AP-20 | After BugFix-04 | After BugFix-07 |
-|-------|--------------|-------------|-----------------|-----------------|
-| `versigo-api` | 1.12 GB (incl. dev tools) | ~839 MB | ~493 MB | **~371 MB** |
-| `versigo-worker` | 1.12 GB (incl. dev tools) | ~828 MB | ~487 MB | **~365 MB** |
-| `versigo-web` | 240 MB | 240 MB | ~207 MB | **~207 MB** |
+| Image | Before AP-20 | After AP-20 | After BugFix-04 | After BugFix-07 | After BugFix-10 |
+|-------|--------------|-------------|-----------------|-----------------|-----------------|
+| `versigo-api` | 1.12 GB (incl. dev tools) | ~839 MB | ~493 MB | ~371 MB | **~339 MB** |
+| `versigo-worker` | 1.12 GB (incl. dev tools) | ~828 MB | ~487 MB | ~365 MB | **~333 MB** |
+| `versigo-web` | 240 MB | 240 MB | ~207 MB | ~207 MB | **~206 MB** |
+| `versigo-migration` | – | – | – | ~431 MB | **~297 MB** |
 
 ### Why so slim?
 
@@ -44,10 +45,19 @@ dependencies only** (AP-20, BugFix-04, BugFix-07 Q6):
   `out-runtime`, then removal of `prisma@*` / `@prisma/engines@*`). A later
   `rm` in a RUN layer would **not** reduce the image size, because OCI layers
   retain deleted files in lower layers (measured: 496 MB without the early
-  pruning). The Prisma client is generated **into the deploy output** in the
-  same stage (`prisma generate`, output lands in the store's
-  `@prisma+client@*/node_modules/.prisma/client` — the path the client loads
-  at runtime; the client has no runtime dependencies of its own, only peers).
+  pruning).
+- **BugFix-10 (#4):** `prisma` is now a **devDependency** of api/worker/foundation,
+  so the whole CLI graph (`prisma`, `@prisma/engines`, `effect`, `@prisma/config`
+  – ~134 MB) is no longer copied into the deploy output at all. The generated
+  client is created in the **build** stage (`prisma generate`) and copied from
+  there into the store of the deploy output (`.pnpm/@prisma+client@*/node_modules/.prisma/client`
+  – the only path the client loads at runtime; the client has no runtime
+  dependencies of its own, only peers). The `migration` image gets its CLI from
+  a dedicated `migration-cli` stage (`pnpm add prisma@6.19.3 --prod` in
+  `/opt/migrate`). The out-runtime cleanup additionally removes `effect@*` and
+  `@prisma+config@*` **defensively**, so a future reintroduction of the CLI
+  graph fails the size check instead of growing the images silently
+  (BugFix-10 #1, saves ~31 MB per image, measured).
 - The Prisma client is generated **at image build time**
   (`prisma generate --schema=/app/prisma/schema.prisma`) so the image contains
   the full client with the query engine.
@@ -345,11 +355,13 @@ podman run --rm --entrypoint sh versigo-api:latest -c '
   node -e "require(\"@versigo/foundation\")"     # workspace package resolvable
 '
 
-# Dev tools AND the Prisma CLI must NOT be in the api/worker images:
+# Dev tools AND the Prisma CLI graph must NOT be in the api/worker images
+# (effect + @prisma/config are only pulled by the Prisma CLI, BugFix-10 #1):
 podman run --rm --entrypoint sh versigo-api:latest -c \
-  'ls node_modules/.pnpm | grep -Ei "^(eslint|vitest|@nestjs\+cli|prisma)@" && echo "LEAK!" || echo "OK: no dev tools / prisma CLI"'
+  'ls node_modules/.pnpm | grep -Ei "^(eslint|vitest|@nestjs\+cli|prisma|effect|@prisma\+config)@" && echo "LEAK!" || echo "OK: no dev tools / prisma CLI graph"'
 
-# The Prisma CLI lives only in the migration image:
+# The Prisma CLI lives only in the migration image (installed via the
+# standalone migration-cli stage, BugFix-10 #4):
 podman run --rm --entrypoint sh versigo-migration:latest -c \
   'node node_modules/prisma/build/index.js --version | head -1'
 ```
