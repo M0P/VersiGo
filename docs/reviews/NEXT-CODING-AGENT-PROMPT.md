@@ -1,107 +1,95 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Next work package: Package B — `prompts/BugFix-08-costs-overhaul-and-overview-page.md`
+## Project state after BugFix-10 (Package D)
 
-The work package `prompts/BugFix-07-ui-fixes-and-branding.md` (Package A) is
-implemented, reviewed (3 review rounds, acceptance condition met: 0 Critical /
-0 High / 0 Medium / 1 Minor), and committed on branch
-`fix/BugFix-06-release-verification` (commit `8ae6f09`,
-see `docs/reviews/BugFix-07-review-1.md` … `review-3.md`).
+The work package `prompts/BugFix-10-docker-image-size-optimizations.md`
+(Package D) is implemented, reviewed (4 review rounds, acceptance condition
+met: 0 Critical / 0 High / 0 Medium / 0 Minor), and committed on branch
+`fix/BugFix-09-ci-fix-community-standards-dockerhub` (commit `c654e13`, see
+`docs/reviews/BugFix-10-review-1.md` through `-4.md`).
 
-The Package B prompt file now exists (authored from the user's full original
-2026-08-06 request) and is the next work package. Implement **only** it.
+Package D delivered (user-selected scope #1, #2, #4; #3 custom base image and
+libphonenumber-js are out of scope):
 
-## Ready-to-paste prompt for the new coding-agent session
+1. **#4 – Prisma CLI out of the runtime images.** `prisma` moved from
+   `dependencies` to `devDependencies` in `apps/api/package.json` and
+   `apps/worker/package.json` (foundation already had it there); lockfile
+   regenerated. The generated Prisma client is now created once in the
+   Dockerfile `build` stage (`prisma generate`) and copied into the deploy
+   output's store path
+   (`.pnpm/@prisma+client@*/node_modules/.prisma/client` — the only path the
+   client loads at runtime) instead of running `prisma generate` inside the
+   prod-deps stage. A standalone `migration-cli` stage (`pnpm add prisma@6.19.3
+   --prod --config.auto-install-peers=false` in `/opt/migrate`, with a
+   `pnpm-workspace.yaml` allowBuilds pre-file to satisfy pnpm 11's
+   `ERR_PNPM_IGNORED_BUILDS`) provides the CLI for the `migration` target;
+   the migration stage copies `node_modules` from it. The shared store cache
+   mount `versigo-pnpm-store-api` is used. Dead `COPY --from=build
+   /app/prisma ./prisma` lines in the prod-deps stages were removed.
+2. **#1 – Defensive cleanup.** The out-runtime copy in both Dockerfiles
+   additionally removes `effect@*` and `@prisma+config@*` (only pulled by the
+   Prisma CLI graph), so a future reintroduction fails the size/LEAK review
+   instead of silently growing the images.
+3. **#2 – Publish workflow.** `.github/workflows/publish.yml` now uses
+   `compression: zstd`, `provenance: false`, `sbom: false` for the
+   `docker/build-push-action@v6` Docker Hub push.
+4. **Measured image sizes (BugFix-10, final):** api ~339 MB, worker ~333 MB,
+   web ~206 MB, migration ~297 MB (down from 371/365/207/431 MB in BugFix-07).
+   Documented in `docs/docker-image-guide.md` (v1.4.0),
+   `docs/release-notes-template.md`, `docs/beta-release-checklist.md`
+   (rows 2/3, R-08).
 
-> Implement **only** the work package `prompts/BugFix-08-costs-overhaul-and-overview-page.md`.
-> Its full content follows:
->
-> ---
->
-> # BugFix-08 – Costs overhaul + separate costs overview page (Package B, user Q4/Q5)
->
-> Source: user batch (2026-08-06) – "improvements: the costs feature needs a general overhaul" (Q4) and "there should be a separate costs overview page" (Q5). Package B per `prompts/BugFix-07-ui-fixes-and-branding.md` ("Out of scope – separate work package for another agent").
->
-> ## Context (what exists today)
->
-> The current cost-tracking feature is considered **too complicated and not user-friendly** ("too many different views to configure it") and must be **completely rebuilt**:
->
-> - API module `apps/api/src/features/cost-tracking/` (controller, service, DTOs, specs). Model `PolicyCostEntry` in `prisma/schema.prisma` (`policyId`, `validFrom`, `validTo?`, `grossAmount` DECIMAL, `netAmount?`, `frequency` `PaymentFrequency` MONTHLY/QUARTERLY/SEMI_ANNUAL/ANNUAL, `bookingSource?`, `note?`). `InsurancePolicy` additionally carries legacy fields `paymentFrequency`/`premiumAmount`.
-> - Existing endpoints: CRUD on `households/:householdId/policies/:policyId/costs` plus `overview`, `annual`, `compare?year=`, `paid-history` and a household `summary` endpoint.
-> - UI: a separate per-policy costs page `apps/web/src/app/policies/[id]/costs/page.tsx` (annual overview, entries table, paid history, new-entry form) and a household summary page `apps/web/src/app/household/costs/page.tsx`. Both must be reworked/consolidated by this package.
->
-> ## Scope (Package B only)
->
-> ### 1. Costs data model & API rebuild (Q4)
-> - Each insurance must support **adding costs** (already the case at the data level; keep/extend `PolicyCostEntry`).
-> - **Cost periods:** define costs per **month, quarter, year** (`MONTHLY`, `QUARTERLY`, `ANNUAL`). The existing `SEMI_ANNUAL` value must be handled (keep for existing data or migrate cleanly in a schema migration — decide and document; a data-lossless path is required).
-> - **Cost increases from a start date:** "es muss möglich sein, die Kosten ab einem bestimmten Zeitpunkt zu erhöhen" — model this as the entry's `validFrom` (and `validTo` on the superseded entry). At any point in time exactly **one entry applies** for a policy (the one with the greatest `validFrom` ≤ period start). An increase = adding a new entry with a later `validFrom`; the previous entry is automatically ended. This must be reflected in all calculations.
-> - **Table view of incurred and expected costs:** a period-based table (one row per period: period start/end, amount, incurred/expected). Past periods = incurred, future periods = expected (projected from the currently valid entry).
-> - **Paid-to-date sum:** "wie viel wurde für die Versicherung bis heute gezahlt; die Berechnung ist eine Summe der vergangenen Perioden, kein Tageswert" — the sum over **past periods** (each completed period contributes its full period amount). **No daily/daily-prorated values.**
-> - **Historic entries must be editable:** PATCH + DELETE for any entry, including past ones (existing API support must be preserved in the rebuild).
-> - Money handling: keep DECIMAL storage, round displayed/calculated amounts to 2 decimals, never use floats for sums. German API messages (existing convention). Household isolation + role guards (READ_ONLY read-only, USER/ADMIN write) must be preserved, as must the BugFix-06 (Teil 3) semantics: calculation by billing period, not daily-prorated.
-> - Decide which of the existing endpoints (`overview`, `annual`, `compare`, `paid-history`) survive the rebuild; the UI must not call dead endpoints. Update/extend the service specs accordingly (paid-to-date = sum of past periods and increase-from-date must be explicitly covered by tests, incl. a frequency-change and an increase-mid-year case).
->
-> ### 2. Costs in the insurance detail view (Q4)
-> - Costs must be addable **directly in the insurance detail view** (`apps/web/src/app/policies/[id]/page.tsx` or a clearly reachable section/tab from it).
-> - The section shows: the period-based incurred/expected table, the paid-to-date sum ("bisher gezahlt"), and add/edit/delete controls (incl. editing historic entries). The current separate per-policy costs page (`policies/[id]/costs/page.tsx`) is folded into the detail view — no duplicate configuration views remain.
-> - UX requirements from the user: simple, one clear place per insurance; each insurance has the possibility to add costs; no hidden multi-view setup flow.
->
-> ### 3. Separate costs overview page (Q5)
-> - A dedicated overview page (rework of `apps/web/src/app/household/costs/page.tsx`), reachable from the navigation.
-> - **Lowest level is the insurance + its total costs so far** (paid-to-date). The goal: "wie viel hat der Nutzer ausgegeben" — per insurance and **per month and per year for all insurances** (total spend, e.g. €/month and €/year across the household).
-> - **Historic graph:** a chart of the costs per year (e.g. per-year bars/line over the last years) — "vielleicht einen historischen Graphen, der die Kosten pro Jahr zeigt". Keep it dependency-light (an existing chart/design-system pattern is preferred; no heavy new chart library without justification).
-> - Aggregation must use the same "sum of past periods" semantics as the per-policy paid-to-date (no daily proration).
->
-> ### 4. Conventions
-> - de/en i18n parity for every new/changed UI string (`apps/web/src/i18n/locales/de.ts` + `en.ts`), i18n guard must stay green (no hardcoded German in TSX).
-> - German API error messages; English code identifiers; follow existing patterns (cards/badges/tables, `PageHeader`, `Alert`, `FormField`).
-> - Migration via the Compose `migration` service (canonical path, BugFix-07): any schema change must be a new Prisma migration folder in `prisma/migrations/` and work on a fresh clone.
-> - No further Docker image size work is required in this package (done in BugFix-07: api ~371 MB / worker ~365 MB / web ~207 MB) — the build must simply keep working and not regress sizes.
->
-> ## Out of scope
-> - Everything already delivered in BugFix-07 (Package A): admin settings single page, OIDC readiness + self-service account linking, Paperless document linking, portal URL https normalization, branding/favicon, Docker image size reduction.
-> - Any other feature not listed above.
->
-> ## Acceptance
-> - All gates green: `docker compose -f docker-compose.test.yml` unit/integration (vitest), tsc, eslint, i18n guard, `docker compose config`, and `./scripts/compose-smoke-test.sh --build --clean` (fresh-clone contract: `docker compose up --build` works, migrations run via the migration service; rebuild the migration image with `docker compose build migration` after adding a migration — the smoke script does not build it).
-> - Review loop (code-reviewer subagent via Task tool): write each review verbatim to `docs/reviews/BugFix-08-review-<n>.md`; fix every Critical/High/Medium (and Minor where reasonable) until **0 Critical / 0 High / 0 Medium / ≤ 8 Minor**, max 5 rounds; then commit (message starting `BugFix-08:`), write a new `docs/reviews/NEXT-CODING-AGENT-PROMPT.md` handoff, and clean up all podman artifacts per AGENTS.md.
-> - The costs rebuild must demonstrably remove the "too many views" complexity: one place to manage costs per insurance (detail view) + one household overview page.
->
-> ---
->
-> Use the **same review loop** as the BugFix-07 session: implement, run the
-> gates via Docker Compose, invoke the `code-reviewer` subagent (Task tool) on
-> the uncommitted diff, write its report verbatim to
-> `docs/reviews/BugFix-08-review-<n>.md`, fix every Critical/High/Medium (and
-> Minor where reasonable), re-review until 0 Critical / 0 High / 0 Medium /
-> ≤8 Minor (max 5 rounds), then commit (message starting `BugFix-08:`) and
-> write a new handoff.
->
-> Do **not** start any later work package after that handoff.
-> Obey AGENTS.md: clean up every podman/Docker artifact you create before the
-> commit and verify `df -h /var/home` afterwards.
+## Verification state of the BugFix-10 commit
+
+- All four images built: api 339 MB, worker 333 MB, web 206 MB, migration
+  297 MB.
+- Runtime invariants verified in api+worker images: LEAK check OK (no
+  eslint/vitest/@nestjs+cli/prisma/effect/@prisma+config); generated Prisma
+  client 20.5 MB present at the runtime store path.
+- `prisma migrate deploy` applied all migrations against a live PostgreSQL
+  from the migration image (prisma 6.19.3); api/worker boot healthy
+  (`/health` 200, compose healthchecks green).
+- Compose smoke test (`--clean`): all 31 checks PASS (incl. real Nest boot in
+  dev AND production paths, worker, BullMQ round-trip).
+- Compose test gate green earlier on identical runtime code: API vitest
+  654/654, web 47/47, foundation 105/105, worker 4/4, typecheck, lint, i18n
+  guard (54 files), `prisma migrate deploy`, both compose configs valid,
+  publish.yml YAML valid.
+- Review loop: 4 rounds, acceptance met 0/0/0/0 (rounds 1/2/3/4 findings:
+  2 Minor → 0 → 1 Minor → 0).
+
+## No next work package exists
+
+`prompts/` contains no further numbered work package after BugFix-10 (the
+last files are `AP-21-multi-language-support.md` and
+`BugFix-10-docker-image-size-optimizations.md`). All currently defined work
+packages are committed (BugFix-01 … BugFix-10, AP-01 … AP-21).
+Note: `prompts/BugFix-03-post-bugfix02-issues.md` exists as an UNTRACKED file
+(pre-existing from an earlier session, not part of any committed package) —
+do not commit or implement it unless the user explicitly asks.
+
+**A new coding-agent session must therefore NOT auto-start any work package.**
+Wait for the user's next explicit instruction. If the user provides a new
+numbered prompt file in `prompts/`, implement only that one and use the same
+review loop (invoke the `code-reviewer` subagent via the Task tool on the
+uncommitted diff, write each report verbatim to
+`docs/reviews/<package>-review-<n>.md`, fix every Critical/High/Medium and
+Minor where reasonable until 0 Critical / 0 High / 0 Medium / ≤ 8 Minor,
+max 5 rounds, then commit with a message starting with the package number and
+write a new handoff).
 
 ## Environment reminders for the next session (Podman host)
 
-- `docker` is a Podman shim → podman-compose 1.6.0. Reuse stale containers
-  after rebuilds: always `docker compose -f docker-compose.test.yml down -v`
-  (or `down`) before `up`; the smoke script supports `--clean`.
+- `docker` is a Podman shim → podman-compose. Reuse stale containers after
+  rebuilds: always `docker compose ... down -v` (or `down`) before `up`; the
+  smoke script supports `--clean`.
 - Node/pnpm are NOT on the host PATH; run gates via
   `podman run --rm -v <repo>:/work -w /work node:24-alpine` with direct
   binary paths (e.g. `node /work/apps/api/node_modules/vitest/vitest.mjs run`).
-- The migration service image is NOT rebuilt by the smoke script
-  (`$COMPOSE build api web worker` only): after adding a migration, rebuild it
-  manually (`docker compose build migration`) before `--clean` smoke runs.
-- Known environmental quirk (NOT a regression): the smoke step-11 auth
-  fail-fast test hangs if a dev DB volume carries persisted restart settings
-  (`preloadRestartSettingsIntoEnv` overwrites process.env); fresh clones /
-  `--clean` are unaffected.
-
-## Verification state of the BugFix-07 commit (8ae6f09)
-
-- vitest 813/813 (75 files; web 47/47), tsc API+web, eslint API+web, i18n
-  guard, `docker compose config` — green.
-- `./scripts/compose-smoke-test.sh --clean`: ALL PASSED, 15 migrations applied
-  on a fresh Postgres incl. `20260806140000_bugfix07_paperless_link_dedupe`.
-- Review loop: 3 rounds, acceptance met (`docs/reviews/BugFix-07-review-1.md` … `review-3.md`).
+- The `auth.service.ts ↔ oidc.strategy.ts` cycle is load-order fragile: a
+  full API boot (real Nest bootstrap) is the ONLY check that proves it; the
+  unit suites cannot.
+- Disk on `/var/home` is ~123 GB and fills quickly; `podman system prune -a -f`
+  before large rebuilds. Never redirect podman storage. Clean up all podman
+  artifacts created during a session before the commit and verify
+  `df -h /var/home` afterwards.

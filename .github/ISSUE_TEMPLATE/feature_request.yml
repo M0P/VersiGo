@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest an idea for VersiGo
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Describe the **problem** you want to
+        solve first, then the proposed solution, so maintainers can discuss
+        trade-offs.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What is the problem you are trying to solve?
+      placeholder: "e.g. It is hard to see how much I paid for all insurances per year."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should the feature do?
+      placeholder: "Describe the feature and its expected behavior."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Any alternative approaches or workarounds?
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, screenshots, related issues
+    validations:
+      required: false

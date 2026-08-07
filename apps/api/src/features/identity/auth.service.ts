@@ -15,10 +15,19 @@ import {
   UserStatus,
 } from '@prisma/client';
 import { PasswordHashingService } from './password-hashing.service';
-// BugFix-07 (Code-Review R3): Nur Funktions-Nutzung auf Methoden-Ebene — die
-// Lade-Reihenfolge des Zyklus `auth.service <-> oidc.strategy` darf nicht
-// veraendert werden (Details am Import in oidc.strategy.ts).
-import { normalizeIssuerUrl } from './oidc.strategy';
+// BugFix-09 (CI fix): NO top-level import from './oidc.strategy' here!
+// auth.service and oidc.strategy form a circular module graph (oidc.strategy
+// VALUE-imports AuthService because `design:paramtypes` must reference the
+// class at runtime for NestJS DI - see the import in oidc.strategy.ts). A
+// top-level import of normalizeIssuerUrl would emit a top-level
+// `require("./oidc.strategy")` in auth.service.js; with the module
+// evaluation order (identity.module -> auth.controller -> auth.service ->
+// oidc.strategy -> auth.service) AuthService is not yet assigned while
+// oidc.strategy is evaluated, and Nest DI fails at API boot with
+// `UndefinedDependencyException` (BugFix-07 regression, verified as the
+// root cause of the CI failure "API not healthy"). Therefore only lazy,
+// method-level access is allowed here (await import) - at call time the
+// oidc.strategy module is guaranteed to be fully evaluated.
 
 export interface AuthenticatedUser {
   id: string;
@@ -179,6 +188,11 @@ export class AuthService {
     // BugFix-07 (Code-Review, R2): Gemeinsame Normalisierung statt Inline-
     // Duplikat, damit Admin-Bindung, Self-Service-Bindung und Login-Vergleich
     // nie divergieren (ADR-007).
+    // BugFix-09 (CI fix): lazy, method-level import instead of a top-level
+    // import - avoids the auth.service <-> oidc.strategy module-evaluation
+    // cycle (see comment above). At call time the oidc.strategy module is
+    // guaranteed to be fully evaluated.
+    const { normalizeIssuerUrl } = await import('./oidc.strategy');
     const normalizedIssuer = normalizeIssuerUrl(oidcIssuer);
     try {
       const result = await this.db.$transaction(async (tx) => {

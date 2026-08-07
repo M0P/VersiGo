@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a problem so it can be fixed
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report. Please provide
+        as much detail as possible. **Security vulnerabilities must not be
+        reported here** — use GitHub Security Advisories instead (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Image tag, version tag or commit hash you are running
+      placeholder: "e.g. 1.2.3, latest, or git commit hash"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug — what did you expect and what actually happened?
+      placeholder: "Tell us what you see!"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      description: How are you running VersiGo?
+      options:
+        - Docker Compose (build from source)
+        - Docker Compose (prebuilt Docker Hub images)
+        - Docker-free local dev (pnpm)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Docker/Podman version, Node version (if relevant), CPU/RAM if it might matter
+      placeholder: "e.g. Linux, Docker 26, 4 vCPU / 8 GB"
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error output
+      description: Paste relevant logs (redact all secrets and personal data!)
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else that could help (screenshots, related issues, workarounds)
+    validations:
+      required: false

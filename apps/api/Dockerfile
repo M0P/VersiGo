@@ -10,6 +10,12 @@
 # Laufzeit-Images – Migrationen laufen ausschliesslich ueber den Compose-
 # Service "migration" (Build-Target `migration` weiter unten). Der Runner
 # enthaelt nur noch den generierten @prisma/client inkl. Query-Engine.
+# BugFix-10 (#4): `prisma` ist eine devDependency (API, Worker, Foundation);
+# der komplette CLI-Graph (prisma, @prisma/engines, effect, @prisma/config,
+# ~134 MB) wird von `pnpm deploy --prod` nicht mehr in den Deploy-Output
+# kopiert. Der generierte Client stammt aus dem Build-Stage; die CLI fuer
+# den migration-Service wird eigenstaendig im Stage `migration-cli`
+# installiert.
 
 # ---- Base Stage ----
 FROM node:24-alpine AS base
@@ -59,44 +65,79 @@ RUN pnpm exec prisma generate --schema=prisma/schema.prisma && \
 # ---- Production Dependencies Stage (nur Laufzeit-Deps, keine Dev-Tools) ----
 # `pnpm deploy` erzeugt ein eigenstaendiges Verzeichnis mit den
 # Produktions-Dependencies des Projekts (inkl. gepacktem @versigo/foundation
-# und Prisma-CLI). Hinweis: `pnpm install --prod` verlinkt in pnpm 11.17.0
-# keine Top-Level-Pakete (Regression), daher deploy statt install.
+# und generiertem @prisma/client; die Prisma-CLI ist devOnly seit
+# BugFix-10 #4 und fehlt im Deploy-Output). Hinweis: `pnpm install --prod`
+# verlinkt in pnpm 11.17.0 keine Top-Level-Pakete (Regression), daher
+# deploy statt install.
 FROM base AS prod-deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/api/package.json apps/api/package.json
 # Gebautes Foundation-Paket (dist) fuer das Packen beim Deploy
 COPY --from=build /app/packages/foundation ./packages/foundation
-# Schema + Migrationen fuer den migration-Service (BugFix-07 Q6)
-COPY --from=build /app/prisma ./prisma
+# BugFix-10 (#4): Der im Build-Stage generierte Prisma-Client (Query-Engine +
+# wasm + JS/typings, insgesamt ~21 MB) wird hierher kopiert und im RUN in den
+# Store-Pfad des Deploy-Outputs uebertragen. Docker kopiert bei einer
+# Verzeichnis-Quelle deren INHALT, daher landen die Client-Dateien unter
+# /app/prisma-generated/client/.
+COPY --from=build /app/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma /app/prisma-generated/
 
 RUN --mount=type=cache,id=versigo-pnpm-store-api,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
     pnpm deploy --filter @versigo/api --prod --legacy /app/out && \
-    # TypeScript ist bei prisma nur ein optionaler Peer (wird nur fuer
-    # prisma.config.ts benoetigt, das wir nicht verwenden) und nicht Teil
-    # der Laufzeit-Dependencies. Entfernen spart ~23 MB im Runner-Image.
+    # BugFix-10 (#4): TypeScript ist nicht mehr im Deploy-Output (war nur ein
+    # optionaler Peer der Prisma-CLI) – die Bereinigung ist defensiv.
     rm -rf /app/out/node_modules/.pnpm/typescript@* /app/out/node_modules/typescript && \
-    # BugFix-07 Q6: Prisma-Client IN den Deploy-Output generieren (Schema in
-    # den Output-Kontext legen, damit das Root-node_modules gefunden wird).
-    # Der generierte Client (Query-Engine) landet im Store-Verzeichnis
-    # .pnpm/@prisma+client@*/node_modules/.prisma/client – das ist der Pfad,
-    # den @prisma/client zur Laufzeit laedt (der Client hat KEINE eigenen
-    # Dependencies, nur Peers).
-    mkdir -p /app/out/prisma && cp /app/prisma/schema.prisma /app/out/prisma/schema.prisma && \
-    cd /app/out && node node_modules/prisma/build/index.js generate --schema=/app/out/prisma/schema.prisma && \
-    rm -rf /app/out/prisma && \
+    # BugFix-10 (#4): Generierten Client aus dem Build-Stage in den
+    # Store-Pfad kopieren. .pnpm/@prisma+client@*/node_modules/.prisma/client
+    # ist der EINZIGE Pfad, den @prisma/client zur Laufzeit laedt (der Client
+    # hat keine eigenen Dependencies, nur Peers).
+    PRISMA_STORE_DIR="$(ls -d /app/out/node_modules/.pnpm/@prisma+client@*/node_modules | head -1)" && \
+    mkdir -p "$PRISMA_STORE_DIR/.prisma" && \
+    cp -a /app/prisma-generated/. "$PRISMA_STORE_DIR/.prisma/" && \
     # Laufzeit-Kopie OHNE Prisma-CLI + Schema-Engines. WICHTIG: Die
     # Bereinigung muss VOR dem COPY in den Runner passieren – ein spaeteres
     # `rm` in einer RUN-Schicht wuerde die Image-Groesse NICHT reduzieren,
     # da OCI-Layer geloeschte Dateien in der darunterliegenden Schicht
     # behalten (gemessen: 496 MB statt ~340 MB).
     cp -a /app/out /app/out-runtime && \
+    # BugFix-10 (#1): `prisma` ist devDependency, der CLI-Graph fehlt im
+    # Deploy-Output. Die rm-Liste ist defensiv: Sollte der Graph jemals
+    # wieder eingeschleust werden (z.B. versehentliche Abhaengigkeit),
+    # schlaegt die Groessenpruefung im Review fehl statt still zu wachsen.
     rm -rf /app/out-runtime/node_modules/.pnpm/prisma@* \
            /app/out-runtime/node_modules/prisma \
            /app/out-runtime/node_modules/.bin/prisma \
            /app/out-runtime/node_modules/.bin/prisma.cmd \
            /app/out-runtime/node_modules/@prisma/engines \
-           /app/out-runtime/node_modules/.pnpm/@prisma+engines@*
+           /app/out-runtime/node_modules/.pnpm/@prisma+engines@* \
+           /app/out-runtime/node_modules/.pnpm/effect@* \
+           /app/out-runtime/node_modules/.pnpm/@prisma+config@*
+
+# ---- Migration CLI Stage (BugFix-10 #4) ----
+# Die Prisma-CLI ist eine devDependency und damit NICHT mehr im
+# Deploy-Output enthalten. Der migration-Service installiert die CLI daher
+# eigenstaendig. Bewusst in /opt/migrate (nicht /app): pnpm wuerde sonst die
+# Root-package.json des Workspace veraendern. `--config.auto-install-peers=false`
+# spart TypeScript ein (nur fuer prisma.config.ts noetig, das wir nicht
+# verwenden).
+# package.json + pnpm-workspace.yaml werden VORAB angelegt: pnpm 11 bricht
+# `pnpm add` ohne explizite Build-Script-Freigabe mit Exit-Code 1 ab
+# (ERR_PNPM_IGNORED_BUILDS fuer @prisma/engines + prisma); die Freigabe
+# erfolgt hier nur fuer die zwei noetigen Pakete.
+# Deterministische Aufloesung: `pnpm add prisma@6.19.3` loest die transitive
+# CLI-Abhaengigkeit ohne eigenes Lockfile auf. Das ist bewusst akzeptiert –
+# prisma pinnt seine direkten Dependencies (@prisma/*) auf exakte Versionen,
+# und das Image ist ein One-Shot-Werkzeug ausserhalb des Workspace-Lockfiles
+# (eine zweite, mitzupflegende Lockfile-Wurzel ist der hoehere Wartungsaufwand).
+FROM base AS migration-cli
+WORKDIR /opt/migrate
+# Gleicher Store-Cache wie die api-Stages (deps/prod-deps): das Install wird
+# ueber Builds hinweg gecacht (Store im Cache-Mount statt in der Schicht).
+RUN --mount=type=cache,id=versigo-pnpm-store-api,target=/pnpm/store \
+    printf '{\n  "name": "migration-cli",\n  "private": true\n}\n' > package.json && \
+    printf 'allowBuilds:\n  "@prisma/engines": true\n  "prisma": true\n' > pnpm-workspace.yaml && \
+    pnpm config set store-dir /pnpm/store && \
+    pnpm add prisma@6.19.3 --prod --config.auto-install-peers=false
 
 # ---- Migration Stage (Compose-Service "migration", BugFix-07 Q6) ----
 # One-shot-Ausfuehrung von `prisma migrate deploy` – der kanonische
@@ -107,14 +148,16 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --chown=appuser:appgroup --from=prod-deps /app/out/node_modules ./node_modules
+# Prisma-CLI + ihre Dependencies (BugFix-10 #4): aus dem eigenen CLI-Stage,
+# nicht mehr aus dem prod-deps-Output.
+COPY --chown=appuser:appgroup --from=migration-cli /opt/migrate/node_modules ./node_modules
 COPY --chown=appuser:appgroup --from=prod-deps /app/out/package.json ./package.json
 COPY --chown=appuser:appgroup --from=build /app/prisma ./prisma
 
 USER appuser
 
-# Direkter Node-Aufruf der CLI (kein npx) – Einstieg identisch zum
-# `prisma generate` im Runner.
+# Direkter Node-Aufruf der CLI (kein npx) – kein `prisma generate` im
+# Runner noetig: die Client-Generierung laeuft im Build-Stage (BugFix-10 #4).
 CMD ["node", "node_modules/prisma/build/index.js", "migrate", "deploy", "--schema=/app/prisma/schema.prisma"]
 
 # ---- Runner Stage ----

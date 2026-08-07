@@ -91,9 +91,10 @@
 | Metrik | Wert | Ziel | Status |
 |--------|------|------|--------|
 | Build-Zeit (Clean) | ~8.5 Min | ≤ 15 Min | ✅ |
-| Image: API | ~839 MB (Prod-Deps only) | < 1 GB | ✅ |
-| Image: Worker | ~828 MB (Prod-Deps only) | < 1 GB | ✅ |
-| Image: Web | ~240 MB (Standalone) | < 500 MB | ✅ |
+| Image: API | ~339 MB (Prod-Deps only, BugFix-10) | < 1 GB | ✅ |
+| Image: Worker | ~333 MB (Prod-Deps only, BugFix-10) | < 1 GB | ✅ |
+| Image: Web | ~206 MB (Standalone) | < 500 MB | ✅ |
+| Image: Migration | ~297 MB (Prisma-CLI via migration-cli-Stage, BugFix-10) | < 500 MB | ✅ |
 | Test-Dauer (Full Suite) | ~2 Min | < 5 Min | ✅ |
 | Smoke-Test Dauer | ~3 Min | < 5 Min | ✅ |
 
@@ -103,7 +104,7 @@
 
 - **Changelog (vollständig):** `git log v1.0.0-beta.(X-1)..v1.0.0-beta.X --oneline`
 - **PR:** `#XXX`
-- **Docker Images:** `ghcr.io/<org>/versigo-api:v1.0.0-beta.X`, `versigo-worker`, `versigo-web`
+- **Docker Images:** `m000p/versigo-api:v1.0.0-beta.X`, `m000p/versigo-worker:v1.0.0-beta.X`, `m000p/versigo-web:v1.0.0-beta.X`, `m000p/versigo-migration:v1.0.0-beta.X` (Docker Hub, jeweils zusätzlich als `:latest` gepusht — automatisch über `.github/workflows/publish.yml`)
 - **Dokumentation:** `docs/` (README, ui-control-matrix, beta-release-checklist, docker-image-guide)
 
 ---
