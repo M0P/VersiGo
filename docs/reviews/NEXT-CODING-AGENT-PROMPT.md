@@ -1,48 +1,72 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Project state after BugFix-09 (Package C)
+## Project state after BugFix-10 (Package D)
 
-The work package `prompts/BugFix-09-ci-fix-community-standards-dockerhub.md`
-(Package C) is implemented, reviewed (2 review rounds, acceptance condition
+The work package `prompts/BugFix-10-docker-image-size-optimizations.md`
+(Package D) is implemented, reviewed (4 review rounds, acceptance condition
 met: 0 Critical / 0 High / 0 Medium / 0 Minor), and committed on branch
-`fix/BugFix-09-ci-fix-community-standards-dockerhub` (commit `e97eb95`, see
-`docs/reviews/BugFix-09-review-1.md` and `docs/reviews/BugFix-09-review-2.md`).
+`fix/BugFix-09-ci-fix-community-standards-dockerhub` (commit `c654e13`, see
+`docs/reviews/BugFix-10-review-1.md` through `-4.md`).
 
-Package C delivered:
+Package D delivered (user-selected scope #1, #2, #4; #3 custom base image and
+libphonenumber-js are out of scope):
 
-1. **CI fix** — the GitHub "API not healthy" failure was a pre-existing
-   BugFix-07 regression: a module-evaluation-time circular import
-   (`auth.service.ts` -> `./oidc.strategy`) made Nest DI capture `undefined`
-   for `AuthService` in `OidcStrategy` at boot. Fixed by replacing the
-   top-level import of `normalizeIssuerUrl` in `auth.service.ts` with a lazy
-   `await import('./oidc.strategy')` inside the using method (the
-   `oidc.strategy -> auth.service` VALUE import is untouched, preserving
-   `design:paramtypes`). Regression guard: the CI health step boots the API
-   and hits `/health`; the compose smoke test proves a real Nest bootstrap in
-   dev and production paths.
-2. **Community standards** — `LICENSE` (AGPL-3.0, user-decided), `CODE_OF_CONDUCT.md`
-   (Contributor Covenant 2.1), `CONTRIBUTING.md`, `SECURITY.md` (GitHub
-   Security Advisories only, user-decided), `.github/ISSUE_TEMPLATE/`
-   (`bug_report.yml`, `feature_request.yml`, `config.yml`),
-   `.github/pull_request_template.md`.
-3. **Docker Hub publishing** — `.github/workflows/publish.yml` builds a matrix
-   of api / worker / web / migration and pushes `m000p/versigo-<service>`
-   (user-decided namespace) as `<version>` + `:latest` on tag `v*`, or
-   `manual-<short-sha>` (no `:latest`) on `workflow_dispatch`. ghcr.io removed
-   (user-decided Docker Hub only). New `docker-compose.dockerhub.yml` deploys
-   the stack from the prebuilt images with no build.
-4. **README** — fully translated to English, warning box preserved with
-   equivalent meaning, quick start deploys from Docker Hub images without
-   rebuilding. `docs/docker-image-guide.md`, `docs/release-guide.md` and
-   `docs/release-notes-template.md` updated; `.env.example` documents
-   `VERSIGO_IMAGE_TAG`.
+1. **#4 – Prisma CLI out of the runtime images.** `prisma` moved from
+   `dependencies` to `devDependencies` in `apps/api/package.json` and
+   `apps/worker/package.json` (foundation already had it there); lockfile
+   regenerated. The generated Prisma client is now created once in the
+   Dockerfile `build` stage (`prisma generate`) and copied into the deploy
+   output's store path
+   (`.pnpm/@prisma+client@*/node_modules/.prisma/client` — the only path the
+   client loads at runtime) instead of running `prisma generate` inside the
+   prod-deps stage. A standalone `migration-cli` stage (`pnpm add prisma@6.19.3
+   --prod --config.auto-install-peers=false` in `/opt/migrate`, with a
+   `pnpm-workspace.yaml` allowBuilds pre-file to satisfy pnpm 11's
+   `ERR_PNPM_IGNORED_BUILDS`) provides the CLI for the `migration` target;
+   the migration stage copies `node_modules` from it. The shared store cache
+   mount `versigo-pnpm-store-api` is used. Dead `COPY --from=build
+   /app/prisma ./prisma` lines in the prod-deps stages were removed.
+2. **#1 – Defensive cleanup.** The out-runtime copy in both Dockerfiles
+   additionally removes `effect@*` and `@prisma+config@*` (only pulled by the
+   Prisma CLI graph), so a future reintroduction fails the size/LEAK review
+   instead of silently growing the images.
+3. **#2 – Publish workflow.** `.github/workflows/publish.yml` now uses
+   `compression: zstd`, `provenance: false`, `sbom: false` for the
+   `docker/build-push-action@v6` Docker Hub push.
+4. **Measured image sizes (BugFix-10, final):** api ~339 MB, worker ~333 MB,
+   web ~206 MB, migration ~297 MB (down from 371/365/207/431 MB in BugFix-07).
+   Documented in `docs/docker-image-guide.md` (v1.4.0),
+   `docs/release-notes-template.md`, `docs/beta-release-checklist.md`
+   (rows 2/3, R-08).
+
+## Verification state of the BugFix-10 commit
+
+- All four images built: api 339 MB, worker 333 MB, web 206 MB, migration
+  297 MB.
+- Runtime invariants verified in api+worker images: LEAK check OK (no
+  eslint/vitest/@nestjs+cli/prisma/effect/@prisma+config); generated Prisma
+  client 20.5 MB present at the runtime store path.
+- `prisma migrate deploy` applied all migrations against a live PostgreSQL
+  from the migration image (prisma 6.19.3); api/worker boot healthy
+  (`/health` 200, compose healthchecks green).
+- Compose smoke test (`--clean`): all 31 checks PASS (incl. real Nest boot in
+  dev AND production paths, worker, BullMQ round-trip).
+- Compose test gate green earlier on identical runtime code: API vitest
+  654/654, web 47/47, foundation 105/105, worker 4/4, typecheck, lint, i18n
+  guard (54 files), `prisma migrate deploy`, both compose configs valid,
+  publish.yml YAML valid.
+- Review loop: 4 rounds, acceptance met 0/0/0/0 (rounds 1/2/3/4 findings:
+  2 Minor → 0 → 1 Minor → 0).
 
 ## No next work package exists
 
-`prompts/` contains no further numbered work package after BugFix-09
-(the last files are `AP-21-multi-language-support.md` and
-`BugFix-09-ci-fix-community-standards-dockerhub.md`). All currently defined
-work packages are committed (BugFix-01 … BugFix-09, AP-01 … AP-21).
+`prompts/` contains no further numbered work package after BugFix-10 (the
+last files are `AP-21-multi-language-support.md` and
+`BugFix-10-docker-image-size-optimizations.md`). All currently defined work
+packages are committed (BugFix-01 … BugFix-10, AP-01 … AP-21).
+Note: `prompts/BugFix-03-post-bugfix02-issues.md` exists as an UNTRACKED file
+(pre-existing from an earlier session, not part of any committed package) —
+do not commit or implement it unless the user explicitly asks.
 
 **A new coding-agent session must therefore NOT auto-start any work package.**
 Wait for the user's next explicit instruction. If the user provides a new
@@ -53,17 +77,6 @@ uncommitted diff, write each report verbatim to
 Minor where reasonable until 0 Critical / 0 High / 0 Medium / ≤ 8 Minor,
 max 5 rounds, then commit with a message starting with the package number and
 write a new handoff).
-
-## Verification state of the BugFix-09 commit
-
-- API vitest 654/654 (58 files), API tsc --noEmit, API eslint, web vitest
-  47/47, web tsc, web eslint, i18n guard (54 files) — green.
-- `docker compose config` and `docker compose -f docker-compose.dockerhub.yml
-  --env-file .env.example config --quiet` — valid.
-- Compose smoke test (`--build --clean`): all 31 checks PASS, including real
-  Nest API bootstrap in dev AND production paths (fresh DB + admin bootstrap
-  + login + household action), worker alive, BullMQ job round-trip consumed.
-- Review loop: 2 rounds, acceptance met 0/0/0/0.
 
 ## Environment reminders for the next session (Podman host)
 
