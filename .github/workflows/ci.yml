@@ -27,6 +27,11 @@ jobs:
       - name: Validate Compose configuration
         run: docker compose config
 
+      # BugFix-09: also validate the Docker Hub deployment stack (no build)
+      # so docs and workflow stay consistent.
+      - name: Validate Docker Hub deployment Compose configuration
+        run: docker compose -f docker-compose.dockerhub.yml --env-file .env.example config --quiet
+
       - name: Build test image
         run: docker compose build test
 
@@ -102,6 +107,10 @@ jobs:
         run: docker compose up -d api
 
       - name: Wait for API health
+        # BugFix-09 regression guard: a broken API boot (e.g. the
+        # auth.service <-> oidc.strategy load-order cycle) must fail CI here.
+        # Unit suites cannot catch module-evaluation-order bugs - only a real
+        # Nest bootstrap can (see apps/api/src/features/identity/auth.service.ts).
         run: |
           for i in $(seq 1 30); do
             if curl -sf http://localhost:3001/health >/dev/null 2>&1; then

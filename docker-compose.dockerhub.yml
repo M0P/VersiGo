@@ -1,0 +1,227 @@
+# VersiGo – deployment stack from prebuilt Docker Hub images (no rebuild)
+#
+# Use this file when you want to run VersiGo without building the images
+# yourself. All images are pulled from Docker Hub. For developers and
+# releases that want to build from source, use docker-compose.yml instead.
+#
+# Usage:
+#   cp .env.example .env        # then adjust .env (see README)
+#   docker compose -f docker-compose.dockerhub.yml up -d
+#
+# The image tag can be pinned via VERSIGO_IMAGE_TAG (default: latest),
+# e.g.  VERSIGO_IMAGE_TAG=1.2.3 docker compose -f docker-compose.dockerhub.yml up -d
+name: versigo
+
+services:
+  # ============================================================
+  # Database
+  # ============================================================
+  db:
+    image: docker.io/postgres:16.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - versigo-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # Redis (Queue / Cache)
+  # ============================================================
+  redis:
+    image: docker.io/redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - versigo-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================================
+  # Database Migration (one-shot convenience)
+  # Runs `prisma migrate deploy` against the prebuilt migration image.
+  # api/worker wait for its successful completion and additionally wait for
+  # the applied migrations via docker/start.sh.
+  # ============================================================
+  migration:
+    image: m000p/versigo-migration:${VERSIGO_IMAGE_TAG:-latest}
+    entrypoint: []
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      NODE_ENV: ${NODE_ENV:-production}
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy", "--schema=/app/prisma/schema.prisma"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - versigo-internal
+
+  # ============================================================
+  # API (NestJS Backend)
+  # ============================================================
+  api:
+    image: m000p/versigo-api:${VERSIGO_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      APP_PORT: "3001"
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL must be set}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY must be set}
+      STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
+      DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
+      LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
+      LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
+      LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
+      LOCAL_ADMIN_USERNAME: "${LOCAL_ADMIN_USERNAME:-}"
+      LOCAL_ADMIN_PASSWORD: "${LOCAL_ADMIN_PASSWORD:-}"
+      OIDC_ENABLED: "${OIDC_ENABLED:-}"
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_CALLBACK_URL: ${OIDC_CALLBACK_URL:-}
+      AI_ENABLED: "${AI_ENABLED:-false}"
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      PAPERLESS_ENABLED: "${PAPERLESS_ENABLED:-false}"
+      PAPERLESS_URL: ${PAPERLESS_URL:-}
+      PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-}
+      CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS: "${CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS:-false}"
+      CONNECTIVITY_ALLOW_SELF_SIGNED: "${CONNECTIVITY_ALLOW_SELF_SIGNED:-false}"
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    volumes:
+      - uploads-data:/data/uploads
+    networks:
+      - versigo-internal
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', r => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # Worker (BullMQ Background Jobs)
+  # ============================================================
+  worker:
+    image: m000p/versigo-worker:${VERSIGO_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL must be set}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY must be set}
+      STORAGE_ENABLED: "${STORAGE_ENABLED:-false}"
+      DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
+      LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
+      LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
+      LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+      OIDC_ENABLED: "${OIDC_ENABLED:-}"
+      AI_ENABLED: "${AI_ENABLED:-false}"
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS: "${CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS:-false}"
+      CONNECTIVITY_ALLOW_SELF_SIGNED: "${CONNECTIVITY_ALLOW_SELF_SIGNED:-false}"
+      WORKER_HEALTH_PORT: "${WORKER_HEALTH_PORT:-3100}"
+      WORKER_HEARTBEAT_INTERVAL_MS: "${WORKER_HEARTBEAT_INTERVAL_MS:-15000}"
+      WORKER_HEARTBEAT_TIMEOUT_MS: "${WORKER_HEARTBEAT_TIMEOUT_MS:-45000}"
+    volumes:
+      - uploads-data:/data/uploads
+    networks:
+      - versigo-internal
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:' + (process.env.WORKER_HEALTH_PORT || '3100') + '/health', r => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # Web (Next.js Frontend)
+  # ============================================================
+  web:
+    image: m000p/versigo-web:${VERSIGO_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: "3000"
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    networks:
+      - versigo-internal
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => { process.exit(r.statusCode >= 200 && r.statusCode < 400 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # Storage (MinIO) – optional, via profile "storage"
+  # ============================================================
+  storage:
+    profiles: ["storage"]
+    image: docker.io/minio/minio:RELEASE.2025-04-08T15-41-24Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
+    volumes:
+      - minio-data:/data
+    networks:
+      - versigo-internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  versigo-internal:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  uploads-data:

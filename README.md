@@ -1,118 +1,167 @@
 # VersiGo
 
-> **⚠️ WICHTIGER HINWEIS**
+> **⚠️ IMPORTANT NOTICE**
 >
-> **VersiGo wurde vollständig mit AI erstellt. Das Projekt ist experimentell, nicht sicherheitsgeprüft und nicht für einen aus dem Internet erreichbaren Betrieb vorgesehen. Betreiben Sie es ausschließlich in einer vertrauenswürdigen, abgeschotteten privaten Umgebung und verwenden Sie keine produktiven oder besonders schützenswerten Daten ohne eigene Sicherheitsprüfung.**
+> **VersiGo was created entirely with AI. The project is experimental, not
+> security-audited and not intended for operation reachable from the internet.
+> Run it exclusively in a trusted, isolated private environment and do not use
+> production or particularly sensitive data without your own security review.**
 >
-> *Dieser Hinweis darf nicht durch Formulierungen wie „production ready“, „sicher“ oder „öffentlich betreibbar“ relativiert werden.*
+> *This notice must not be relativized by wording such as "production ready",
+> "secure" or "publicly operable".*
 
 ---
 
-VersiGo ist eine modulare Versicherungszentrale für Privathaushalte.
+VersiGo is a modular insurance hub for private households.
 
-## Ziel
+## What VersiGo does
 
-VersiGo verwaltet Versicherungsverträge, Dokumente, Kostenhistorien, Portal-Links und optionale AI-gestützte Extraktion/Zusammenfassungen für Privathaushalte.
+VersiGo manages insurance policies, documents, cost histories, portal links and
+optional AI-assisted extraction/summaries for private households.
 
-## Mitwirken
+## Quick start (deployment from Docker Hub images — no build required)
 
-Hilfe, Reviews, Tests, Fehlerberichte, Sicherheitsmeldungen, Dokumentationsverbesserungen und Pull Requests sind **ausdrücklich erwünscht**.
+The easiest way to run VersiGo is the prebuilt stack from Docker Hub. All
+images are pulled as-is; **no image build is needed**.
 
-**Niedrigschwelliger Beitragsweg:**
-1. Forken Sie das Repository
-2. Erstellen Sie einen Feature-Branch (`git checkout -b feat/meine-verbesserung`)
-3. Committen Sie Ihre Änderungen mit aussagekräftigen Messages
-4. Öffnen Sie einen Pull Request gegen `main`
-5. Beschreiben Sie kurz: Was wurde geändert? Warum? Wie getestet?
+### Requirements
 
-Bei Sicherheitsfunden nutzen Sie bitte **GitHub Security Advisories** (nicht öffentliche Issues).
-
----
-
-## Quick Start
-
-### Voraussetzungen
-
-- Docker (oder Podman mit `podman-compose` und `docker-compose` kompatibler CLI)
+- Docker Engine 24+ **or** Podman 5+ with a docker-compose-compatible wrapper
 - Git
+- 2 GB+ RAM, ~5 GB persistent storage (more if you upload documents)
 
-### Erster Start
+### First start
 
 ```bash
-git clone <repository-url>
-cd versigo
+git clone https://github.com/M0P/insura.git
+cd insura
 
-# Umgebung konfigurieren
+# Configure the environment
 cp .env.example .env
-# (optional) .env anpassen, insbesondere Secrets generieren:
-#   openssl rand -hex 32  # für SETTINGS_ENCRYPTION_KEY und SESSION_SECRET
-# Lokale Entwicklung: LOCAL_AUTH_ENABLED=true (Default) und einen
-# eigenen LOCAL_ADMIN_PASSWORD-Wert in .env setzen.
-# ACHTUNG Beta-/Produktionsbetrieb: .env.example ist auf NODE_ENV=development
-# vorkonfiguriert. Für den Beta-Betrieb NODE_ENV=production in der .env setzen
-# (Sicherheitsgarantien, siehe "Voraussetzungen für Beta-Betrieb" und
-# docs/docker-image-guide.md Abschnitt 5).
-
-# Stack starten
-docker compose up --build
 ```
 
-Nach dem Start sind die Dienste erreichbar unter:
-- **Web UI:** http://localhost:3000
-- **API:** http://localhost:3001
-- **API Health:** http://localhost:3001/health
-- **API Readiness:** http://localhost:3001/ready
+Edit `.env` at least as follows:
 
-### Lokale Authentifizierung und Initial-Admin
+1. **Generate secrets** (do not use the placeholders!):
 
-In der lokalen Entwicklung ist die lokale Benutzer-/Passwort-Anmeldung der Standard (`LOCAL_AUTH_ENABLED=true`, `OIDC_ENABLED=false`). Beim ersten Start auf einer leeren Datenbank legt die API genau einen initialen Administrator aus `LOCAL_ADMIN_USERNAME`/`LOCAL_ADMIN_PASSWORD` der `.env` an (idempotent, Passwort nur als bcrypt-Hash). Anmeldung:
+   ```bash
+   openssl rand -hex 32   # for SETTINGS_ENCRYPTION_KEY and SESSION_SECRET
+   ```
+
+2. **Set a strong admin password**: `LOCAL_ADMIN_PASSWORD` (the placeholder
+   `CHANGE_ME_FOR_LOCAL_DEVELOPMENT` is rejected in production mode).
+3. **Choose the operating mode**: for local/first use the defaults
+   (`NODE_ENV=development`, `LOCAL_AUTH_ENABLED=true`) are fine. For
+   beta/production operation set `NODE_ENV=production` — only then do the
+   security guarantees apply (no automatic default admin, rejection of the
+   placeholder password, session cookie with `Secure` flag, auth fail-fast).
+4. **Set `VERSIGO_IMAGE_TAG`** (optional) to pin a concrete version
+   (e.g. `1.2.3`) instead of `latest`.
+
+Start the stack from the prebuilt images (this runs the database migration
+automatically on first start):
+
+```bash
+docker compose -f docker-compose.dockerhub.yml up -d
+```
+
+Or with a pinned version:
+
+```bash
+VERSIGO_IMAGE_TAG=1.2.3 docker compose -f docker-compose.dockerhub.yml up -d
+```
+
+### What happens on first start
+
+1. `db` (PostgreSQL) and `redis` start and become healthy.
+2. The one-shot `migration` service runs `prisma migrate deploy` against the
+   database.
+3. `api` and `worker` start only after the migrations were applied
+   (`docker/start.sh` verifies this) — then `web` starts after the API health
+   check.
+
+### Login and first steps
+
+With local authentication enabled, the API creates exactly one initial
+administrator from `LOCAL_ADMIN_USERNAME` / `LOCAL_ADMIN_PASSWORD` on an empty
+database (idempotent, password stored only as bcrypt hash). Log in via the web
+UI at <http://localhost:3000> or via API:
 
 ```bash
 curl -sS -X POST http://localhost:3001/auth/local/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"localadmin","password":"<IHR_PASSWORT>"}'
+  -d '{"username":"localadmin","password":"<YOUR_PASSWORD>"}'
 ```
 
-Neue Konten werden über `POST /auth/register` angelegt und müssen von einem Administrator über `POST /admin/users/:id/approve` freigeschaltet werden (Status `PENDING_APPROVAL`, siehe `docs/07-security-privacy.md`).
+New accounts are created via `POST /auth/register` and must be approved by an
+administrator (`POST /admin/users/:id/approve`, status `PENDING_APPROVAL`, see
+`docs/07-security-privacy.md`).
 
-In Produktion (`NODE_ENV=production`) greift der Fail-Fast: Ohne explizit gesetzte `OIDC_ENABLED=true`- oder `LOCAL_AUTH_ENABLED=true`-Konfiguration startet die API nicht. Ein Default-Admin wird dort **niemals automatisch** angelegt: `LOCAL_AUTH_ENABLED` ist in Produktion per Default deaktiviert, und der initiale Administrator wird nur angelegt, wenn `LOCAL_AUTH_ENABLED=true` **und** `LOCAL_ADMIN_USERNAME`/`LOCAL_ADMIN_PASSWORD` ausdrücklich gesetzt sind. Das Platzhalter-Passwort aus `.env.example` wird in Produktion abgelehnt.
+### Services and ports
 
-### Stoppen und Zurücksetzen
+| Service | URL |
+|---------|-----|
+| **Web UI** | http://localhost:3000 |
+| **API** | http://localhost:3001 |
+| **API health** | http://localhost:3001/health |
+| **API readiness** | http://localhost:3001/ready |
+
+### Stop and reset
 
 ```bash
-# Stack herunterfahren
-docker compose down
+# Shut down the stack
+docker compose -f docker-compose.dockerhub.yml down
 
-# Alle Daten löschen (Datenbank, Redis, Uploads)
-docker compose down -v
-
-# Nur Entwicklungsdaten zurücksetzen (ohne andere Docker-Ressourcen)
-docker compose down -v --remove-orphans
+# Delete ALL data (database, Redis, uploads) — irreversible!
+docker compose -f docker-compose.dockerhub.yml down -v
 ```
 
-### Logs anzeigen
+### Logs
 
 ```bash
-docker compose logs -f          # Alle Dienste
-docker compose logs -f api      # Nur API
-docker compose logs -f web      # Nur Web
-docker compose logs -f worker   # Nur Worker
+docker compose -f docker-compose.dockerhub.yml logs -f          # all services
+docker compose -f docker-compose.dockerhub.yml logs -f api      # API only
+docker compose -f docker-compose.dockerhub.yml logs -f web      # Web only
+docker compose -f docker-compose.dockerhub.yml logs -f worker   # Worker only
 ```
 
 ---
 
-## Tests und Qualitätssicherung
+## Alternative: build and run from source (developers / releases)
 
-Alle Tests laufen in Docker-Containern:
+If you develop VersiGo or want to build the images yourself, the repository's
+`docker-compose.yml` builds all images from source:
 
 ```bash
-# Vollständige Testsuite (Lint, Typecheck, Unit-Tests, Migration Check)
+git clone https://github.com/M0P/insura.git
+cd insura
+
+cp .env.example .env
+# adjust .env as described above
+
+docker compose up --build -d
+```
+
+This path is also used by the CI and the release process. The image names are
+the same (`versigo-api`, `versigo-worker`, `versigo-web`); additionally the
+`migration` target of `apps/api/Dockerfile` is built by the `migration`
+service. See `docs/docker-image-guide.md` for all build, tag, push, upgrade,
+rollback and restore details.
+
+---
+
+## Tests and quality assurance
+
+All tests run in Docker containers:
+
+```bash
+# Full test suite (lint, typecheck, unit tests, migration check, i18n guard)
 docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test
 
-# Compose Smoke-Test (Stack starten + Health-Checks + API/Web-Verfügbarkeit)
+# Compose smoke test (start the stack + health checks + API/Web availability)
 ./scripts/compose-smoke-test.sh --build
 
-# Einzelne Prüfungen
+# Individual checks
 docker compose -f docker-compose.test.yml run --rm test sh -c "pnpm run lint"
 docker compose -f docker-compose.test.yml run --rm test sh -c "pnpm run typecheck"
 docker compose -f docker-compose.test.yml run --rm test sh -c "pnpm run test"
@@ -120,170 +169,198 @@ docker compose -f docker-compose.test.yml run --rm test sh -c "pnpm run test"
 
 ---
 
-## Docker-Free Fallback
+## Docker-free fallback
 
-Für lesenden Zugriff oder kleine Änderungen ohne Docker:
+For read-only access or small changes without Docker:
 
 ```bash
-# Voraussetzung: Node.js 24, pnpm, PostgreSQL, Redis lokal installiert
+# Prerequisites: Node.js 24, pnpm, PostgreSQL, Redis installed locally
 pnpm install
 pnpm run build
 pnpm run dev
 ```
 
-Dieser Modus ist **nicht** für CI, Releases oder vollständige Testverifikation geeignet.
+This mode is **not** suitable for CI, releases or full test verification.
 
 ---
 
-## Entwicklungsmodus (Turbo)
+## Development mode (Turbo)
 
-Der Dev-Modus wird über Turborepo gestartet (mit laufender Datenbank und Redis, z. B. aus dem Compose-Stack):
+The dev mode is started via Turborepo (with a running database and Redis, e.g.
+from the Compose stack):
 
 ```bash
-pnpm run dev         # API, Worker und Web parallel (Watch-Mode)
-pnpm run dev:api     # nur NestJS-API
-pnpm run dev:web     # nur Next.js-Web
-pnpm run dev:worker  # nur Worker
+pnpm run dev         # API, Worker and Web in parallel (watch mode)
+pnpm run dev:api     # NestJS API only
+pnpm run dev:web     # Next.js web only
+pnpm run dev:worker  # Worker only
 ```
 
-Der `dev`-Task baut zuerst die Workspace-Abhängigkeiten (`^build`) und startet danach die Watch-Prozesse. `turbo.json` setzt `envMode: "loose"`, damit die Konfigurationsvariablen der Umgebung (`.env`) an die Dev-Prozesse durchgereicht werden.
+The `dev` task first builds the workspace dependencies (`^build`) and then
+starts the watch processes. `turbo.json` sets `envMode: "loose"` so the
+configuration variables of the environment (`.env`) are passed through to the
+dev processes.
 
-Der Next.js-Dev-Server erlaubt HMR/Dev-Anfragen standardmäßig nur von `localhost`. Wird die Web-UI über eine andere Origin aufgerufen (z. B. LAN-IP oder Reverse-Proxy), die in `NEXT_ALLOWED_DEV_ORIGINS` als kommaseparierte Liste (`host` oder `host:port`) ergänzen – z. B. `NEXT_ALLOWED_DEV_ORIGINS=192.168.24.8:3000`. Die Einstellung gilt nur im Dev-Modus.
-
----
-
-## Funktionsübersicht
-
-| Bereich | Features | Status |
-|---------|----------|--------|
-| **Authentifizierung** | Lokale Anmeldung (Username/Password), OIDC (Keycloak, Authentik, etc.), Registrierung mit Admin-Freigabe, Rollen (ADMIN, USER, READ_ONLY) | ✅ |
-| **Versicherungsverwaltung** | Policies CRUD, Versicherte Personen, Kostenhistorie, Dokumente, Portal-Links | ✅ |
-| **Dokumente** | Upload (lokal/MinIO), Kategorisierung, Versionierung, AI-Extraktion | ✅ |
-| **Kostenübersicht** | Haushaltsweite Aggregation, Diagramme, Filter | ✅ |
-| **Family Sharing** | Objektbasierte Freigaben zwischen Household-Mitgliedern (Übersicht, Erstellen, Berechtigungen) | ✅ |
-| **Admin: Systemeinstellungen** | Katalogbasiert (Allowlist), Priorität UI > ENV > Default, Secrets verschlüsselt, Connectivity-Tests, Audit-Log | ✅ |
-| **Admin: Feature-Flags** | Global & Household-spezifisch, Toggle in UI | ✅ |
-| **Admin: Integrationen** | AI (Ollama/OpenAI-compat), Paperless-ngx, Portal-Connectors | ✅ |
-| **AI Assist** | Dokument-Extraktion, Deckungszusammenfassungen (optional, Queue-basiert) | ✅ |
-| **Paperless-ngx** | Dokumenten-Sync, Tagging (optional) | ✅ |
-| **Portal-Connectors** | Katalog (HUK-COBURG, etc.), Deeplinks, Plugin-Rahmen (experimentell) | ✅ |
-| **Audit & Monitoring** | Audit-Log (Admin), Queue-Monitoring, Worker-Heartbeat, Integrations-Status | ✅ |
-| **Datenschutz** | DSGVO-Export (Art. 15), Konto-Löschung mit Last-Admin-Schutz | ✅ |
-| **Internationalisierung** | Deutsch/Englisch, persistent (USER/ADMIN) oder session-only (READ_ONLY) | ✅ |
-| **Design System** | Hell/Dunkel, 8 Akzentfarben + Custom, CSS Custom Properties | ✅ |
+The Next.js dev server only allows HMR/dev requests from `localhost` by
+default. If the web UI is called from another origin (e.g. LAN IP or reverse
+proxy), add it to `NEXT_ALLOWED_DEV_ORIGINS` as a comma-separated list
+(`host` or `host:port`) — e.g. `NEXT_ALLOWED_DEV_ORIGINS=192.168.24.8:3000`.
+This setting applies only in dev mode.
 
 ---
 
-## Architektur
+## Feature overview
 
-- **Modularer Monolith** mit vertikal geschnittenen Features (siehe `docs/03-architecture.md`)
+| Area | Features | Status |
+|------|----------|--------|
+| **Authentication** | Local login (username/password), OIDC (Keycloak, Authentik, etc.), registration with admin approval, roles (ADMIN, USER, READ_ONLY) | ✅ |
+| **Policy management** | Policy CRUD, insured persons, cost history, documents, portal links | ✅ |
+| **Documents** | Upload (local/MinIO), categorization, versioning, AI extraction | ✅ |
+| **Cost overview** | Household-wide aggregation, charts, filters | ✅ |
+| **Family sharing** | Object-based sharing between household members (overview, create, permissions) | ✅ |
+| **Admin: system settings** | Catalog-based (allowlist), priority UI > ENV > default, encrypted secrets, connectivity tests, audit log | ✅ |
+| **Admin: feature flags** | Global & household-specific, toggle in UI | ✅ |
+| **Admin: integrations** | AI (Ollama/OpenAI-compatible), Paperless-ngx, portal connectors | ✅ |
+| **AI assist** | Document extraction, coverage summaries (optional, queue-based) | ✅ |
+| **Paperless-ngx** | Document sync, tagging (optional) | ✅ |
+| **Portal connectors** | Catalog (HUK-COBURG, etc.), deep links, plugin framework (experimental) | ✅ |
+| **Audit & monitoring** | Audit log (admin), queue monitoring, worker heartbeat, integration status | ✅ |
+| **Privacy** | GDPR export (Art. 15), account deletion with last-admin protection | ✅ |
+| **Internationalization** | German/English, persistent (USER/ADMIN) or session-only (READ_ONLY) | ✅ |
+| **Design system** | Light/dark, 8 accent colors + custom, CSS custom properties | ✅ |
+
+---
+
+## Architecture
+
+- **Modular monolith** with vertically sliced features (see `docs/03-architecture.md`)
 - **Backend:** NestJS (API + Worker)
 - **Frontend:** Next.js 16 (App Router, React 19, Standalone Output)
-- **Design System:** CSS Custom Properties mit Theme-Provider (siehe `docs/11-ui-ux.md`)
-- **Datenbank:** PostgreSQL 16 mit Prisma ORM
+- **Design system:** CSS custom properties with theme provider (see `docs/11-ui-ux.md`)
+- **Database:** PostgreSQL 16 with Prisma ORM
 - **Queue/Cache:** Redis 7 + BullMQ 5
-- **Dateispeicher:** Lokales Volume (optional MinIO/S3)
-- **Auth:** OIDC (Keycloak, Authentik, etc.) + lokale Username/Password
+- **File storage:** local volume (optional MinIO/S3)
+- **Auth:** OIDC (Keycloak, Authentik, etc.) + local username/password
 
 ---
 
-## Voraussetzungen für Beta-Betrieb
+## Requirements for beta operation
 
-> **Zwingend für Beta/Produktion:** In der `.env` **`NODE_ENV=production`**
-> setzen (`.env.example` ist für die lokale Entwicklung auf
-> `development` vorkonfiguriert). Erst mit `NODE_ENV=production` greifen die
-> Sicherheitsgarantien: kein automatisch angelegter Default-Admin, Ablehnung
-> des `.env.example`-Platzhalter-Passworts, Session-Cookie mit `Secure`-Flag
-> und Auth-Fail-Fast beim Start. Der Compose-Smoke-Test verifiziert diesen
-> Produktionspfad (Schritt 12).
+> **Mandatory for beta/production:** set **`NODE_ENV=production`** in the
+> `.env` (`.env.example` is preconfigured for local development with
+> `development`). Only with `NODE_ENV=production` do the security guarantees
+> apply: no automatically created default admin, rejection of the
+> `.env.example` placeholder password, session cookie with `Secure` flag and
+> auth fail-fast at startup. The Compose smoke test verifies this production
+> path (step 12).
 
-| Ressource | Minimum | Empfohlen | Hinweis |
-|-----------|---------|-----------|---------|
-| CPU | 2 vCPU | 4 vCPU | Für AI-Queue Worker |
+| Resource | Minimum | Recommended | Note |
+|----------|---------|-------------|------|
+| CPU | 2 vCPU | 4 vCPU | For the AI queue worker |
 | RAM | 2 GB | 4 GB | API + Worker + Web + DB + Redis |
-| Persistenter Speicher | 5 GB | 20 GB | PostgreSQL + Redis + Uploads |
-| Backup-Speicher | 2× Daten | 3× Daten | Tägliche pg_dump + Volume-Snapshots |
-| Upload-Wachstum | – | 1–5 GB/Monat | Je nach Dokumentenaufkommen |
+| Persistent storage | 5 GB | 20 GB | PostgreSQL + Redis + uploads |
+| Backup storage | 2× data | 3× data | Daily pg_dump + volume snapshots |
+| Upload growth | – | 1–5 GB/month | Depending on document volume |
 
 ---
 
-## Konfiguration
+## Configuration
 
-Alle Umgebungsvariablen sind in `.env.example` **pro Variable** mit Zweck,
-sicherem Platzhalter-Beispielwert, Sicherheitsrelevanz und Default
-dokumentiert (verbindliche Referenz). Die folgende Tabelle fasst die
-Kategorien mit Beispielwerten und Sicherheitsrelevanz zusammen:
+All environment variables are documented **per variable** in `.env.example`
+with purpose, safe placeholder example value, security relevance and default
+(binding reference). The following table summarizes the categories with
+example values and security relevance:
 
-| Kategorie | Variablen | Pflicht | Service | Beispielwert | Sicherheitsrelevanz |
-|-----------|-----------|---------|---------|--------------|---------------------|
-| **Infrastruktur** | `DATABASE_URL`, `REDIS_URL`, `POSTGRES_*`, `APP_PORT`, `WEB_PORT` | Ja | Alle | `postgresql://versigo:change-me@db:5432/versigo` | DB-Passwort kein Default; nur internes Netz |
-| **Secrets** | `SESSION_SECRET`, `SETTINGS_ENCRYPTION_KEY` | Ja | API, Worker | `openssl rand -hex 32` | Mind. 32 Zufallszeichen; Leak = Session-Impersonation / Entschlüsselung |
-| **Auth** | `LOCAL_AUTH_ENABLED`, `LOCAL_ADMIN_*`, `OIDC_*`, `CORS_ORIGINS`, `TRUST_PROXY`, `COOKIE_SECURE` | Ja (mind. eine Auth-Methode) | API, Worker | `LOCAL_ADMIN_PASSWORD=<stark>`; `TRUST_PROXY=false`; `COOKIE_SECURE` leer | Platzhalter-Passwort wird in Produktion abgelehnt; `TRUST_PROXY` nur hinter Proxy; `COOKIE_SECURE` nur bei HTTP-Betrieb explizit setzen (Default: true in Produktion) |
-| **Storage** | `STORAGE_ENABLED`, `DOCUMENTS_STORAGE_PATH`, `S3_*`, `MINIO_*` | Nein | API, Worker | `change-me`-Platzhalter | Zugangsdaten nie Default; Pfad im Volume |
-| **AI** | `AI_ENABLED`, `AI_PROVIDER`, `AI_OLLAMA_*`, `AI_OPENAI_COMPAT_*` | Nein | API, Worker | `AI_ENABLED=false` (opt-in) | API-Key nur bei expliziter Aktivierung; Daten fließen nur dann |
-| **Paperless** | `PAPERLESS_ENABLED`, `PAPERLESS_URL`, `PAPERLESS_API_TOKEN` | Nein | API | `PAPERLESS_ENABLED=false` (opt-in) | Token nur bei Aktivierung; Datenverlassen nur dann |
-| **Worker Health** | `WORKER_HEALTH_PORT`, `WORKER_HEARTBEAT_*` | Nein | Worker | `3100` (nur intern) | Port nicht an den Host gebunden |
+| Category | Variables | Required | Service | Example value | Security relevance |
+|----------|-----------|----------|---------|---------------|--------------------|
+| **Infrastructure** | `DATABASE_URL`, `REDIS_URL`, `POSTGRES_*`, `APP_PORT`, `WEB_PORT` | Yes | All | `postgresql://versigo:change-me@db:5432/versigo` | DB password has no default; internal network only |
+| **Secrets** | `SESSION_SECRET`, `SETTINGS_ENCRYPTION_KEY` | Yes | API, Worker | `openssl rand -hex 32` | Min. 32 random characters; leak = session impersonation / decryption |
+| **Auth** | `LOCAL_AUTH_ENABLED`, `LOCAL_ADMIN_*`, `OIDC_*`, `CORS_ORIGINS`, `TRUST_PROXY`, `COOKIE_SECURE` | Yes (at least one auth method) | API, Worker | `LOCAL_ADMIN_PASSWORD=<strong>`; `TRUST_PROXY=false`; `COOKIE_SECURE` empty | Placeholder password is rejected in production; `TRUST_PROXY` only behind a proxy; `COOKIE_SECURE` only set explicitly for HTTP operation (default: true in production) |
+| **Storage** | `STORAGE_ENABLED`, `DOCUMENTS_STORAGE_PATH`, `S3_*`, `MINIO_*` | No | API, Worker | `change-me` placeholders | Credentials never default; path in volume |
+| **AI** | `AI_ENABLED`, `AI_PROVIDER`, `AI_OLLAMA_*`, `AI_OPENAI_COMPAT_*` | No | API, Worker | `AI_ENABLED=false` (opt-in) | API key only on explicit activation; data flows only then |
+| **Paperless** | `PAPERLESS_ENABLED`, `PAPERLESS_URL`, `PAPERLESS_API_TOKEN` | No | API | `PAPERLESS_ENABLED=false` (opt-in) | Token only on activation; data leaves only then |
+| **Worker health** | `WORKER_HEALTH_PORT`, `WORKER_HEARTBEAT_*` | No | Worker | `3100` (internal only) | Port not bound to the host |
 
-**Sichere Defaults:** Alle Secrets haben in `.env.example` Platzhalter (`change-me`). In Produktion **müssen** eigene Werte generiert werden (`openssl rand -hex 32`). Für den Beta-/Produktionsbetrieb ist zwingend `NODE_ENV=production` zu setzen (siehe „Voraussetzungen für Beta-Betrieb" oben).
+**Secure defaults:** all secrets have placeholders (`change-me`) in
+`.env.example`. In production you **must** generate your own values
+(`openssl rand -hex 32`). For beta/production operation `NODE_ENV=production`
+is mandatory (see "Requirements for beta operation" above).
 
-**Validierung:** Unbekannte, unsichere oder widersprüchliche Konfigurationen führen beim Start zu klarem Fehler (Fail-Fast).
+**Validation:** unknown, insecure or contradictory configurations cause a
+clear error at startup (fail-fast).
 
 ---
 
-## Ports, Volumes & Daten
+## Ports, volumes & data
 
-| Service | Ports (intern) | Ports (extern, Compose) | Volumes | Gespeicherte Daten |
-|---------|----------------|-------------------------|---------|-------------------|
-| **PostgreSQL** | 5432 | – | `postgres-data` | Alle relationalen Daten (User, Policies, Settings, Audit, etc.) |
-| **Redis** | 6379 | – | `redis-data` | BullMQ Queues, Cache, Session-Store |
-| **API** | 3001 | `${APP_PORT:-3001}` | `uploads-data` (Mount) | – (stateless) |
-| **Worker** | 3100 (Health, nur intern) | – | `uploads-data` (Mount) | – (stateless) |
+| Service | Ports (internal) | Ports (external, Compose) | Volumes | Stored data |
+|---------|------------------|---------------------------|---------|-------------|
+| **PostgreSQL** | 5432 | – | `postgres-data` | All relational data (users, policies, settings, audit, etc.) |
+| **Redis** | 6379 | – | `redis-data` | BullMQ queues, cache, session store |
+| **API** | 3001 | `${APP_PORT:-3001}` | `uploads-data` (mount) | – (stateless) |
+| **Worker** | 3100 (health, internal only) | – | `uploads-data` (mount) | – (stateless) |
 | **Web** | 3000 | `${WEB_PORT:-3000}` | – | – (stateless) |
-| **MinIO** (optional) | 9000/9001 | – | `minio-data` | S3-kompatibler Objektspeicher |
+| **MinIO** (optional) | 9000/9001 | – | `minio-data` | S3-compatible object storage |
 
 ---
 
-## AI & Externe Integrationen (Optional)
+## AI & external integrations (optional)
 
-| Integration | Zweck | Empfangene Daten | Deaktivierung |
-|-------------|-------|------------------|---------------|
-| **AI Assist (Ollama)** | Lokale LLM-Extraktion | Dokumenten-Text, Metadaten | `AI_ENABLED=false` |
-| **AI Assist (OpenAI-compat)** | Cloud-LLM-Extraktion | Dokumenten-Text, Metadaten, API-Key | `AI_ENABLED=false` |
-| **Paperless-ngx** | Dokumenten-Sync | Dokumenten-Metadaten, Datei-Referenzen | `PAPERLESS_ENABLED=false` |
-| **Portal-Connectors** | Versicherer-Portal Deeplinks | Keine (nur Konfiguration) | Feature-Flag `portalConnectors.enabled=false` |
+| Integration | Purpose | Data received | Deactivation |
+|-------------|---------|---------------|--------------|
+| **AI Assist (Ollama)** | Local LLM extraction | Document text, metadata | `AI_ENABLED=false` |
+| **AI Assist (OpenAI-compatible)** | Cloud LLM extraction | Document text, metadata, API key | `AI_ENABLED=false` |
+| **Paperless-ngx** | Document sync | Document metadata, file references | `PAPERLESS_ENABLED=false` |
+| **Portal connectors** | Insurer portal deep links | None (configuration only) | Feature flag `portalConnectors.enabled=false` |
 
-**Wichtig:** Alle Integrationen sind **opt-in** (Standard: deaktiviert). Keine Daten verlassen das System ohne explizite Konfiguration.
+**Important:** all integrations are **opt-in** (default: disabled). No data
+leaves the system without explicit configuration.
 
 ---
 
-## Tool-Dokumentation
+## Contributing
 
-| Tool | Version | Zweck | Wichtige Befehle |
-|------|---------|-------|------------------|
-| **Docker / Compose** | 24+ / 2.24+ | Container-Orchestrierung | `docker compose up --build`, `docker compose down -v` |
-| **pnpm** | 11.17.0 | Package Manager (Monorepo) | `pnpm install`, `pnpm run build`, `pnpm run test` |
+Help, reviews, tests, bug reports, security reports, documentation
+improvements and pull requests are **explicitly welcome**.
+
+- **Contribution guidelines:** see [CONTRIBUTING.md](CONTRIBUTING.md)
+  (forking, branch naming, commit messages, tests, review loop).
+- **Code of conduct:** see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- **Security reports:** report vulnerabilities **privately** via **GitHub
+  Security Advisories** (Security -> Report a vulnerability), **not** as a
+  public issue. See [SECURITY.md](SECURITY.md).
+
+---
+
+## Tool documentation
+
+| Tool | Version | Purpose | Important commands |
+|------|---------|---------|--------------------|
+| **Docker / Compose** | 24+ / 2.24+ | Container orchestration | `docker compose up --build`, `docker compose down -v` |
+| **pnpm** | 11.17.0 | Package manager (monorepo) | `pnpm install`, `pnpm run build`, `pnpm run test` |
 | **Node.js** | 24.x | Runtime | – |
-| **Turbo** | 2.10+ | Build-Orchestrierung | `turbo run build`, `turbo run dev` |
-| **Prisma** | 6.19+ | ORM & Migrationen | `npx prisma migrate deploy`, `npx prisma generate` |
-| **Redis / BullMQ** | 7.4 / 5.34 | Queue & Cache | – |
-| **Next.js** | 16.2 | Frontend Framework | `next build`, `next start` |
-| **NestJS** | 11.0 | Backend Framework | `nest start`, `nest build` |
+| **Turbo** | 2.10+ | Build orchestration | `turbo run build`, `turbo run dev` |
+| **Prisma** | 6.19+ | ORM & migrations | `npx prisma migrate deploy`, `npx prisma generate` |
+| **Redis / BullMQ** | 7.4 / 5.34 | Queue & cache | – |
+| **Next.js** | 16.2 | Frontend framework | `next build`, `next start` |
+| **NestJS** | 11.0 | Backend framework | `nest start`, `nest build` |
 
-**Diagnose-Befehle:**
+**Diagnostic commands:**
+
 ```bash
-# Container-Status
+# Container status
 docker compose ps
 
 # Logs
 docker compose logs -f api
 
-# Datenbank-Migrationen prüfen
+# Check database migrations
 docker compose run --rm migration
 
-# Prisma Studio (Dev only)
+# Prisma Studio (dev only)
 npx prisma studio
 
-# Health-Checks
+# Health checks
 curl http://localhost:3001/health
 curl http://localhost:3001/ready
 curl http://localhost:3000/
@@ -293,76 +370,83 @@ curl http://localhost:3000/
 
 ## Troubleshooting
 
-| Problem | Ursache | Lösung |
-|---------|---------|--------|
-| **API startet nicht: "KEINE AUTHENTIFIZIERUNGSMETHODE KONFIGURIERT"** | Weder `LOCAL_AUTH_ENABLED` noch `OIDC_ENABLED` gesetzt | In `.env` mind. eine Methode aktivieren: `LOCAL_AUTH_ENABLED=true` oder `OIDC_ENABLED=true` |
-| **Datenbank nicht erreichbar** | `DATABASE_URL` falsch, DB nicht gestartet | `docker compose ps db`, `DATABASE_URL` in `.env` prüfen |
-| **Redis Connection refused** | Redis nicht gestartet, falscher Port | `docker compose ps redis`, `REDIS_URL` prüfen |
-| **Migration schlägt fehl** | Schema-Drift, Lock-Konflikt | `docker compose down -v` (Datenverlust!) oder manuell `npx prisma migrate resolve` |
-| **Login schlägt fehl (401)** | Falsches Passwort, User nicht `ACTIVE`, `PENDING_APPROVAL` | Admin: User in `/admin/users` freigeben; Passwort zurücksetzen via DB |
-| **Upload schlägt fehl** | `STORAGE_ENABLED=false`, Volume nicht gemountet, Datei zu groß | `STORAGE_ENABLED=true`, `docker compose ps`, nginx/Proxy `client_max_body_size` prüfen |
-| **Build-Fehler: TypeScript Errors** | Code-Änderungen brechen Types | `pnpm run typecheck` lokal prüfen, `tsconfig.json` `strict: true` |
-| **OIDC Login schlägt fehl** | `OIDC_*` Variablen falsch, Callback-URL mismatch | Issuer-URL, Client-ID/Secret, Callback-URL in IdP & `.env` abgleichen |
-| **AI/Paperless Connectivity-Test fehlschlägt** | Falsche URL/Token, Netzwerk blockiert | `curl` von API-Container testen: `docker compose exec api curl -v <URL>` |
-| **CORS-Fehler im Browser** | `CORS_ORIGINS` stimmt nicht mit Web-Origin überein | `CORS_ORIGINS=http://localhost:3000` (oder Ihre Domain) setzen |
-| **Rate-Limit sperrt alle User** | `TRUST_PROXY=true` ohne echten Reverse-Proxy | `TRUST_PROXY=false` (Default) belassen, außer hinter vertrauenswürdigem Proxy |
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| **API does not start: "NO AUTHENTICATION METHOD CONFIGURED"** | Neither `LOCAL_AUTH_ENABLED` nor `OIDC_ENABLED` set | Enable at least one method in `.env`: `LOCAL_AUTH_ENABLED=true` or `OIDC_ENABLED=true` |
+| **Database unreachable** | `DATABASE_URL` wrong, DB not started | `docker compose ps db`, check `DATABASE_URL` in `.env` |
+| **Redis connection refused** | Redis not started, wrong port | `docker compose ps redis`, check `REDIS_URL` |
+| **Migration fails** | Schema drift, lock conflict | `docker compose down -v` (data loss!) or manually `npx prisma migrate resolve` |
+| **Login fails (401)** | Wrong password, user not `ACTIVE`, `PENDING_APPROVAL` | Admin: approve the user in `/admin/users`; reset password via DB |
+| **Upload fails** | `STORAGE_ENABLED=false`, volume not mounted, file too large | `STORAGE_ENABLED=true`, `docker compose ps`, check nginx/proxy `client_max_body_size` |
+| **Build error: TypeScript errors** | Code changes break types | Run `pnpm run typecheck` locally, check `tsconfig.json` `strict: true` |
+| **OIDC login fails** | `OIDC_*` variables wrong, callback URL mismatch | Compare issuer URL, client ID/secret, callback URL in IdP & `.env` |
+| **AI/Paperless connectivity test fails** | Wrong URL/token, network blocked | Test `curl` from the API container: `docker compose exec api curl -v <URL>` |
+| **CORS error in browser** | `CORS_ORIGINS` does not match the web origin | Set `CORS_ORIGINS=http://localhost:3000` (or your domain) |
+| **Rate limit locks out all users** | `TRUST_PROXY=true` without a real reverse proxy | Keep `TRUST_PROXY=false` (default), except behind a trusted proxy |
 
 ---
 
-## Beta-Grenzen (Offen & Ehrlich)
+## Beta limitations (open & honest)
 
-| Grenze | Details |
-|--------|---------|
-| **Kein öffentliches Hosting** | Nicht für Internet-zugänglichen Betrieb vorgesehen |
-| **Keine Sicherheitszertifizierung** | Kein Pen-Test, kein Audit, keine Compliance-Garantie |
-| **Keine Garantie für Datenverlustfreiheit** | Backups sind **Ihre** Verantwortung |
-| **Keine Support-Zusage** | Community-Projekt, Best-Effort |
-| **Kein Ersatz für eigene Backups** | `docker compose down -v` löscht alles unwiderruflich |
-| **Unvollständige Features** | Notifications nur API, keine UI |
-| **Experimentelle Plugins** | Portal-Connector "Mailbox Sync" ist `available: false` |
-| **Keine automatische DB-Rückwärtsmigration** | Restore nur via Backup (`pg_dump` + Volume) |
-| **Single-Tenant only** | Kein Multi-Tenant, keine Mandanten-Isolation über Households hinaus |
-
----
-
-## Bekannte Einschränkungen
-
-- **Family Sharing:** Haushaltsfreigaben enden an der eigenen Installation; kein Cross-Instance-Sharing
-- **Notifications:** Nur API-Skelett, keine UI, keine Push/E-Mail
-- **Paperless-Sync:** Nur Konfiguration + Connectivity-Test, kein automatischer Sync
-- **Portal-Connector Plugin:** "Mailbox Sync" ist experimentell und deaktiviert (`available: false`)
-- **OIDC:** Kein Auto-Provisioning – Admin muss Binding manuell setzen (ADR-007)
-- **Sprache:** Nur Deutsch/Englisch (keine vollständige i18n für alle Strings)
+| Limitation | Details |
+|------------|---------|
+| **No public hosting** | Not intended for operation reachable from the internet |
+| **No security certification** | No pen test, no audit, no compliance guarantee |
+| **No guarantee of loss-free data** | Backups are **your** responsibility |
+| **No support commitment** | Community project, best effort |
+| **No replacement for your own backups** | `docker compose down -v` deletes everything irreversibly |
+| **Incomplete features** | Notifications only API, no UI |
+| **Experimental plugins** | Portal connector "Mailbox Sync" is `available: false` |
+| **No automatic DB backward migration** | Restore only via backup (`pg_dump` + volume) |
+| **Single-tenant only** | No multi-tenant, no tenant isolation beyond households |
 
 ---
 
-## Dokumente
+## Known limitations
 
-- `docs/01-product-vision.md` – Produktvision
-- `docs/02-requirements.md` – Anforderungen
-- `docs/03-architecture.md` – Architektur (Modularer Monolith, ADRs)
-- `docs/04-data-model.md` – Datenmodell (Prisma Schema)
-- `docs/05-feature-slices.md` – Feature-Slices Übersicht
-- `docs/06-integrations.md` – Externe Integrationen
-- `docs/07-security-privacy.md` – Sicherheits- & Datenschutzmodell
-- `docs/08-admin-operations.md` – Betrieb (Backup, Restore, Upgrade, Migration)
-- `docs/09-ai-agent-implementation-plan.md` – AI-Agent Plan
-- `docs/10-quality-and-library-policy.md` – Qualitäts- & Bibliothekspolitik
-- `docs/11-ui-ux.md` – UI/UX & Design System
+- **Family sharing:** household shares end at your own installation; no
+  cross-instance sharing
+- **Notifications:** API skeleton only, no UI, no push/email
+- **Paperless sync:** configuration + connectivity test only, no automatic sync
+- **Portal connector plugin:** "Mailbox Sync" is experimental and disabled
+  (`available: false`)
+- **OIDC:** no auto-provisioning — an admin must set the binding manually
+  (ADR-007)
+- **Language:** only German/English (no complete i18n for all strings)
+
+---
+
+## Documentation
+
+- `docs/01-product-vision.md` – Product vision
+- `docs/02-requirements.md` – Requirements
+- `docs/03-architecture.md` – Architecture (modular monolith, ADRs)
+- `docs/04-data-model.md` – Data model (Prisma schema)
+- `docs/05-feature-slices.md` – Feature slices overview
+- `docs/06-integrations.md` – External integrations
+- `docs/07-security-privacy.md` – Security & privacy model
+- `docs/08-admin-operations.md` – Operations (backup, restore, upgrade, migration)
+- `docs/09-ai-agent-implementation-plan.md` – AI agent plan
+- `docs/10-quality-and-library-policy.md` – Quality & library policy
+- `docs/11-ui-ux.md` – UI/UX & design system
 - `docs/12-roadmap.md` – Roadmap
-- `docs/13-settings-catalog.md` – Vollständiger Settings-Katalog
-- `docs/adr/` – Architecture Decision Records (ADR-001 bis ADR-009)
-- `docs/ui-control-matrix.md` – UI Control Matrix (alle Funktionen, Rollen, Berechtigungen, Tests)
-- `docs/beta-release-checklist.md` – Beta Release Checkliste (Go/No-Go)
-- `docs/release-notes-template.md` – Release Notes Vorlage
-- `docs/docker-image-guide.md` – Docker Image Bau & Deployment Anleitung
+- `docs/13-settings-catalog.md` – Complete settings catalog
+- `docs/adr/` – Architecture Decision Records (ADR-001 to ADR-009)
+- `docs/ui-control-matrix.md` – UI control matrix (all functions, roles, permissions, tests)
+- `docs/beta-release-checklist.md` – Beta release checklist (go/no-go)
+- `docs/release-notes-template.md` – Release notes template
+- `docs/docker-image-guide.md` – Docker image build & deployment guide
+- `docs/end-user-guide.md` – End-user guide
+- `docs/release-guide.md` – Release guide
 
 ---
 
-## Lizenz
+## License
 
-MIT License – siehe `LICENSE` Datei.
+VersiGo is licensed under the **GNU Affero General Public License v3.0
+(AGPL-3.0)** — see the [LICENSE](LICENSE) file. The software is and will
+remain open source; the copyright is held by the project maintainer.
 
 ---
 
-*Stand: 2026-08-03 | Beta-Version | Vollständig AI-erstellt*
+*Last updated: 2026-08-07 | Beta version | Created entirely with AI*

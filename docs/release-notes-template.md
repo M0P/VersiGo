@@ -103,7 +103,7 @@
 
 - **Changelog (vollständig):** `git log v1.0.0-beta.(X-1)..v1.0.0-beta.X --oneline`
 - **PR:** `#XXX`
-- **Docker Images:** `ghcr.io/<org>/versigo-api:v1.0.0-beta.X`, `versigo-worker`, `versigo-web`
+- **Docker Images:** `m000p/versigo-api:v1.0.0-beta.X`, `m000p/versigo-worker:v1.0.0-beta.X`, `m000p/versigo-web:v1.0.0-beta.X`, `m000p/versigo-migration:v1.0.0-beta.X` (Docker Hub, jeweils zusätzlich als `:latest` gepusht — automatisch über `.github/workflows/publish.yml`)
 - **Dokumentation:** `docs/` (README, ui-control-matrix, beta-release-checklist, docker-image-guide)
 
 ---

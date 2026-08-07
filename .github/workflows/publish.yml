@@ -1,9 +1,25 @@
-name: Publish Docker Images
+# Publish Docker Images
+#
+# Builds and pushes the VersiGo production images to Docker Hub.
+# Triggers: version tag (v*) or manual workflow_dispatch.
+#
+# Required repository secrets:
+#   DOCKERHUB_USERNAME  - Docker Hub user name
+#   DOCKERHUB_TOKEN     - Docker Hub access token (read/write)
+#
+# The Docker Hub namespace is configured in the `dockerhub-namespace`
+# environment variable below (e.g. `m000p`). Images are named
+# `<namespace>/versigo-<service>` where <service> is one of
+# api / worker / web / migration.
+#
+# Tag behavior:
+# - Tag push `v*` -> images are pushed as `<version>` (tag without `v`) plus
+#   `:latest`.
+# - Manual `workflow_dispatch` -> images are pushed with a sha-based tag
+#   `manual-<short-sha>` only; `:latest` is never overwritten and branch
+#   names (which may contain '/') are never used as tags.
 
-# Optionaler Workflow: baut und pusht die VersiGo-Produktionsimages in eine
-# Container-Registry. Ausloeser: Versions-Tag (v*) oder manuell
-# (workflow_dispatch). Der Workflow ist OPTIONAL — fuer den Beta-Betrieb
-# kann er aktiviert oder uebersprungen werden (siehe docs/docker-image-guide.md).
+name: Publish Docker Images
 
 on:
   push:
@@ -11,15 +27,32 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # Docker Hub namespace the images are published under, e.g. `m000p`.
+  DOCKERHUB_NAMESPACE: m000p
+  IMAGE_PREFIX: versigo
 
 jobs:
-  publish:
+  dockerhub:
+    name: Build and push to Docker Hub
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            file: apps/api/Dockerfile
+            target: ""
+          - service: worker
+            file: apps/worker/Dockerfile
+            target: ""
+          - service: web
+            file: apps/web/Dockerfile
+            target: ""
+          - service: migration
+            file: apps/api/Dockerfile
+            target: migration
 
     steps:
       - name: Checkout
@@ -28,46 +61,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract tag
         id: meta
         run: |
-          TAG=${GITHUB_REF_NAME#v}
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Version tag push (e.g. v1.2.3) -> publish <version> + latest.
+            TAG="${GITHUB_REF_NAME#v}"
+            echo "push_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            # Manual workflow_dispatch: GITHUB_REF_NAME is a branch name
+            # (never overwrite :latest with an unreleased build, and branch
+            # names may contain '/' which is invalid in a Docker tag).
+            TAG="manual-${GITHUB_SHA::8}"
+            echo "push_latest=false" >> "$GITHUB_OUTPUT"
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Ref: $GITHUB_REF_NAME -> Tag: $TAG"
 
-      - name: Build and push API
+      - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: apps/api/Dockerfile
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api:${{ steps.meta.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api:latest
-
-      - name: Build and push Worker
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: apps/worker/Dockerfile
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ steps.meta.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker:latest
-
-      - name: Build and push Web
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: apps/web/Dockerfile
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:${{ steps.meta.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:latest
+            ${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.push_latest == 'true' && format('{0}/{1}-{2}:latest', env.DOCKERHUB_NAMESPACE, env.IMAGE_PREFIX, matrix.service) || '' }}

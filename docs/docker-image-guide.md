@@ -1,7 +1,7 @@
 # Docker Image Guide – Build, Tag, Push, Deploy, Upgrade, Rollback, Restore
 
-**Version:** 1.2.0 (BugFix-07)  
-**Date:** 2026-08-06  
+**Version:** 1.3.0 (BugFix-09)  
+**Date:** 2026-08-07  
 **Applies to:** `versigo-api`, `versigo-worker`, `versigo-web` (and `versigo-test` for CI, `versigo-migration`)
 
 ---
@@ -128,12 +128,34 @@ podman build --target migration -f apps/api/Dockerfile -t versigo-migration:late
 
 ## 4. Tag & Push
 
+### 4.1 Public registry images (Docker Hub)
+
+Since **BugFix-09**, the GitHub workflow `.github/workflows/publish.yml`
+automatically builds and pushes all production images to **Docker Hub** when a
+version tag (`v*`) is pushed (or manually via `workflow_dispatch`). The images
+are published as:
+
+- `<namespace>/versigo-api:<version>` + `<namespace>/versigo-api:latest`
+- `<namespace>/versigo-worker:<version>` + `<namespace>/versigo-worker:latest`
+- `<namespace>/versigo-web:<version>` + `<namespace>/versigo-web:latest`
+- `<namespace>/versigo-migration:<version>` + `<namespace>/versigo-migration:latest`
+
+where `<version>` is the tag without the `v` prefix (e.g. tag `v1.2.3` ->
+version `1.2.3`) and `<namespace>` is the Docker Hub namespace configured in
+the workflow (`DOCKERHUB_NAMESPACE`, currently `m000p`). The workflow requires
+the GitHub secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+
+Deployment without rebuilding the images uses
+`docker-compose.dockerhub.yml` (see README "Quick start").
+
+### 4.2 Manual tag & push (own registry)
+
 Convention: `<registry>/versigo-<service>:<tag>`, where `<tag>` is either
-`latest` (development) or a version tag such as `v1.0.0-beta`.
+`latest` (development) or a version tag such as `1.0.0-beta`.
 
 ```bash
-REGISTRY=ghcr.io/mein-user   # or your own container registry
-TAG=v1.0.0-beta
+REGISTRY=docker.io/your-user   # or your own container registry
+TAG=1.0.0-beta
 
 podman tag versigo-api:latest    "$REGISTRY/versigo-api:$TAG"
 podman tag versigo-worker:latest "$REGISTRY/versigo-worker:$TAG"
@@ -152,12 +174,12 @@ version tag:
 ```bash
 podman tag versigo-api:latest "$REGISTRY/versigo-api:latest"
 podman push "$REGISTRY/versigo-api:latest"
-# analogous for worker + web
+# analogous for worker + web + migration
 ```
 
 > The CI (`.github/workflows/ci.yml`) does **not** run the build-metrics job
-> blockingly; an optional publish workflow can build and push the tags
-> automatically (see `docs/`).
+> blockingly; the publish workflow (`.github/workflows/publish.yml`) builds
+> and pushes the tags to Docker Hub automatically on version release.
 
 ---
 

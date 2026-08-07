@@ -69,6 +69,13 @@ docker tag versigo-web:latest    myregistry.example/versigo/versigo-web:latest
 
 ## 3. Publish to a registry
 
+> **Since BugFix-09** the automated release workflow
+> (`.github/workflows/publish.yml`) builds and pushes the images
+> **api / worker / web / migration** to **Docker Hub**
+> (`m000p/versigo-<service>:<version>` + `:latest`) whenever a version tag is
+> pushed. The manual commands below are only needed for custom registries or
+> local publishing.
+
 ### Docker Hub
 
 ```bash
@@ -81,7 +88,11 @@ docker push myregistry.example/versigo/versigo-worker:latest
 docker push myregistry.example/versigo/versigo-web:latest
 ```
 
-### GitHub Container Registry (GHCR)
+### GitHub Container Registry (GHCR) — optional manual path
+
+> The automated release workflow publishes to **Docker Hub only**. GHCR is not
+> used by the project; the commands below are an optional manual alternative
+> for maintainers who want a private mirror.
 
 ```bash
 echo "$GITHUB_TOKEN" | docker login ghcr.io -u <your-user> --password-stdin
