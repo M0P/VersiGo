@@ -107,7 +107,14 @@ async function bootstrap(): Promise<void> {
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        secure: config.get('COOKIE_SECURE'),
+        // BugFix-14: per-request Secure flag. An explicitly set COOKIE_SECURE
+        // (true/false) is honored as before. When unset, 'auto' derives the
+        // flag from the actual connection (req.secure, which requires
+        // TRUST_PROXY=true behind a reverse proxy): Secure over HTTPS (via
+        // Caddy/Nginx, X-Forwarded-Proto: https), plain over direct HTTP.
+        // This makes one deployment work over both IP/HTTP access and a
+        // TLS-terminating reverse proxy.
+        secure: process.env.COOKIE_SECURE ? config.get('COOKIE_SECURE') : 'auto',
         sameSite: 'lax',
         // BugFix-02: in development, set the cookie domain to 'localhost' (without port)
         // so the session cookie works across different localhost ports (e.g., web on 2478, API on 2479).

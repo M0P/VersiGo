@@ -35,9 +35,14 @@ export function getApiBaseUrl(): string {
     return cachedApiBaseUrl;
   }
 
-  // Fallback for SSR or if runtime config not loaded yet
-  // This should not happen in normal operation since the script is in <head>
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+  // Fallback for SSR or if runtime config not loaded yet.
+  // BugFix-14: an empty NEXT_PUBLIC_API_BASE_URL (compose default) means
+  // "auto-detect in the browser" (see docker-entrypoint.sh) and must NOT be
+  // returned here – fall back to the local API default instead. SSR never
+  // calls the API itself (the middleware only checks the session cookie), so
+  // this value is only a placeholder until client hydration.
+  const ssrBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  return ssrBase && ssrBase.trim() ? ssrBase : 'http://localhost:3001';
 }
 
 /** Runtime application version (BugFix-11/R7), 'unknown' when not injected. */

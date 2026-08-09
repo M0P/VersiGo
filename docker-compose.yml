@@ -1,9 +1,11 @@
 # VersiGo – production/development stack
-# Public URLs (single source of truth): NEXT_PUBLIC_API_BASE_URL,
-# CORS_ORIGINS and OIDC_CALLBACK_URL are derived from VERSIGO_HOST plus
-# APP_PORT/WEB_PORT (see .env). They only need to be set explicitly when the
-# stack is served through a TLS-terminating reverse proxy that uses a
-# different public URL (e.g. https://app.example.com).
+# Public URLs: CORS_ORIGINS and OIDC_CALLBACK_URL are derived from
+# VERSIGO_HOST plus APP_PORT/WEB_PORT (see .env). NEXT_PUBLIC_API_BASE_URL is
+# auto-detected by the web app in the browser (BugFix-14): direct IP/HTTP
+# access -> http://<host>:<API port>, HTTPS via reverse proxy ->
+# https://<host>/api. Only set the variables explicitly when the stack is
+# served through a TLS-terminating reverse proxy that uses a different public
+# URL (e.g. https://app.example.com).
 name: versigo
 
 services:
@@ -96,10 +98,9 @@ services:
       # (otherwise req.ip falls back to the proxy IP behind the proxy and the
       # per-IP rate limits would lock out all clients globally).
       TRUST_PROXY: "${TRUST_PROXY:-false}"
-      # AP-20: Secure flag of the session cookie. Default: true in production
-      # (derived from NODE_ENV). Only set explicitly when the API is served
-      # deliberately over plain HTTP (TLS-terminating reverse proxy or
-      # controlled internal installation).
+      # AP-20/BugFix-14: Secure flag of the session cookie. Empty (default):
+      # per-request "auto" – Secure only over HTTPS (requires TRUST_PROXY=true
+      # behind a proxy). Set true/false explicitly only to force the flag.
       COOKIE_SECURE: "${COOKIE_SECURE:-}"
       # AP-16: Allowed browser origins for CORS (comma-separated list).
       CORS_ORIGINS: "${CORS_ORIGINS:-http://${VERSIGO_HOST:-localhost}:${WEB_PORT:-3000}}"
@@ -218,9 +219,14 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: "3000"
-      # API base URL for the browser - injected at container startup via entrypoint
-      # This allows fully dynamic port configuration without rebuilding the web image
-      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-http://${VERSIGO_HOST:-localhost}:${APP_PORT:-3001}}"
+      # API base URL for the browser - injected at container startup via entrypoint.
+      # Empty (default): the browser auto-detects it from the loaded page
+      # (BugFix-14): direct IP/HTTP access -> http://<host>:<API port>,
+      # HTTPS via reverse proxy -> https://<host>/api (proxy strips /api).
+      # Set NEXT_PUBLIC_API_BASE_URL only for proxy URLs outside this scheme.
+      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-}"
+      # API port for the direct IP/HTTP auto-detection path.
+      NEXT_PUBLIC_API_PORT: "${APP_PORT:-3001}"
       # BugFix-11 (R7): runtime app version, shown in the UI footer
       NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-1.0.0-beta.1}
     ports:

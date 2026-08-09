@@ -386,9 +386,10 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     type: 'boolean',
     group: 'Infrastruktur',
     description:
-      'Secure-Flag des Session-Cookies (Default: true in Produktion, false sonst, abgeleitet ' +
-      'aus NODE_ENV). Nur bei Deployments hinter TLS-terminierendem Reverse-Proxy oder ' +
-      'kontrollierten internen Installationen ohne TLS explizit setzen. Nur Environment/Compose.',
+      'Secure-Flag des Session-Cookies. Leer (Default): pro Request "auto" – Secure nur ueber ' +
+      'HTTPS (erfordert TRUST_PROXY=true hinter einem Reverse-Proxy); damit funktioniert ein ' +
+      'Deployment sowohl ueber direkten IP/HTTP-Zugriff als auch ueber HTTPS-Proxy. ' +
+      'Nur bei Bedarf explizit true/false setzen. Nur Environment/Compose.',
     defaultValue: true,
     connectivityTestable: false,
     permission: 'ADMIN',
@@ -605,8 +606,12 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     category: 'bootstrap',
     type: 'string',
     group: 'Infrastruktur',
-    description: 'Oeffentliche API-Basis-URL fuer den Browser (Next.js Build-Zeit). Nur Environment/Compose.',
-    defaultValue: 'http://localhost:3001',
+    description:
+      'Oeffentliche API-Basis-URL fuer den Browser. Leer (Default): der Browser leitet die URL ' +
+      'automatisch aus der geladenen Seite ab (BugFix-14): direkter IP/HTTP-Zugriff -> ' +
+      'http://<host>:<API-Port>, HTTPS via Reverse-Proxy -> https://<host>/api. Nur bei ' +
+      'Proxy-URLs ausserhalb dieses Schemas explizit setzen. Nur Environment/Compose.',
+    defaultValue: '',
     connectivityTestable: false,
     permission: 'ADMIN',
   },
