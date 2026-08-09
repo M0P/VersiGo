@@ -1,93 +1,88 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Project state after BugFix-11 (Package E)
+## Project state after BugFix-12 (third-party license compliance)
 
-The work package `prompts/BugFix-11-release-readiness.md` (Package E) is
+The third-party license-compliance work package (no prompt file – direct user
+request: "create a list of all used libraries and licenses, find the rules to
+use each, then apply the rules so we use each library as intended") is
 implemented, reviewed (2 review rounds, acceptance condition met: 0 Critical /
-0 High / 0 Medium / ≤ 8 Minor — final round 1 Minor, fixed without a further
-round; see `docs/reviews/BugFix-11-review-1.md` and
-`docs/reviews/BugFix-11-review-2.md`), and committed on branch
-`fix/BugFix-09-ci-fix-community-standards-dockerhub` (commit `c54c557`).
+0 High / 0 Medium / ≤ 8 Minor – final round 0/0/0/4, three of the four Minors
+fixed immediately, the fourth explicitly deferred to the next work package;
+see `docs/reviews/BugFix-12-review-1.md` and
+`docs/reviews/BugFix-12-review-2.md`), and committed on branch
+`fix/BugFix-09-ci-fix-community-standards-dockerhub` (commit `f6ffeb7`).
 
-Package E delivered:
+Package BugFix-12 delivered:
 
-1. **Upload fix (Docker images).** `apps/api/Dockerfile` and
-   `apps/worker/Dockerfile` now create `/data/uploads` owned by
-   `appuser:appgroup` before `USER appuser`, so fresh named volumes inherit
-   correct ownership (fixes `EACCES mkdir /data/uploads/<id>`). Existing
-   deployments need a one-time `podman unshare chown 100:101 <volume>/_data`
-   (documented in `docs/docker-image-guide.md`). `scripts/compose-smoke-test.sh`
-   extended with the upload-write probe (31 → 32 checks).
-2. **Paperless API-dialect auto-negotiation.** `PaperlessNgxService` now
-   negotiates `v2` (`Accept: application/json;version=2`, param `query`) vs
-   `legacy` (`Accept: application/json`, param `q`) per `baseUrl`. A 406 probe
-   response switches to `legacy` for all subsequent calls; 401/403 keep `v2`
-   and surface the real token error; communication errors are logged, never
-   thrown; failed probes are NOT cached (so a later success can flip the
-   dialect). 5+ unit scenarios in `paperless-ngx.service.spec.ts`.
-3. **Version 1.0.0-beta.1 everywhere + runtime exposure (B2/R7).** All five
-   `package.json` files at `1.0.0-beta.1`; API/worker read `APP_VERSION`
-   (optional, `'unknown'` fallback) and return it from `/health` + `/ready`
-   (foundation `HealthController`); web shows `NEXT_PUBLIC_APP_VERSION` in the
-   footer via the runtime-config entrypoint. Compose (`docker-compose.yml` +
-   `docker-compose.dockerhub.yml`), `.env.example`, and the docs env-var tables
-   updated per the Required Future-Feature Contract. The git tag
-   `v1.0.0-beta.1` is created by the release manager AFTER merge (out of agent
-   scope).
-4. **B5 dependency audit.** bcrypt 6.0.0 (removes the
-   node-pre-gyp→tar/brace-expansion graph), next 16.2.12, pnpm-workspace
-   `overrides`: postcss ≥8.5.23, sharp ≥0.35.3, vite ≥6.4.3; vitest 3.2.x
-   (all four manifests `^3.2.6`, lockfile resolves 3.2.7). `pnpm audit --prod`
-   = 0 advisories (0/0/0); 5 remaining HIGH are Dev-Tooling only, documented
-   with reason + risk in checklist R-12.
-5. **R1 rename + German→English translation round.** README/CONTRIBUTING/
-   SECURITY use `M0P/VersiGo`; `git remote set-url origin
-   https://github.com/M0P/VersiGo.git` is local-only (describe in PR). All
-   code comments/JSDoc/non-UI runtime strings in `apps/*/src/**`, Dockerfiles,
-   `docker/*.sh`, and `.github/workflows/*.yml` are now English; specs updated
-   to the new assertion strings. German remains ONLY in the documented
-   allowlist: i18n UI resources (`apps/web` locale files), user-visible UI
-   labels (settings-catalog descriptions, admin-settings validation messages,
-   Wüstenrot portal label in `portal-catalog.ts:132,135`, spec fixtures), and
-   the functional German LLM prompts in
-   `apps/worker/src/ai-extraction.processor.ts` (all four, now explicitly
-   commented as intentional allowlist entries — German summaries are a
-   feature).
-6. **B3 advanced-security diagnosis.** The `github-advanced-security` failure
-   is a GitHub default-setup run, not a repo workflow; state and owner actions
-   documented in the commit/PR (no repo-admin rights were used).
-7. **R5 release notes.** `docs/release-notes-v1.0.0-beta.1.md` is concrete;
-   `docs/beta-release-checklist.md` updated (version row, R-12 audit numbers,
-   test counts 660/58/47/4/107, vitest 3.2.x wording); `docs/release-guide.md`
-   references the concrete notes file.
-8. **R6 repo hygiene.** Stale untracked
-   `prompts/BugFix-03-post-bugfix02-issues.md` deleted; local merged branches
-   pruned; remote branch cleanup left for the owner (listed in the commit).
+1. **Full dependency + license inventory.** `docs/third-party-notices.md`
+   lists all 578 npm packages (direct and transitive, incl. dev tooling) with
+   their license, generated from the installed pnpm virtual store
+   (`node_modules/.pnpm`). License summary: MIT 482, Apache-2.0 35, ISC 28,
+   BSD-2-Clause 12, BSD-3-Clause 10, BlueOak-1.0.0 5, Unlicense 2, 0BSD 1,
+   CC-BY-4.0 1 (caniuse-lite), LGPL-3.0-or-later 1
+   (@img/sharp-libvips-linuxmusl-x64), Python-2.0 1 (argparse). Four packages
+   without a `license` field (busboy, streamsearch, passport-strategy, pause)
+   confirmed MIT; `pause` handled via `KNOWN_LICENSES` override.
+2. **License policy + usage rules.** `scripts/dependency-licenses.mjs` is the
+   single source of truth (allowlist, restricted licenses, special cases) and
+   `docs/10-quality-and-library-policy.md` gained a "Lizenzpolitik" section
+   (German, matching the existing doc language) documenting the per-license
+   usage rules: permissive (MIT/ISC/BSD/BlueOak/Unlicense/0BSD/Python-2.0)
+   used unmodified as libraries with attribution; Apache-2.0 additionally
+   ships NOTICE files; CC-BY-4.0 data-only; LGPL-3.0-or-later libvips binary
+   used unmodified and dynamically loaded by sharp (replaceable, not statically
+   linked). CC-BY-4.0 and LGPL-3.0-or-later are RESTRICTED to their named
+   packages and the check fails for any other package carrying them.
+3. **Test-gate license check.** `docker-compose.test.yml` now runs
+   `node scripts/dependency-licenses.mjs check` after the tests (before the
+   i18n guard): fails on non-allowlisted licenses, missing license
+   declarations, restricted-license misuse, or a stale notices doc. The
+   generation is deterministic (explicit name+version sort, no
+   localeCompare/readdir dependence). Root `package.json` gained
+   `licenses:generate` / `licenses:check` scripts.
+4. **Web-image license collection.** Next.js standalone output traces only
+   runtime files and dropped all LICENSE texts (the web image previously
+   shipped zero). `apps/web/Dockerfile` now runs
+   `node ../../scripts/dependency-licenses.mjs collect --pnpm-dir
+   /app/node_modules/.pnpm --out .../standalone/THIRD_PARTY_LICENSES` after
+   `pnpm run build`. Verified in the rebuilt image: 220 dirs / 221 files /
+   3.3 MB, zero empty entries; each package keeps its own license text in
+   `<entry>/<package>/` subdirs (no overwrites – next and styled-jsx each ship
+   their own MIT text, libvips ships its README documenting the bundled
+   LGPLv3/MPL-2.0/BSD/MIT libraries).
+5. **Build plumbing.** `Dockerfile.test` COPYs the script + notices doc into
+   the test image; `.dockerignore` changed `docs/` to `docs/*` +
+   `!docs/third-party-notices.md` so the notices file reaches the test image.
 
-**Security note for reviewers of this commit:** during the translation round
-the `@IsUrl({ protocols: ['http','https'], require_protocol: true })`
-decorators on `CreatePortalAccountLinkDto.portalUrl` and
-`UpdatePortalAccountLinkDto.portalUrl` (`apps/api/src/features/policy-registry/
-dto/policy-registry.dto.ts`) had been accidentally dropped; they were restored
-to match HEAD. Verify they stay present in future edits of that file — the
-DTO tests (`policy-registry.dto.spec.ts:66-69,138-142,166-168`) cover it.
+**Known debt / deferred items:**
+- No automated unit tests for `scripts/dependency-licenses.mjs` (check
+  allowlist/restricted/stale-doc and collect no-overwrite/symlink-skip) –
+  explicitly deferred with reviewer permission. The next work package that
+  touches this tooling should add a fixture-based test.
+- Re-running the compose smoke test without `--clean` against a leftover DB
+  (two active admins) makes step 8m ("DELETE /privacy/account should return
+  409") fail with 204 – pre-existing script characteristic (stale state), NOT
+  a regression. Always run `./scripts/compose-smoke-test.sh --build --clean`.
 
-## Verification state of the BugFix-11 commit
+## Verification state of the BugFix-12 commit
 
-- Full compose test gate (container): `pnpm run test` 5/5 tasks (API 58 files /
-  660 tests, web 47, foundation 107, worker 4), `pnpm run typecheck` 4/4,
-  `pnpm run lint` 3/3, i18n guard OK (no hardcoded German UI texts in 54 files).
-- Compose smoke test (`--build`): 32/32 checks (incl. new upload-write probe).
-- Live dev-stack checks performed earlier in the package: end-to-end upload
-  E2E OK, `/health` + `/ready` return `version`.
-- Review loop: 2 rounds, acceptance met 0/0/0/1 (round 1: 0/0/0/3; round 2:
-  0/0/0/1, fixed immediately; no round 3 needed).
+- Full compose test gate (container): lint, typecheck, `pnpm run test` 5/5
+  tasks (API 58 files / 660 tests, web 47, foundation 107, worker 4),
+  `License check: OK` (578 packages), i18n guard OK.
+- Compose smoke test (`--build --clean`): "All smoke tests passed".
+- Web image verified: `THIRD_PARTY_LICENSES` per-package layout correct
+  (next own MIT text, styled-jsx own license.md, libvips README, zero empty
+  entries).
+- Review loop: 2 rounds, acceptance met 0/0/0/4 (round 1: 1 High + 1 Medium +
+  6 Minor, all fixed; round 2: 0/0/0/4, three Minors fixed after; 1 Minor
+  deferred).
 
 ## No next work package exists
 
 `prompts/` contains no further numbered work package after BugFix-11 (the
-last file is `prompts/BugFix-11-release-readiness.md`). All currently defined
-work packages are committed (AP-01 … AP-21, BugFix-01 … BugFix-11).
+last file is `prompts/BugFix-11-release-readiness.md`); BugFix-12 was a
+direct user request with no prompt file. All currently defined work packages
+are committed (AP-01 … AP-21, BugFix-01 … BugFix-12).
 
 **A new coding-agent session must therefore NOT auto-start any work package.**
 Wait for the user's next explicit instruction. If the user provides a new
