@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type ReactElement, type ReactNode } from 'react';
 import { Button } from './button';
+import { useI18n } from '../../i18n';
 
 type DialogProps = {
   open: boolean;
@@ -22,6 +23,7 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (open) {
@@ -103,7 +105,7 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
         <div className="dialog-footer">
           {actions}
           <Button variant="ghost" onClick={onClose}>
-            Abbrechen
+            {t('common.cancel')}
           </Button>
         </div>
       </div>

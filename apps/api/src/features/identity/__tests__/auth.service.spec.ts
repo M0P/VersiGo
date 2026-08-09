@@ -17,6 +17,7 @@ function createMockDb() {
     },
     credential: {
       create: vi.fn(),
+      update: vi.fn().mockResolvedValue({ userId: 'user-1' }),
     },
     householdMembership: {
       findUnique: vi.fn(),
@@ -374,6 +375,84 @@ describe('AuthService.localLogin', () => {
 
     const result = await service.localLogin('testuser', 'passwort');
     expect(result).toBeNull();
+  });
+});
+
+describe('AuthService.changePassword', () => {
+  let mockDb: MockDb;
+  let mockPasswordHashing: MockPasswordHashing;
+  let service: AuthService;
+
+  beforeEach(() => {
+    mockDb = createMockDb();
+    mockPasswordHashing = createMockPasswordHashing();
+    service = new AuthService(mockDb as never, mockPasswordHashing as never);
+  });
+
+  it('changes the password after verifying the current one and audits without the password', async () => {
+    mockDb.user.findUnique.mockResolvedValue({
+      credential: { passwordHash: '$2b$12$old' },
+    });
+    mockPasswordHashing.verify.mockResolvedValue(true);
+    mockPasswordHashing.hash.mockResolvedValue('$2b$12$new');
+
+    await service.changePassword('user-1', 'aktuell', 'neues-passwort');
+
+    expect(mockPasswordHashing.verify).toHaveBeenCalledWith('aktuell', '$2b$12$old');
+    expect(mockPasswordHashing.hash).toHaveBeenCalledWith('neues-passwort');
+    expect(mockDb.credential.update).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      data: { passwordHash: '$2b$12$new' },
+    });
+    expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actorUserId: 'user-1',
+          action: 'PASSWORD_CHANGED',
+          entityId: 'user-1',
+        }),
+      }),
+    );
+    // The password must never land in the audit diff.
+    const auditCall = mockDb.auditEvent.create.mock.calls[0][0] as {
+      data: { diffJson: unknown };
+    };
+    expect(JSON.stringify(auditCall.data.diffJson)).not.toContain('neues-passwort');
+    expect(JSON.stringify(auditCall.data.diffJson)).not.toContain('aktuell');
+  });
+
+  it('throws 403 for a wrong current password and audits the failure', async () => {
+    mockDb.user.findUnique.mockResolvedValue({
+      credential: { passwordHash: '$2b$12$old' },
+    });
+    mockPasswordHashing.verify.mockResolvedValue(false);
+
+    await expect(
+      service.changePassword('user-1', 'falsch', 'neues-passwort'),
+    ).rejects.toThrow('Current password is incorrect');
+    expect(mockDb.credential.update).not.toHaveBeenCalled();
+    expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'PASSWORD_CHANGE_FAILURE' }),
+      }),
+    );
+  });
+
+  it('throws 404 for a missing user', async () => {
+    mockDb.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.changePassword('ghost', 'aktuell', 'neues-passwort'),
+    ).rejects.toThrow('User not found');
+  });
+
+  it('throws 409 for an account without a local credential (OIDC-only)', async () => {
+    mockDb.user.findUnique.mockResolvedValue({ credential: null });
+
+    await expect(
+      service.changePassword('oidc-user', 'aktuell', 'neues-passwort'),
+    ).rejects.toThrow('Account has no local password');
+    expect(mockPasswordHashing.verify).not.toHaveBeenCalled();
   });
 });
 

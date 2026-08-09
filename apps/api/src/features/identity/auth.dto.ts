@@ -33,3 +33,22 @@ export class RegisterLocalAccountDto {
   })
   password!: string;
 }
+
+/**
+ * BugFix-16: password change of the signed-in user (POST /auth/change-password).
+ * The current password is verified against the stored hash before the new one
+ * is set. Passwords are never stored, logged or audited.
+ */
+export class ChangePasswordDto {
+  @IsString()
+  @Length(1, PASSWORD_MAX_LENGTH, {
+    message: `currentPassword must be between 1 and ${PASSWORD_MAX_LENGTH} characters long`,
+  })
+  currentPassword!: string;
+
+  @IsString()
+  @Length(PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, {
+    message: `newPassword must be between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters long`,
+  })
+  newPassword!: string;
+}

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AuthController } from '../auth.controller';
 import { GlobalRole, UserStatus } from '@prisma/client';
-import { ConflictException, HttpException, HttpStatus } from '@nestjs/common';
+import { ConflictException, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
 import type { AuthenticatedUser } from '../auth.service';
 
 type OidcStrategyLike = {
@@ -19,6 +19,7 @@ type AuthServiceLike = {
   getOidcBinding: ReturnType<typeof vi.fn>;
   bindOidcIdentityForUser: ReturnType<typeof vi.fn>;
   unbindOidcIdentityForUser: ReturnType<typeof vi.fn>;
+  changePassword: ReturnType<typeof vi.fn>;
 };
 
 type CapabilitiesLike = {
@@ -94,6 +95,7 @@ function createMockAuthService(): AuthServiceLike {
       oidcSubject: 'sub-1',
     }),
     unbindOidcIdentityForUser: vi.fn().mockResolvedValue(undefined),
+    changePassword: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -659,6 +661,85 @@ describe('AuthController', () => {
 
       await controller.localLogin(req as never, res as never, { username: 'test', password: 'wrong' });
       expect(rateLimiter.recordAttempt).toHaveBeenCalledWith('1.2.3.4');
+    });
+  });
+
+  describe('POST /auth/change-password', () => {
+    const req = { ip: '1.2.3.4', socket: {} } as unknown as RequestLike;
+
+    it('delegates to the service with the current user and the new password', async () => {
+      const authService = createMockAuthService();
+      const rateLimiter = createMockRateLimiter();
+      const controller = createController({ authService, rateLimiter });
+
+      await controller.changePassword(
+        mockUser as never,
+        { currentPassword: 'aktuell', newPassword: 'neues-passwort' } as never,
+        req as never,
+      );
+
+      expect(authService.changePassword).toHaveBeenCalledWith(
+        'user-1',
+        'aktuell',
+        'neues-passwort',
+      );
+      expect(rateLimiter.recordAttempt).not.toHaveBeenCalled();
+      expect(rateLimiter.resetAttempts).toHaveBeenCalledWith('1.2.3.4', 'change-password');
+    });
+
+    it('propagates a 403 for a wrong current password and records the failed attempt', async () => {
+      const authService = createMockAuthService();
+      authService.changePassword.mockRejectedValue(
+        new ForbiddenException('Current password is incorrect'),
+      );
+      const rateLimiter = createMockRateLimiter();
+      const controller = createController({ authService, rateLimiter });
+
+      await expect(
+        controller.changePassword(
+          mockUser as never,
+          { currentPassword: 'falsch', newPassword: 'neues-passwort' } as never,
+          req as never,
+        ),
+      ).rejects.toThrow('Current password is incorrect');
+      expect(rateLimiter.recordAttempt).toHaveBeenCalledWith('1.2.3.4', 'change-password');
+    });
+
+    it('propagates a 409 for an account without a local credential without counting the attempt', async () => {
+      const authService = createMockAuthService();
+      authService.changePassword.mockRejectedValue(
+        new ConflictException('Account has no local password'),
+      );
+      const rateLimiter = createMockRateLimiter();
+      const controller = createController({ authService, rateLimiter });
+
+      await expect(
+        controller.changePassword(
+          mockUser as never,
+          { currentPassword: 'aktuell', newPassword: 'neues-passwort' } as never,
+          req as never,
+        ),
+      ).rejects.toThrow('Account has no local password');
+      expect(rateLimiter.recordAttempt).not.toHaveBeenCalled();
+    });
+
+    it('answers 429 without touching the service when the IP is rate-limited', async () => {
+      const authService = createMockAuthService();
+      const rateLimiter = createMockRateLimiter();
+      rateLimiter.isBlocked.mockResolvedValue(true);
+      const controller = createController({ authService, rateLimiter });
+
+      await expect(
+        controller.changePassword(
+          mockUser as never,
+          { currentPassword: 'aktuell', newPassword: 'neues-passwort' } as never,
+          req as never,
+        ),
+      ).rejects.toMatchObject({
+        status: HttpStatus.TOO_MANY_REQUESTS,
+        message: 'Too many failed attempts. Please try again later.',
+      });
+      expect(authService.changePassword).not.toHaveBeenCalled();
     });
   });
 });

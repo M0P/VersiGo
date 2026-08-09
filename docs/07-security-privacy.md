@@ -78,6 +78,7 @@
 - Nach einer konfigurierbaren Anzahl von Versuchen (Standard: 5) innerhalb eines Zeitfensters (Standard: 15 Minuten) wird die IP vorübergehend gesperrt
 - Der Zähler wird nach erfolgreichem Login zurückgesetzt
 - Auch Registrierungsversuche (`POST /auth/register`) werden pro IP getrennt gezählt und begrenzt; fehlgeschlagene (409) wie erfolgreiche Registrierungen erhöhen den Zähler, ein Reset findet dort nicht statt
+- Auch fehlgeschlagene Verifikationen des aktuellen Passworts bei `POST /auth/change-password` werden pro IP in einem separaten Scope (`change-password`) gezählt und begrenzt; der Zähler wird nach erfolgreicher Änderung zurückgesetzt
 - Bei Redis-Ausfall wird der Zugriff nicht blockiert (Fail-Open)
 - `TRUST_PROXY`: Nur hinter einem vertrauenswürdigen Reverse-Proxy auf `true` setzen, sonst fallen `req.ip` und damit die per-IP-Rate-Limits auf die Proxy-IP zurück
 

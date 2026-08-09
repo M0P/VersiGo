@@ -76,7 +76,8 @@ LOCAL_ADMIN_PASSWORD=change-me
 - Bei ausschließlicher Nutzung der lokalen Authentifizierung muss OIDC deaktiviert sein (`OIDC_ENABLED=false`)
 - Wenn keine Authentifizierungsmethode aktiviert ist, startet die Anwendung nicht (Konfigurationsfehler)
 - OIDC ist ein zweiter Login-Weg, der an ein bestehendes (freigeschaltetes) lokales Konto gebunden sein muss; die Bindung setzt ein Admin (`POST /admin/users/:id/oidc-binding`). OIDC provisioniert keine Konten.
-- Ein Passwort-Reset per E-Mail ist derzeit nicht implementiert (geplante Erweiterung)
+- Ein Passwort-Reset per E-Mail ist derzeit nicht implementiert (geplante Erweiterung). Stattdessen kann ein Admin das Passwort eines Kontos direkt zurücksetzen: über die Admin-Nutzerverwaltung (`/admin/users`) bzw. die Admin-API (`POST /admin/users/:id/reset-password`, Audit `USER_PASSWORD_RESET`; 409 bei OIDC-only-Konten ohne lokales Passwort).
+- **Sessions nach Passwort-Reset (BugFix-16):** Ein Passwort-Reset (weder Admin-Reset noch Selbst-Änderung) widerruft **keine bestehenden Sessions** des betroffenen Kontos – die Session-Validierung prüft nur Existenz und Status `ACTIVE`, nicht das Passwort. Wer im Kompromittierungsfall eine erneute Authentifizierung erzwingen will, muss das Konto sperren (`/admin/users` → Sperren; der Login der gesperrten Sessions wird sofort abgelehnt).
 
 ### Health Checks
 
@@ -98,6 +99,7 @@ LOCAL_ADMIN_PASSWORD=change-me
 | `POST /admin/monitoring/queues/failed/:jobId/retry` | `ADMIN` | Job erneut einreihen |
 | `GET /admin/monitoring/ai-jobs` | `ADMIN` | AI-Job-Übersicht (ohne Fehlermeldungen/Payloads) |
 | `GET /admin/monitoring/integrations` | `ADMIN` | Integrationsstatus ohne Secrets |
+| `POST /admin/users/:id/reset-password` | `ADMIN` | Lokales Passwort direkt neu setzen (kein altes Passwort nötig; Audit `USER_PASSWORD_RESET`; 409 bei OIDC-only-Konten). Widerruft keine bestehenden Sessions – zum Erzwingen von Re-Authentifizierung Konto sperren |
 
 Redaktions-Policy: Alle Monitoring-Antworten enthalten niemals Job-Payloads,
 URLs, Tokens oder Zugangsdaten (siehe `docs/05-feature-slices.md`).

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException, Logger } from '@nestj
 import { DatabaseService } from '@versigo/foundation';
 import { GlobalRole, Prisma, UserStatus } from '@prisma/client';
 import { AuthenticatedUser } from './auth.service';
+import { PasswordHashingService } from './password-hashing.service';
 import { DEFAULT_HOUSEHOLD_ID } from './local-admin.bootstrap';
 import { ListUsersQueryDto } from './user-admin.dto';
 import { normalizeIssuerUrl } from './oidc.strategy';
@@ -48,7 +49,10 @@ const userSelect = {
 export class UserAdminService {
   private readonly logger = new Logger(UserAdminService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly passwordHashing: PasswordHashingService,
+  ) {}
 
   async list(query: ListUsersQueryDto): Promise<{ users: AdminUserListItem[]; total: number }> {
     const where: Prisma.UserWhereInput = query.status ? { status: query.status } : {};
@@ -291,6 +295,44 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
 
       await tx.user.update({ where: { id: userId }, data: { oidcIssuer: null, oidcSubject: null } });
       await this.audit(tx, admin, userId, 'OIDC_UNBOUND', {});
+    });
+  }
+
+  /**
+   * BugFix-16: sets a new local password for a user (admin password reset,
+   * POST /admin/users/:id/reset-password). The admin does not need the old
+   * password. 409 when the account has no local credential (OIDC-only).
+   *
+   * The bcrypt hash is computed BEFORE the transaction opens, so the
+   * slow hash (~250 ms at cost 12) never holds a DB connection/transaction
+   * open. The new password is never logged or audited – the audit entry
+   * only records the action USER_PASSWORD_RESET.
+   *
+   * NOTE: the reset does NOT revoke existing sessions of the target user
+   * (session validation checks existence and ACTIVE status, not the
+   * password). To force re-authentication, disable the account.
+   */
+  async resetPassword(
+    admin: AuthenticatedUser,
+    userId: string,
+    newPassword: string,
+  ): Promise<void> {
+    const passwordHash = await this.passwordHashing.hash(newPassword);
+    await this.db.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { credential: { select: { userId: true } } },
+      });
+      if (!user) throw new NotFoundException('User not found');
+      if (!user.credential) {
+        throw new ConflictException('Account has no local password');
+      }
+
+      await tx.credential.update({
+        where: { userId },
+        data: { passwordHash },
+      });
+      await this.audit(tx, admin, userId, 'USER_PASSWORD_RESET', {});
     });
   }
 

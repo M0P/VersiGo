@@ -486,6 +486,22 @@ export const en = {
     oidcLinkFailed: 'Linking failed. Please try again.',
     oidcLinkSuccess: 'Your account has been linked with the identity provider.',
     oidcUnlinkSuccess: 'The OIDC link has been removed.',
+    // BugFix-16: password change (POST /auth/change-password)
+    pwTitle: 'Change password',
+    pwBody:
+      'Set a new password for your account. You need your current password to confirm the change. The password must be at least 12 characters long.',
+    pwCurrent: 'Current password',
+    pwNew: 'New password',
+    pwConfirm: 'Repeat new password',
+    pwMinHint: 'At least {min} characters.',
+    pwButton: 'Change password',
+    pwSaving: 'Saving...',
+    pwChanged: 'Your password has been changed.',
+    pwMismatch: 'The new passwords do not match.',
+    pwWrongCurrent: 'The current password is incorrect.',
+    pwNoLocalCredential:
+      'This account has no local password (it signs in via OIDC).',
+    pwChangeError: 'Error while changing the password.',
   },
   appearance: {
     title: 'Appearance customization',
@@ -555,6 +571,18 @@ export const en = {
       confirmRoleChangeDowngrade:
         'Change role from {from} to {to}? A downgraded admin immediately loses admin rights.',
       roleChangeFailed: 'Role change failed',
+      // BugFix-16: admin password reset (POST /admin/users/:id/reset-password)
+      resetPassword: 'Reset password',
+      resetPasswordTitle: 'Reset password',
+      resetPasswordBody: 'Set a new password for user {username}.',
+      resetPasswordLabel: 'New password',
+      resetPasswordConfirmLabel: 'Repeat new password',
+      resetPasswordHint: 'At least 12 characters.',
+      resetPasswordMismatch: 'The new passwords do not match.',
+      resetPasswordSuccess: 'The password has been reset.',
+      resetPasswordFailed: 'Password reset failed',
+      resetPasswordNoCredential:
+        'This account has no local password (it signs in via OIDC).',
     },
     integrations: {
       title: 'Integrations',
