@@ -20,7 +20,7 @@ function buildContext(user?: RequestLike['user'], params: Record<string, string>
 }
 
 describe('HouseholdMembershipGuard (Mandantentrennung)', () => {
-  it('verweigert Zugriff auf fremdes Household ohne Membership-Eintrag', async () => {
+  it('denies access to a foreign household without a membership entry', async () => {
     const authService: AuthServiceLike = {
       getMembership: vi.fn().mockResolvedValue(null),
     };
@@ -31,7 +31,7 @@ describe('HouseholdMembershipGuard (Mandantentrennung)', () => {
     expect(authService.getMembership).toHaveBeenCalledWith('user-a', 'household-b');
   });
 
-  it('erlaubt Zugriff bei bestehender Membership im Ziel-Household', async () => {
+  it('allows access with an existing membership in the target household', async () => {
     const authService: AuthServiceLike = {
       getMembership: vi.fn().mockResolvedValue({ householdId: 'household-a', userId: 'user-a' }),
     };
@@ -41,7 +41,7 @@ describe('HouseholdMembershipGuard (Mandantentrennung)', () => {
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
-  it('erlaubt Requests ohne householdId-Param unverändert', async () => {
+  it('allows requests without a householdId param unchanged', async () => {
     const authService: AuthServiceLike = { getMembership: vi.fn() };
     const guard = new HouseholdMembershipGuard(authService as never);
     const ctx = buildContext({ id: 'user-a' }, {});
@@ -50,11 +50,11 @@ describe('HouseholdMembershipGuard (Mandantentrennung)', () => {
     expect(authService.getMembership).not.toHaveBeenCalled();
   });
 
-  it('verweigert Zugriff ohne authentifizierten User', async () => {
+  it('denies access without an authenticated user', async () => {
     const authService: AuthServiceLike = { getMembership: vi.fn() };
     const guard = new HouseholdMembershipGuard(authService as never);
     const ctx = buildContext(undefined, { householdId: 'household-a' });
 
-    await expect(guard.canActivate(ctx)).rejects.toThrow('Nicht authentifiziert');
+    await expect(guard.canActivate(ctx)).rejects.toThrow('Not authenticated');
   });
 });

@@ -32,7 +32,7 @@ describe('preloadRestartSettingsIntoEnv', () => {
   it('wendet katalogisierte restart-Settings aus der DB auf die Umgebung an', async () => {
     const restartKeys = getRestartRequiredKeys();
     const env = baseEnv();
-    // Erste restart-Katalog-Schluessel: LOCAL_AUTH_MAX_ATTEMPTS (Zahl 1-100),
+    // First restart catalog keys: LOCAL_AUTH_MAX_ATTEMPTS (number 1-100),
     // LOCAL_AUTH_RATE_LIMIT_WINDOW_MS (Zahl 1000-86400000), STORAGE_ENABLED (Boolean).
     findMany.mockResolvedValue([
       { key: restartKeys[0], valueEncrypted: null, valuePlain: '42' },
@@ -52,13 +52,13 @@ describe('preloadRestartSettingsIntoEnv', () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('ueberspringt ungueltige DB-Werte statt sie in die Umgebung zu schreiben (Fail-soft)', async () => {
+  it('skips invalid DB values instead of writing them into the environment (fail-soft)', async () => {
     const restartKeys = getRestartRequiredKeys();
     const env = baseEnv();
     findMany.mockResolvedValue([
-      { key: restartKeys[0], valueEncrypted: null, valuePlain: 'banana' }, // keine Zahl
+      { key: restartKeys[0], valueEncrypted: null, valuePlain: 'banana' }, // not a number
       { key: restartKeys[1], valueEncrypted: null, valuePlain: '0' }, // unterhalb Min (1000)
-      { key: restartKeys[2], valueEncrypted: null, valuePlain: 'yes' }, // kein Boolean
+      { key: restartKeys[2], valueEncrypted: null, valuePlain: 'yes' }, // not a boolean
     ]);
 
     const applied = await preloadRestartSettingsIntoEnv(env);
@@ -70,7 +70,7 @@ describe('preloadRestartSettingsIntoEnv', () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('ueberspringt nicht katalogisierte Schluessel aus Legacy-Daten (Allowlist)', async () => {
+  it('skips non-catalogued keys from legacy data (allowlist)', async () => {
     const restartKeys = getRestartRequiredKeys();
     const env = baseEnv();
     findMany.mockResolvedValue([
@@ -85,7 +85,7 @@ describe('preloadRestartSettingsIntoEnv', () => {
     expect(env[restartKeys[0]]).toBe('7');
   });
 
-  it('ueberspringt leere Werte und trennt die Verbindung trotzdem', async () => {
+  it('skips empty values and still disconnects', async () => {
     const restartKeys = getRestartRequiredKeys();
     const env = baseEnv();
     findMany.mockResolvedValue([
@@ -100,7 +100,7 @@ describe('preloadRestartSettingsIntoEnv', () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('gibt 0 zurueck, wenn keine DB-Zeilen existieren', async () => {
+  it('returns 0 when no DB rows exist', async () => {
     const env = baseEnv();
     findMany.mockResolvedValue([]);
 
@@ -110,7 +110,7 @@ describe('preloadRestartSettingsIntoEnv', () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('gibt 0 zurueck, wenn DATABASE_URL fehlt (kein DB-Zugriff)', async () => {
+  it('returns 0 when DATABASE_URL is missing (no DB access)', async () => {
     const env: Record<string, string | undefined> = {
       SETTINGS_ENCRYPTION_KEY: 'a'.repeat(64),
     };
@@ -124,7 +124,7 @@ describe('preloadRestartSettingsIntoEnv', () => {
   it('bricht bei haengendem DB-Zugriff nach Ablauf der Zeit-Obergrenze ab (Fail-soft)', async () => {
     const restartKeys = getRestartRequiredKeys();
     const env = baseEnv();
-    // findMany loest nie auf – simuliert einen haengenden DB-Zugriff.
+    // findMany never resolves – simulates a hanging DB access.
     findMany.mockReturnValue(new Promise(() => undefined));
     const startedAt = Date.now();
 

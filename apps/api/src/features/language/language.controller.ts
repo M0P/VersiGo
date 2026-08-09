@@ -12,16 +12,15 @@ interface LanguageRequest {
 }
 
 /**
- * AP-21: Sprachpraeferenz-Endpunkt fuer ALLE authentifizierten Rollen
- * (READ_ONLY eingeschlossen).
+ * AP-21: language preference endpoint for ALL authenticated roles
+ * (READ_ONLY included).
  *
- * Sicherheitsmodell:
- * - READ_ONLY darf ausschliesslich seine eigene Sprache lesen/aendern
- *   (sitzungsbezogen, niemals persistiert, kein Zugriff auf andere
- *   Profileinstellungen, Haushaltsdaten, Nutzerverwaltung oder
- *   Systemeinstellungen).
- * - USER/ADMIN nutzen dieselbe, kontospezifische Einstellung.
- * - Es gibt keine systemweite Sprache und keine Uebersetzungsverwaltung.
+ * Security model:
+ * - READ_ONLY may only read/change its own language (session-bound,
+ *   never persisted, no access to other profile settings, household
+ *   data, user administration or system settings).
+ * - USER/ADMIN use the same account-specific setting.
+ * - There is no system-wide language and no translation management.
  */
 @Controller('user/language')
 @Roles(GlobalRole.READ_ONLY)

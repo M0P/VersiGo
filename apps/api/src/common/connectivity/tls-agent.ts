@@ -2,13 +2,13 @@ import * as https from 'node:https';
 import type { SettingsResolverService } from '@versigo/foundation';
 
 /**
- * BugFix-06 (Teil 2): Opt-in-TLS-Lockerung fuer AI-/OIDC-Runtime-Aufrufe.
+ * BugFix-06 (part 2): opt-in TLS relaxation for AI/OIDC runtime calls.
  *
- * Liefert einen HTTPS-Agent mit deaktivierter Zertifikatsvalidierung, wenn
- * die Admin-Einstellung `CONNECTIVITY_ALLOW_SELF_SIGNED` aktiv ist. Die
- * Lockerung gilt damit ausschliesslich fuer die konfigurierten AI-Endpunkte
- * (Ollama / OpenAI-kompatibel), niemals global. Ein Aufloesungsfehler
- * degradiert sicher auf den strikten Default (kein relaxed Agent).
+ * Returns an HTTPS agent with certificate validation disabled when
+ * the admin setting `CONNECTIVITY_ALLOW_SELF_SIGNED` is active. The
+ * relaxation therefore applies only to the configured AI endpoints
+ * (Ollama / OpenAI-compatible), never globally. A resolution error
+ * degrades safely to the strict default (no relaxed agent).
  */
 export async function optionalRelaxedHttpsAgent(
   settings: SettingsResolverService,

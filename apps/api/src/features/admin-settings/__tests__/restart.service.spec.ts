@@ -25,7 +25,7 @@ describe('RestartService (BugFix-06, Teil 3.4)', () => {
     vi.restoreAllMocks();
   });
 
-  it('hinterlegt die Anforderung mit Metadaten und beendet den Prozess', async () => {
+  it('stores the request with metadata and terminates the process', async () => {
     vi.useFakeTimers();
     const coordinator = createMockCoordinator();
     const service = new RestartService(coordinator as never);
@@ -40,12 +40,12 @@ describe('RestartService (BugFix-06, Teil 3.4)', () => {
         services: ['api', 'worker'],
       }),
     );
-    // Die HTTP-Antwort soll den Client erreichen, bevor der Prozess exitet.
+    // The HTTP response must reach the client before the process exits.
     vi.advanceTimersByTime(2000);
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
-  it('beendet den Prozess auch bei nicht erreichbarem Redis (fail-soft)', async () => {
+  it('terminates the process even when Redis is unreachable (fail-soft)', async () => {
     vi.useFakeTimers();
     const coordinator = createMockCoordinator();
     coordinator.requestRestart.mockRejectedValue(new Error('ECONNREFUSED'));

@@ -40,15 +40,15 @@ interface OllamaRuntimeConfig {
   baseUrl: string;
   model: string;
   timeout: number;
-  /** BugFix-06: HTTPS-Agent mit deaktivierter Zertifikatsvalidierung (opt-in). */
+  /** BugFix-06: HTTPS agent with certificate validation disabled (opt-in). */
   httpsAgent?: import('https').Agent;
 }
 
 /**
- * Ollama-Adapter (AP-17): liest seine Konfiguration pro Aufruf ueber die
- * zentrale Settings-Aufloesung (UI > .env > Default). Dadurch wirken
- * Admin-UI-Aenderungen an AI_OLLAMA_BASE_URL/-MODEL/-TIMEOUT sofort,
- * ohne Neustart.
+ * Ollama adapter (AP-17): reads its configuration per call via the
+ * central settings resolution (UI > .env > default). Admin-UI changes
+ * to AI_OLLAMA_BASE_URL/-MODEL/-TIMEOUT take effect immediately,
+ * without a restart.
  */
 @Injectable()
 export class OllamaAdapter implements IAIAdapter {
@@ -134,7 +134,7 @@ export class OllamaAdapter implements IAIAdapter {
 
     const parsed = tryParseExtractionResponse(raw, config.model);
     if (!parsed) {
-      this.logger.warn(`Konnte JSON nicht parsen aus AI-Antwort: ${raw.substring(0, 200)}`);
+      this.logger.warn(`Could not parse JSON from AI response: ${raw.substring(0, 200)}`);
       return null;
     }
 
@@ -188,12 +188,12 @@ export class OllamaAdapter implements IAIAdapter {
   private logError(method: string, err: unknown): void {
     if (err instanceof AxiosError) {
       this.logger.warn(
-        `Ollama-API ${method} fehlgeschlagen: status=${err.response?.status ?? 'keine Antwort'}, message=${err.message}`,
+        `Ollama API ${method} failed: status=${err.response?.status ?? 'no response'}, message=${err.message}`,
       );
     } else if (err instanceof Error) {
-      this.logger.warn(`Ollama-API ${method} Fehler: ${err.message}`);
+      this.logger.warn(`Ollama API ${method} error: ${err.message}`);
     } else {
-      this.logger.warn(`Ollama-API ${method} unbekannter Fehler`);
+      this.logger.warn(`Ollama API ${method} unknown error`);
     }
   }
 }

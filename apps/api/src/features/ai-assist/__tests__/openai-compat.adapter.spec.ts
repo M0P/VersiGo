@@ -42,13 +42,13 @@ describe('OpenAiCompatAdapter', () => {
     } as never;
   });
 
-  it('hat providerKey "openai-compat"', () => {
+  it('has providerKey "openai-compat"', () => {
     const settings = createMockSettings();
     const adapter = new OpenAiCompatAdapter(httpService, settings);
     expect(adapter.providerKey).toBe('openai-compat');
   });
 
-  it('extractContractFacts gibt null bei leerer Konfiguration', async () => {
+  it('extractContractFacts returns null for an empty configuration', async () => {
     const settings = createMockSettings({
       AI_OPENAI_COMPAT_BASE_URL: '',
       AI_OPENAI_COMPAT_API_KEY: '',
@@ -59,7 +59,7 @@ describe('OpenAiCompatAdapter', () => {
     expect(result).toBeNull();
   });
 
-  it('extractContractFacts gibt null bei leeren Dokumenten', async () => {
+  it('extractContractFacts returns null for empty documents', async () => {
     const settings = createMockSettings();
     const adapter = new OpenAiCompatAdapter(httpService, settings);
 
@@ -105,7 +105,7 @@ describe('OpenAiCompatAdapter', () => {
     expect(result!.model).toBe('gpt-4o-mini');
   });
 
-  it('summarizeCoverage gibt null bei leerer Konfiguration', async () => {
+  it('summarizeCoverage returns null for an empty configuration', async () => {
     const settings = createMockSettings({
       AI_OPENAI_COMPAT_BASE_URL: '',
       AI_OPENAI_COMPAT_API_KEY: '',
@@ -116,7 +116,7 @@ describe('OpenAiCompatAdapter', () => {
     expect(result).toBeNull();
   });
 
-  it('healthCheck gibt false bei leerer Konfiguration', async () => {
+  it('healthCheck returns false for an empty configuration', async () => {
     const settings = createMockSettings({
       AI_OPENAI_COMPAT_BASE_URL: '',
       AI_OPENAI_COMPAT_API_KEY: '',

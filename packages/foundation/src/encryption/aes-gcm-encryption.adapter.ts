@@ -7,10 +7,10 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH_BYTES = 12;
 
 /**
- * AES-256-GCM-Adapter fuer den EncryptionPort.
- * Schluessel wird ausschliesslich aus der validierten Konfiguration
- * gelesen (SETTINGS_ENCRYPTION_KEY), nie hartcodiert.
- * Format des Chiffrats: base64(iv):base64(authTag):base64(ciphertext)
+ * AES-256-GCM adapter for the EncryptionPort.
+ * The key is read exclusively from the validated configuration
+ * (SETTINGS_ENCRYPTION_KEY), never hardcoded.
+ * Cipher format: base64(iv):base64(authTag):base64(ciphertext)
  */
 @Injectable()
 export class AesGcmEncryptionAdapter implements EncryptionPort {
@@ -32,7 +32,7 @@ export class AesGcmEncryptionAdapter implements EncryptionPort {
   async decrypt(cipherText: string): Promise<string> {
     const [ivB64, authTagB64, dataB64] = cipherText.split(':');
     if (!ivB64 || !authTagB64 || !dataB64) {
-      throw new Error('Ungueltiges Chiffrat-Format');
+      throw new Error('Invalid ciphertext format');
     }
 
     const iv = Buffer.from(ivB64, 'base64');

@@ -10,7 +10,7 @@ import {
 import { en } from '../i18n/locales/en';
 import { de } from '../i18n/locales/de';
 
-/** Flaettet einen verschachtelten Katalog zu "pfad.zum.key" -> "Wert". */
+/** Flattens a nested catalog to "path.to.key" -> "Value". */
 function flattenKeys(
   obj: Record<string, unknown>,
   prefix = '',
@@ -99,8 +99,8 @@ describe('catalog parity (en vs de)', () => {
   });
 
   it('German values differ from English values (actually translated)', () => {
-    // Repraesentative Schluessel, die in der deutschen Fassung zwingend
-    // uebersetzt sein muessen (keine identischen Fachbegriffe).
+    // Representative keys that must be translated in the German catalog
+    // (no identical domain terms).
     const mustDiffer: Array<keyof typeof enKeys> = [
       'common.loading',
       'policies.title',

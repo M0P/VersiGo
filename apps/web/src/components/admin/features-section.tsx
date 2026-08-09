@@ -15,8 +15,8 @@ export type Source = 'UI' | 'ENV' | 'DEFAULT';
 export type SettingType = 'boolean' | 'number' | 'string';
 
 /**
- * Admin-UI-Ansicht eines katalogisierten System-Settings (AP-17).
- * Die Struktur entspricht exakt `SystemConfigEntryDto` der API.
+ * Admin UI view of a catalogued system setting (AP-17).
+ * The structure matches `SystemConfigEntryDto` of the API exactly.
  */
 export type SystemConfigEntry = {
   key: string;
@@ -37,7 +37,7 @@ export type SystemConfigEntry = {
   uiValuePresent: boolean;
   uiValueInvalid: boolean;
   restartRequired: boolean;
-  /** m2: erst nach Neustart aktiver UI-Wert (Restart-Kategorie). */
+  /** m2: UI value only active after a restart (restart category). */
   pendingRestartValue: string | number | boolean | null;
   uiUpdatedAt: string | null;
   uiUpdatedBy: string | null;
@@ -50,19 +50,19 @@ export type ConnectivityResult = {
 };
 
 /**
- * BugFix-05 (Befund 1): Benutzerfreundliche Feature-Verwaltung.
+ * BugFix-05 (finding 1): user-friendly feature management.
  *
- * Statt roher Schluesselnamen zeigt dieser Abschnitt pro optionalem Feature
- * eine Karte mit Master-Toggle (das jeweilige *_ENABLED-Setting) und den
- * zugehoerigen Konfigurationsfeldern. Gespeichert wird ausschliesslich ueber
- * den etablierten /admin/system-config-Endpunkt (Katalog-Allowlist +
- * Typvalidierung + Secret-Verschluesselung). `restart`-Kategorie (OIDC,
- * Storage) zeigt "Neustart erforderlich"; `runtime`-Kategorie (KI,
- * Paperless, Family-Sharing) wirkt sofort.
+ * Instead of raw key names, this section shows one card per optional feature
+ * with a master toggle (the respective *_ENABLED setting) and the
+ * associated configuration fields. Saving happens exclusively via
+ * the established /admin/system-config endpoint (catalog allowlist +
+ * type validation + secret encryption). The `restart` category (OIDC,
+ * storage) shows "restart required"; the `runtime` category (AI,
+ * Paperless, family sharing) takes effect immediately.
  *
- * BugFix-07 (Q1): Die Karten sind seit dem Merge in die Systemeinstellungen
- * ein Abschnitt der /admin/settings-Seite. `FEATURE_KEYS` schliesst dieselben
- * Schluessel aus dem Katalog darunter aus (keine Duplikate).
+ * BugFix-07 (Q1): since the merge into the system settings, the cards
+ * are a section of the /admin/settings page. `FEATURE_KEYS` excludes the
+ * same keys from the catalog below (no duplicates).
  */
 const FEATURES = [
   {
@@ -117,15 +117,15 @@ const FEATURES = [
   },
 ] as const;
 
-/** Alle Setting-Schluessel, die von den Feature-Karten verwaltet werden. */
+/** All setting keys managed by the feature cards. */
 export const FEATURE_KEYS: readonly string[] = FEATURES.flatMap((feature) => feature.keys);
 
 type AdminFeaturesSectionProps = {
-  /** Katalogdaten der /admin/settings-Seite (eine gemeinsame Quelle). */
+  /** Catalog data of the /admin/settings page (one shared source). */
   entries: SystemConfigEntry[];
-  /** Holt einen einzelnen Schluessel frisch vom Server (nach Aenderung). */
+  /** Fetches a single key fresh from the server (after a change). */
   onEntryRefresh: (key: string) => Promise<SystemConfigEntry | null>;
-  /** Meldet Fehler an die Elternseite (dortige Fehlerzeile). */
+  /** Reports errors to the parent page (its error line). */
   onError: (message: string) => void;
 };
 

@@ -4,10 +4,10 @@ import { ENCRYPTION_PORT, type EncryptionPort } from '@versigo/foundation';
 import { Inject } from '@nestjs/common';
 
 /**
- * Verwaltet verschlüsselte und Klartext-Settings auf globaler und
- * Household-Ebene. Secrets werden automatisch über den EncryptionPort
- * ver- und entschlüsselt. API-Keys werden niemals im Klartext ausgegeben
- * oder geloggt.
+ * Manages encrypted and plaintext settings on global and household
+ * level. Secrets are automatically encrypted/decrypted via the
+ * EncryptionPort. API keys are never returned in plaintext
+ * or logged.
  */
 @Injectable()
 export class SettingsStoreService {
@@ -29,7 +29,7 @@ export class SettingsStoreService {
       id: s.id,
       key: s.key,
       isSecret: s.isSecret,
-      // Immer maskiert ausliefern; der Wert wird nur beim Setzen/Updaten uebermittelt
+      // Always deliver masked; the value is only transmitted on set/update
       valuePlain: s.isSecret ? '********' : s.valuePlain ?? '',
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
@@ -41,7 +41,7 @@ export class SettingsStoreService {
       where: { key },
     });
     if (!setting) {
-      throw new NotFoundException(`Globales Setting '${key}' nicht gefunden`);
+      throw new NotFoundException(`Global setting '${key}' not found`);
     }
     return {
       id: setting.id,
@@ -61,10 +61,10 @@ export class SettingsStoreService {
   ) {
     const secret = isSecret ?? false;
 
-    // Pruefe auf doppelten Key
+    // Check for duplicate key
     const existing = await this.db.globalIntegrationSetting.findUnique({ where: { key } });
     if (existing) {
-      throw new ConflictException(`Globales Setting '${key}' existiert bereits`);
+      throw new ConflictException(`Global setting '${key}' already exists`);
     }
 
     let valueEncrypted: string | undefined;
@@ -108,7 +108,7 @@ export class SettingsStoreService {
   ) {
     const existing = await this.db.globalIntegrationSetting.findUnique({ where: { key } });
     if (!existing) {
-      throw new NotFoundException(`Globales Setting '${key}' nicht gefunden`);
+      throw new NotFoundException(`Global setting '${key}' not found`);
     }
 
     const secret = isSecret ?? existing.isSecret;
@@ -124,7 +124,7 @@ export class SettingsStoreService {
         valueEncrypted = undefined;
       }
     } else {
-      // Wert nicht uebergeben -> bestehenden Wert beibehalten
+      // Value not provided -> keep the existing value
       valueEncrypted = existing.valueEncrypted ?? undefined;
       valuePlainStored = existing.valuePlain ?? undefined;
     }
@@ -154,11 +154,11 @@ export class SettingsStoreService {
   async deleteGlobalSetting(key: string) {
     const existing = await this.db.globalIntegrationSetting.findUnique({ where: { key } });
     if (!existing) {
-      throw new NotFoundException(`Globales Setting '${key}' nicht gefunden`);
+      throw new NotFoundException(`Global setting '${key}' not found`);
     }
 
     await this.db.globalIntegrationSetting.delete({ where: { key } });
-    this.logger.log(`Globales Setting '${key}' geloescht`);
+    this.logger.log(`Global setting '${key}' deleted`);
     return { success: true };
   }
 
@@ -185,7 +185,7 @@ export class SettingsStoreService {
       where: { householdId_key: { householdId, key } },
     });
     if (!setting) {
-      throw new NotFoundException(`Household-Setting '${key}' nicht gefunden`);
+      throw new NotFoundException(`Household setting '${key}' not found`);
     }
     return {
       id: setting.id,
@@ -210,7 +210,7 @@ export class SettingsStoreService {
       where: { householdId_key: { householdId, key } },
     });
     if (existing) {
-      throw new ConflictException(`Household-Setting '${key}' existiert bereits`);
+      throw new ConflictException(`Household setting '${key}' already exists`);
     }
 
     let valueEncrypted: string | undefined;
@@ -228,7 +228,7 @@ export class SettingsStoreService {
       data: { householdId, key, valueEncrypted, valuePlain: valuePlainStored, isSecret: secret },
     });
 
-    this.logger.log(`Household-Setting '${key}' fuer Household ${householdId} angelegt (hasValue: ${valuePlain !== undefined})`);
+    this.logger.log(`Household setting '${key}' created for household ${householdId} (hasValue: ${valuePlain !== undefined})`);
 
     return {
       id: setting.id,
@@ -251,7 +251,7 @@ export class SettingsStoreService {
       where: { householdId_key: { householdId, key } },
     });
     if (!existing) {
-      throw new NotFoundException(`Household-Setting '${key}' nicht gefunden`);
+      throw new NotFoundException(`Household setting '${key}' not found`);
     }
 
     const secret = isSecret ?? existing.isSecret;
@@ -276,7 +276,7 @@ export class SettingsStoreService {
       data: { valueEncrypted, valuePlain: valuePlainStored, isSecret: secret },
     });
 
-    this.logger.log(`Household-Setting '${key}' fuer Household ${householdId} aktualisiert`);
+    this.logger.log(`Household setting '${key}' updated for household ${householdId}`);
 
     return {
       id: setting.id,
@@ -294,17 +294,17 @@ export class SettingsStoreService {
       where: { householdId_key: { householdId, key } },
     });
     if (!existing) {
-      throw new NotFoundException(`Household-Setting '${key}' nicht gefunden`);
+      throw new NotFoundException(`Household setting '${key}' not found`);
     }
 
     await this.db.householdIntegrationSetting.delete({
       where: { householdId_key: { householdId, key } },
     });
-    this.logger.log(`Household-Setting '${key}' fuer Household ${householdId} geloescht`);
+    this.logger.log(`Household setting '${key}' deleted for household ${householdId}`);
     return { success: true };
   }
 
-  // --- Intern: Entschluesselten Wert fuer Backend-Zwecke lesen ---
+  // --- Internal: read decrypted value for backend purposes ---
 
   async getDecryptedGlobalValue(key: string): Promise<string | null> {
     const setting = await this.db.globalIntegrationSetting.findUnique({ where: { key } });

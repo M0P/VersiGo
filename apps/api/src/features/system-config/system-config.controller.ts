@@ -19,33 +19,33 @@ import {
 } from './dto/system-config.dto';
 
 /**
- * Admin-UI-Endpunkte fuer die zentrale Systemkonfiguration (AP-17).
+ * Admin-UI endpoints for the central system configuration (AP-17).
  *
- * Berechtigungsgrenze (unabhaengig von sichtbaren Navigationspunkten):
- * NUR globale ADMINS duerfen Systemeinstellungen lesen oder aendern.
- * `USER`/`READ_ONLY` erhalten ueber direkte Anfragen keinerlei Werte,
- * Secrets, Metadaten oder Aenderungsmoeglichkeiten (RolesGuard global).
+ * Permission boundary (independent of visible navigation entries):
+ * only global ADMINS may read or change system settings. `USER`/
+ * `READ_ONLY` receive no values via direct requests, no secrets,
+ * metadata or change capabilities (global RolesGuard).
  *
- * Route-Prefix: /admin/system-config
+ * Route prefix: /admin/system-config
  */
 @Controller('admin/system-config')
 @Roles(GlobalRole.ADMIN)
 export class SystemConfigController {
   constructor(private readonly systemConfig: SystemConfigService) {}
 
-  /** Vollstaendige Katalogansicht mit effektiven Werten, Quellen und Fehlern. */
+  /** Complete catalog view with effective values, sources and errors. */
   @Get()
   async list(): Promise<SystemConfigEntryDto[]> {
     return this.systemConfig.list();
   }
 
-  /** Einzelner Schluessel. */
+  /** Single key. */
   @Get(':key')
   async get(@Param('key') key: string): Promise<SystemConfigEntryDto> {
     return this.systemConfig.get(key);
   }
 
-  /** Setzt/aendert einen UI-Wert (atomar validiert, Secrets verschluesselt). */
+  /** Sets/changes a UI value (atomically validated, secrets encrypted). */
   @Put(':key')
   async update(
     @CurrentUser() user: AuthenticatedUser,
@@ -55,7 +55,7 @@ export class SystemConfigController {
     return this.systemConfig.update(key, dto.value, user);
   }
 
-  /** Setzt den UI-Wert zurueck (effektiver Wert faellt auf .env/Default). */
+  /** Resets the UI value (effective value falls back to .env/default). */
   @Delete(':key')
   async reset(
     @CurrentUser() user: AuthenticatedUser,
@@ -64,7 +64,7 @@ export class SystemConfigController {
     return this.systemConfig.reset(key, user);
   }
 
-  /** Sichere Connectivity-Pruefung (nur fuer als pruefbar markierte Schluessel). */
+  /** Safe connectivity check (only for keys marked as testable). */
   @Post(':key/test')
   async test(
     @CurrentUser() user: AuthenticatedUser,

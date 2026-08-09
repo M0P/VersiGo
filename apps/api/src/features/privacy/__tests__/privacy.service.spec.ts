@@ -76,7 +76,7 @@ describe('PrivacyService', () => {
   });
 
   describe('exportPersonalData', () => {
-    it('liefert die eigenen Daten ohne Secrets (kein Passwort-Hash, keine storageRefs, keine Portal-Zugangsdaten)', async () => {
+    it('returns the own data without secrets (no password hash, no storageRefs, no portal credentials)', async () => {
       const db = createMockDb();
       db.user.findUnique.mockResolvedValue({
         id: 'user-1',
@@ -89,7 +89,7 @@ describe('PrivacyService', () => {
         oidcIssuer: null,
         oidcSubject: null,
         createdAt: new Date('2026-01-01T00:00:00Z'),
-        // Sensible Werte duerfen NICHT im Export auftauchen:
+        // Sensitive values must NOT appear in the export:
         passwordHash: 'supersecret-hash',
         userPreferences: [
           { key: 'ui.theme', value: 'dark', updatedAt: new Date('2026-01-02T00:00:00Z') },
@@ -123,7 +123,7 @@ describe('PrivacyService', () => {
               category: null,
               documentDate: null,
               uploadedAt: new Date('2026-01-03T00:00:00Z'),
-              // darf nicht exportiert werden:
+              // must not be exported:
               storageRef: '/tmp/versigo-test-storage/p1/doc1/doc1',
             },
           ],
@@ -133,7 +133,7 @@ describe('PrivacyService', () => {
               mailboxCapability: true,
               lastSyncAt: null,
               syncStatus: 'NOT_SYNCED',
-              // Zugangsdaten/URLs duerfen nicht exportiert werden:
+              // credentials/URLs must not be exported:
               portalUrl: 'https://portal.example.com',
               usernameHint: 'alice',
             },
@@ -157,7 +157,7 @@ describe('PrivacyService', () => {
       expect(result.auditEvents[0].action).toBe('POLICY_CREATED');
     });
 
-    it('wirft NotFoundException bei unbekanntem Benutzer', async () => {
+    it('throws NotFoundException for an unknown user', async () => {
       const db = createMockDb();
       db.user.findUnique.mockResolvedValue(null);
       const service = createService(db);
@@ -167,7 +167,7 @@ describe('PrivacyService', () => {
   });
 
   describe('deleteAccount', () => {
-    it('blockiert den letzten aktiven Administrator (ConflictException)', async () => {
+    it('blocks the last active administrator (ConflictException)', async () => {
       const db = createMockDb({
         tx: {
           user: { count: vi.fn().mockResolvedValue(1), delete: vi.fn() },
@@ -180,7 +180,7 @@ describe('PrivacyService', () => {
       expect(db.tx.auditEvent.create).not.toHaveBeenCalled();
     });
 
-    it('erlaubt die Loeschung bei mehreren aktiven Administratoren', async () => {
+    it('allows deletion when multiple active administrators exist', async () => {
       const db = createMockDb({
         tx: {
           user: { count: vi.fn().mockResolvedValue(2), delete: vi.fn().mockResolvedValue({}) },
@@ -192,7 +192,7 @@ describe('PrivacyService', () => {
       expect(db.tx.user.delete).toHaveBeenCalledWith({ where: { id: 'user-1' } });
     });
 
-    it('schreibt den Audit-Trail VOR der Loeschung und loescht Policen/Mitgliedschaften', async () => {
+    it('writes the audit trail BEFORE deletion and deletes policies/memberships', async () => {
       const db = createMockDb({
         tx: {
           user: { count: vi.fn().mockResolvedValue(2), delete: vi.fn().mockResolvedValue({}) },
@@ -220,7 +220,7 @@ describe('PrivacyService', () => {
       expect(createCalls[0][0].data.action).toBe('PRIVACY_ACCOUNT_DELETED');
       expect(createCalls[0][0].data.actorUserId).toBe('user-1');
 
-      // Reihenfolge: Audit zuerst, dann Policen, dann Mitgliedschaften/User
+      // Order: audit first, then policies, then memberships/user
       const auditOrder = db.tx.auditEvent.create.mock.invocationCallOrder[0];
       const policyOrder = db.tx.insurancePolicy.deleteMany.mock.invocationCallOrder[0];
       const userOrder = db.tx.user.delete.mock.invocationCallOrder[0];
@@ -229,7 +229,7 @@ describe('PrivacyService', () => {
       expect(db.tx.household.delete).toHaveBeenCalledWith({ where: { id: 'h1' } });
     });
 
-    it('behaelt einen Household mit verbleibenden Mitgliedern oder Policen', async () => {
+    it('keeps a household with remaining members or policies', async () => {
       const db = createMockDb({
         tx: {
           user: { count: vi.fn().mockResolvedValue(2), delete: vi.fn().mockResolvedValue({}) },
@@ -255,7 +255,7 @@ describe('PrivacyService', () => {
       expect(db.tx.household.delete).not.toHaveBeenCalled();
     });
 
-    it('entfernt INTERNAL-Dateien NACH dem Commit, aber nur innerhalb des Storage-Roots', async () => {
+    it('removes INTERNAL files AFTER the commit, but only within the storage root', async () => {
       const inside = `${STORAGE_ROOT}/p1/doc1/doc1`;
       const outside = '/etc/shadow';
       const db = createMockDb({
@@ -287,12 +287,12 @@ describe('PrivacyService', () => {
       const user: AuthenticatedUser = { ...adminUser, role: GlobalRole.USER, id: 'user-1' };
       await service.deleteAccount(user);
 
-      // Exakt die Datei im Storage-Root wird geloescht – nichts anderes.
+      // Exactly the file in the storage root is deleted – nothing else.
       expect(unlinkSpy).toHaveBeenCalledTimes(1);
       expect(unlinkSpy).toHaveBeenCalledWith(inside);
     });
 
-    it('toleriert ENOENT beim Datei-Loeschen (kein Abbruch)', async () => {
+    it('tolerates ENOENT when deleting files (no abort)', async () => {
       unlinkSpy.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }));
       const db = createMockDb({
         tx: {

@@ -4,7 +4,7 @@ import * as net from 'net';
 import { WorkerLivenessService } from '../worker-liveness.service';
 import { AppConfigService } from '../../config';
 
-/** Ermittelt einen freien TCP-Port fuer den Test (verhindert Kollisionen). */
+/** Finds a free TCP port for the test (prevents collisions). */
 async function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -49,7 +49,7 @@ describe('WorkerLivenessService', () => {
     vi.restoreAllMocks();
   });
 
-  it('antwortet auf GET /health mit status ok und keinen sensiblen Daten', async () => {
+  it('responds to GET /health with status ok and no sensitive data', async () => {
     const port = await getFreePort();
     const service = new WorkerLivenessService(buildConfig(port));
     service.start();
@@ -84,7 +84,7 @@ describe('WorkerLivenessService', () => {
     await service.stop();
   });
 
-  it('start() ist idempotent (kein zweiter Server)', async () => {
+  it('start() is idempotent (no second server)', async () => {
     const port = await getFreePort();
     const service = new WorkerLivenessService(buildConfig(port));
     service.start();

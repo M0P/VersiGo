@@ -33,16 +33,16 @@ const userSelect = {
 } satisfies Prisma.UserSelect;
 
 /**
- * Admin-Verwaltung lokaler Konten (ADRs 005-007):
- * - Freischaltung (approve) und Ablehnung (reject) von Neuregistrierungen
- * - Sperren (disable) und Entsperren (enable) von Konten
- * - Setzen der globalen Rolle (GlobalRole)
- * - Binden/Entbinden einer OIDC-Identitaet an ein lokales Konto
+ * Admin management of local accounts (ADRs 005-007):
+ * - Approval (approve) and rejection (reject) of new registrations
+ * - Disabling (disable) and enabling (enable) of accounts
+ * - Setting the global role (GlobalRole)
+ * - Binding/unbinding an OIDC identity to a local account
  *
- * Schutzregeln:
- * - Letzter-Admin-Schutz: Der letzte aktive ADMIN kann weder gesperrt noch
- *   herabgestuft werden (serialisierbare Transaktion).
- * - Jede Aenderung wird im Audit-Event-Log protokolliert.
+ * Protection rules:
+ * - Last-admin protection: the last active ADMIN can neither be disabled
+ *   nor demoted (serializable transaction).
+ * - Every change is logged in the audit event log.
  */
 @Injectable()
 export class UserAdminService {
@@ -84,20 +84,20 @@ export class UserAdminService {
   }
 
   /**
-   * Schaltet ein Konto mit Status PENDING_APPROVAL frei (ACTIVE).
+   * Activates an account with status PENDING_APPROVAL (ACTIVE).
    *
-   * AP-20: Der freigeschaltete User wird ausserdem in das Beta-Referenz-
-   * Household "default" aufgenommen (falls dieses existiert), damit die
-   * household-gescopten UI-Funktionen fuer das Konto tatsaechlich nutzbar
-   * sind. In reinen OIDC-Betriebsmodi ohne Bootstrap kann das Household
-   * fehlen – dann wird die Mitgliedschaft uebersprungen.
+   * AP-20: the approved user is also added to the beta reference
+   * Household "default" (if it exists), so the household-scoped UI
+   * functions are actually usable for the account. In pure OIDC operation
+   * modes without bootstrap the household may be missing – then the
+   * membership is skipped.
    */
   async approve(admin: AuthenticatedUser, userId: string): Promise<void> {
     await this.db.$transaction(async (tx) => {
       const user = await tx.user.findUnique({ where: { id: userId }, select: { status: true } });
-      if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+      if (!user) throw new NotFoundException('User not found');
       if (user.status !== UserStatus.PENDING_APPROVAL) {
-        throw new ConflictException('Nur freizuschaltende Konten (PENDING_APPROVAL) koennen freigeschaltet werden');
+        throw new ConflictException('Only accounts pending approval (PENDING_APPROVAL) can be approved');
       }
 
       await tx.user.update({ where: { id: userId }, data: { status: UserStatus.ACTIVE } });
@@ -124,14 +124,14 @@ export class UserAdminService {
   }
 
   /**
-   * Lehnt ein Konto mit Status PENDING_APPROVAL ab (DISABLED).
+   * Rejects an account with status PENDING_APPROVAL (DISABLED).
    */
   async reject(admin: AuthenticatedUser, userId: string): Promise<void> {
     await this.db.$transaction(async (tx) => {
       const user = await tx.user.findUnique({ where: { id: userId }, select: { status: true } });
-      if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+      if (!user) throw new NotFoundException('User not found');
       if (user.status !== UserStatus.PENDING_APPROVAL) {
-        throw new ConflictException('Nur freizuschaltende Konten (PENDING_APPROVAL) koennen abgelehnt werden');
+        throw new ConflictException('Only accounts pending approval (PENDING_APPROVAL) can be rejected');
       }
 
       await tx.user.update({ where: { id: userId }, data: { status: UserStatus.DISABLED } });
@@ -140,11 +140,11 @@ export class UserAdminService {
   }
 
 /**
- * Fuehrt einen Callback in einer serialisierbaren Transaktion aus und
- * uebersetzt Prisma-Fehler P2034 (Serialisierungskonflikt / Deadlock) in
- * eine ConflictException. Da die Letzter-Admin-Pruefung race-sensitiv ist,
- * wird der Vorgang bei P2034 begrenzt wiederholt, bevor ein 409 gemeldet
- * wird (statt eines unbehandelten 500).
+ * Runs a callback in a serializable transaction and translates Prisma
+ * error P2034 (serialization conflict / deadlock) into a
+ * ConflictException. Since the last-admin check is race-sensitive, the
+ * operation is retried a limited number of times on P2034 before a 409
+ * is reported (instead of an unhandled 500).
  */
 private async runSerializable<T>(
   fn: (tx: Prisma.TransactionClient) => Promise<T>,
@@ -159,13 +159,13 @@ private async runSerializable<T>(
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === 'P2034' && attempt < MAX_ATTEMPTS) {
-        // Serialisierungs-Konflikt: erneut versuchen
+        // Serialization conflict: retry
         lastError = error;
         continue;
       }
       if (code === 'P2034') {
         throw new ConflictException(
-          'Gleichzeitige Aenderung erkannt. Bitte erneut versuchen.',
+          'Concurrent change detected. Please try again.',
         );
       }
       throw error;
@@ -175,12 +175,12 @@ private async runSerializable<T>(
 }
 
 /**
- * Sperrt ein aktives Konto (DISABLED). Der letzte aktive ADMIN kann nicht
- * gesperrt werden (Letzter-Admin-Schutz).
+ * Disables an active account (DISABLED). The last active ADMIN cannot
+ * be disabled (last-admin protection).
  */
 async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
   if (admin.id === userId) {
-    throw new ConflictException('Sie koennen sich nicht selbst sperren');
+    throw new ConflictException('You cannot disable yourself');
   }
 
   await this.runSerializable(async (tx) => {
@@ -188,9 +188,9 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
       where: { id: userId },
       select: { status: true, role: true },
     });
-    if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+    if (!user) throw new NotFoundException('User not found');
     if (user.status !== UserStatus.ACTIVE) {
-      throw new ConflictException('Nur aktive Konten koennen gesperrt werden');
+      throw new ConflictException('Only active accounts can be disabled');
     }
 
     await this.assertNotLastActiveAdmin(tx, user.role);
@@ -200,14 +200,14 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
 }
 
   /**
-   * Entsperrt ein gesperrtes Konto (ACTIVE).
+   * Enables a disabled account (ACTIVE).
    */
   async enable(admin: AuthenticatedUser, userId: string): Promise<void> {
     await this.db.$transaction(async (tx) => {
       const user = await tx.user.findUnique({ where: { id: userId }, select: { status: true } });
-      if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+      if (!user) throw new NotFoundException('User not found');
       if (user.status !== UserStatus.DISABLED) {
-        throw new ConflictException('Nur gesperrte Konten koennen entsperrt werden');
+        throw new ConflictException('Only disabled accounts can be enabled');
       }
 
       await tx.user.update({ where: { id: userId }, data: { status: UserStatus.ACTIVE } });
@@ -216,8 +216,8 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
   }
 
   /**
-   * Setzt die globale Rolle eines Users. Beim Herabstufen des letzten
-   * aktiven ADMIN gilt der Letzter-Admin-Schutz.
+   * Sets the global role of a user. When demoting the last active ADMIN
+   * the last-admin protection applies.
    */
   async setRole(admin: AuthenticatedUser, userId: string, role: GlobalRole): Promise<void> {
     await this.runSerializable(async (tx) => {
@@ -225,9 +225,9 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
         where: { id: userId },
         select: { status: true, role: true },
       });
-      if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+      if (!user) throw new NotFoundException('User not found');
       if (user.role === role) {
-        throw new ConflictException('Rolle ist bereits gesetzt');
+        throw new ConflictException('Role is already set');
       }
 
       const isDowngradeFromAdmin = user.role === GlobalRole.ADMIN && role !== GlobalRole.ADMIN;
@@ -241,9 +241,9 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
   }
 
   /**
-   * Bindet eine OIDC-Identitaet (issuer, subject) an ein lokales Konto.
-   * Die UNIQUE-Constraint (oidcIssuer, oidcSubject) verhindert, dass
-   * dieselbe Identitaet an zwei Konten gebunden wird.
+   * Binds an OIDC identity (issuer, subject) to a local account.
+   * The UNIQUE constraint (oidcIssuer, oidcSubject) prevents the same
+   * identity from being bound to two accounts.
    */
   async bindOidcIdentity(
     admin: AuthenticatedUser,
@@ -254,11 +254,11 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
     try {
       await this.db.$transaction(async (tx) => {
         const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true } });
-        if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+        if (!user) throw new NotFoundException('User not found');
 
-        // Trailing-Slash-Varianz normalisieren, damit die gespeicherte
-        // Bindung unabhaengig von einem abschliessenden Slash beim Login
-        // (claims.iss, ebenfalls normalisiert) wiederfindbar ist (ADR-007).
+        // Normalize trailing-slash variance so the stored binding can be
+        // found again regardless of a trailing slash at login (claims.iss,
+        // also normalized) (ADR-007).
         await tx.user.update({
           where: { id: userId },
           data: { oidcIssuer: normalizeIssuerUrl(oidcIssuer), oidcSubject },
@@ -266,16 +266,17 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
         await this.audit(tx, admin, userId, 'OIDC_BOUND', { oidcIssuer });
       });
     } catch (error) {
-      // P2002: (oidcIssuer, oidcSubject) ist bereits an ein anderes Konto gebunden
+      // P2002: (oidcIssuer, oidcSubject) is already bound to another account
       if ((error as { code?: string }).code === 'P2002') {
-        throw new ConflictException('Diese OIDC-Identitaet ist bereits an ein anderes Konto gebunden');
+        throw new ConflictException('This OIDC identity is already bound to another account');
       }
       throw error;
     }
   }
 
   /**
-   * Loest die OIDC-Bindung eines Kontos (nur die Bindung, nie das Konto).
+   * Unbinds the OIDC identity of an account (only the binding, never the
+   * account).
    */
   async unbindOidcIdentity(admin: AuthenticatedUser, userId: string): Promise<void> {
     await this.db.$transaction(async (tx) => {
@@ -283,9 +284,9 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
         where: { id: userId },
         select: { oidcIssuer: true },
       });
-      if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+      if (!user) throw new NotFoundException('User not found');
       if (!user.oidcIssuer) {
-        throw new ConflictException('Konto hat keine OIDC-Bindung');
+        throw new ConflictException('Account has no OIDC binding');
       }
 
       await tx.user.update({ where: { id: userId }, data: { oidcIssuer: null, oidcSubject: null } });
@@ -294,8 +295,8 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
   }
 
   /**
-   * Letzter-Admin-Schutz: Wirft ConflictException, wenn der Ziel-User der
-   * letzte verbleibende aktive ADMIN ist (nur relevant bei aktiven ADMINs).
+   * Last-admin protection: throws a ConflictException if the target user
+   * is the last remaining active ADMIN (only relevant for active ADMINs).
    */
   private async assertNotLastActiveAdmin(
     tx: Prisma.TransactionClient,
@@ -307,7 +308,7 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
       where: { role: GlobalRole.ADMIN, status: UserStatus.ACTIVE },
     });
     if (activeAdmins <= 1) {
-      throw new ConflictException('Der letzte aktive Administrator kann nicht geaendert werden');
+      throw new ConflictException('The last active administrator cannot be changed');
     }
   }
 
@@ -329,7 +330,7 @@ async disable(admin: AuthenticatedUser, userId: string): Promise<void> {
         },
       });
     } catch (error) {
-      this.logger.warn(`Audit-Eintrag fehlgeschlagen: ${(error as Error).message}`);
+      this.logger.warn(`Audit entry failed: ${(error as Error).message}`);
     }
   }
 }

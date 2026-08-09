@@ -15,13 +15,13 @@ import { InsurancePolicyType, PolicyStatus, PaymentFrequency, PolicySource, Sync
 import { Transform, Type } from 'class-transformer';
 
 /**
- * BugFix-05 (Befund 2): Portal-URL-Normalisierung als Defense-in-Depth.
- * Fehlt das Schema (`www.portal.de`), wird `https://` vorangestellt; `http://`
- * bleibt unveraendert. Die eigentliche Sicherheitsvalidierung (nur http/https,
- * explizites 2048-Zeichen-Laengenlimit) uebernimmt weiterhin `@IsUrl` bzw.
- * `@MaxLength` direkt dahinter – ein `javascript:`/`data:`-Eingang kann hier
- * nie entstehen, weil nur dann ein Schema ergaenzt wird, wenn KEIN Schema
- * vorhanden ist.
+ * BugFix-05 (finding 2): portal URL normalization as defense in depth.
+ * If the scheme is missing (`www.portal.de`), `https://` is prepended; `http://`
+ * remains unchanged. The actual security validation (only http/https,
+ * explicit 2048-character length limit) is still done by `@IsUrl` or
+ * `@MaxLength` right behind it – a `javascript:`/`data:` input can never
+ * arise here because a scheme is only prepended when NO scheme is
+ * present.
  */
 function normalizePortalUrl(value: unknown): unknown {
   if (typeof value !== 'string') return value;
@@ -31,7 +31,7 @@ function normalizePortalUrl(value: unknown): unknown {
   return hasSchema ? trimmed : `https://${trimmed}`;
 }
 
-/** Transform-Decorator-Fabrik fuer die beiden Portal-URL-Felder. */
+/** Transform decorator factory for the two portal URL fields. */
 function PortalUrlTransform(): PropertyDecorator {
   return Transform(({ value }) => normalizePortalUrl(value));
 }
@@ -44,8 +44,8 @@ export class CreatePolicyDto {
   insurerName!: string;
 
   @IsOptional()
-  // BugFix-07 (Befund 1): Gleiche Normalisierung wie bei Portal-Links –
-  // fehlt das Schema, wird https:// vorangestellt; nur http(s) ist erlaubt.
+  // BugFix-07 (finding 1): same normalization as for portal links –
+  // if the scheme is missing, https:// is prepended; only http(s) is allowed.
   @PortalUrlTransform()
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(2048)
@@ -114,8 +114,8 @@ export class UpdatePolicyDto {
   insurerName?: string;
 
   @IsOptional()
-  // BugFix-07 (Befund 1): Gleiche Normalisierung wie bei Portal-Links –
-  // fehlt das Schema, wird https:// vorangestellt; nur http(s) ist erlaubt.
+  // BugFix-07 (finding 1): same normalization as for portal links –
+  // if the scheme is missing, https:// is prepended; only http(s) is allowed.
   @PortalUrlTransform()
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(2048)
@@ -203,20 +203,20 @@ export class UpdateCoveredPersonDto {
 }
 
 /**
- * Optionale Portal-Zugangsdaten (AP-18).
+ * Optional portal credentials (AP-18).
  *
- * Werden NIE im Klartext gespeichert oder zurueckgegeben: Der Service
- * verschluesselt sie AES-256-GCM in `PortalAccountLink.credentialsEncrypted`;
- * Antworten enthalten ausschliesslich `credentialsSet: true/false`.
+ * Are NEVER stored or returned in plaintext: the service encrypts them
+ * with AES-256-GCM into `PortalAccountLink.credentialsEncrypted`;
+ * responses contain only `credentialsSet: true/false`.
  *
- * Die "mindestens ein Feld" -Regel wird bewusst im Service durchgesetzt
- * (`encryptCredentials`, Single Source of Truth), weil class-validator
- * (0.14.x) keine typisierten Klassenebenen-Constraints bietet. Die DTO-Schicht
- * validiert hier nur Typ und Laengen der einzelnen Felder.
+ * The "at least one field" rule is deliberately enforced in the service
+ * (`encryptCredentials`, Single Source of Truth), because class-validator
+ * (0.14.x) offers no typed class-level constraints. The DTO layer only
+ * validates type and lengths of the individual fields here.
  *
- * Hinweis (AP-18): Bei einem Update gilt Ersetz-Semantik – uebermittelte
- * Felder ersetzen die gespeicherten Zugangsdaten vollstaendig; ein einzelnes
- * Feld ueberschreibt damit beide gespeicherten Werte.
+ * Note (AP-18): updates use replace semantics – submitted fields replace
+ * the stored credentials completely; a single field therefore overwrites
+ * both stored values.
  */
 export class PortalCredentialsDto {
   @IsOptional()
@@ -235,11 +235,11 @@ export class CreatePortalAccountLinkDto {
   providerKey!: string;
 
   @IsOptional()
-  // BugFix-05 (Befund 2): Schema-Ergaenzung (https://) + Sicherheitsvalidierung.
+  // BugFix-05 (finding 2): scheme completion (https://) + security validation.
   @PortalUrlTransform()
-  // AP-18: Nur http(s)-URLs – verhindert javascript:/data: im Deeplink-Target.
+  // AP-18: only http(s) URLs – prevents javascript:/data: in the deeplink target.
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
-  // Maximales URL-Laengenlimit (Konsistenz mit dem 2048er-Default von @IsUrl).
+  // Maximum URL length limit (consistent with the 2048 default of @IsUrl).
   @MaxLength(2048)
   portalUrl?: string;
 
@@ -278,11 +278,11 @@ export class UpdatePortalAccountLinkDto {
   providerKey?: string;
 
   @IsOptional()
-  // BugFix-05 (Befund 2): Schema-Ergaenzung (https://) + Sicherheitsvalidierung.
+  // BugFix-05 (finding 2): scheme completion (https://) + security validation.
   @PortalUrlTransform()
-  // AP-18: Nur http(s)-URLs – verhindert javascript:/data: im Deeplink-Target.
+  // AP-18: only http(s) URLs – prevents javascript:/data: in the deeplink target.
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
-  // Maximales URL-Laengenlimit (Konsistenz mit dem 2048er-Default von @IsUrl).
+  // Maximum URL length limit (consistent with the 2048 default of @IsUrl).
   @MaxLength(2048)
   portalUrl?: string;
 
@@ -309,8 +309,8 @@ export class UpdatePortalAccountLinkDto {
   syncStatus?: SyncStatus;
 
   /**
-   * Zugangsdaten setzen (Objekt) oder loeschen (`null`).
-   * Nicht angegeben => unveraendert lassen.
+   * Sets credentials (object) or deletes them (`null`).
+   * Not provided => leave unchanged.
    */
   @IsOptional()
   @IsObject()

@@ -6,11 +6,11 @@ import { OpenAiCompatAdapter } from './openai-compat.adapter';
 import { NoOpAIAdapter } from './noop-ai.adapter';
 
 /**
- * Registry, die den passenden AI-Adapter basierend auf der zentralen
- * Settings-Aufloesung auswaehlt (AP-17). AI_ENABLED und AI_PROVIDER
- * werden pro Aufruf ueber SettingsResolverService aufgeloest, sodass
- * Admin-UI-Aenderungen sofort wirken. Wenn AI deaktiviert ist, wird
- * der NoOp-Adapter verwendet.
+ * Registry that selects the matching AI adapter based on the central
+ * settings resolution (AP-17). AI_ENABLED and AI_PROVIDER
+ * are resolved per call via SettingsResolverService, so admin-UI
+ * changes take effect immediately. When AI is disabled, the NoOp
+ * adapter is used.
  */
 @Injectable()
 export class AiProviderRegistry {

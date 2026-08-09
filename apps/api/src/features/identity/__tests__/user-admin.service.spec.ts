@@ -43,9 +43,9 @@ describe('UserAdminService', () => {
   beforeEach(() => {
     mockDb = createMockDb();
     service = new UserAdminService(mockDb as never);
-    // $transaction unterstuetzt beide Formen:
-    // - Array-Form: $transaction([p1, p2]) => Promise.all (wird von list() genutzt)
-    // - Callback-Form: $transaction(cb[, options]) => cb(tx); tx === mockDb
+    // $transaction supports both forms:
+    // - Array form: $transaction([p1, p2]) => Promise.all (used by list())
+    // - Callback form: $transaction(cb[, options]) => cb(tx); tx === mockDb
     mockDb.$transaction.mockImplementation(
       (input: unknown, _options?: unknown) => {
         if (Array.isArray(input)) {
@@ -57,7 +57,7 @@ describe('UserAdminService', () => {
   });
 
   describe('list', () => {
-    it('liefert Users, Credential-Flag und Gesamtzahl', async () => {
+    it('returns users, the credential flag and the total count', async () => {
       mockDb.user.findMany.mockResolvedValue([
         {
           id: 'user-1',
@@ -91,7 +91,7 @@ describe('UserAdminService', () => {
       );
     });
 
-    it('nutzt keinen Status-Filter, wenn keiner angegeben ist', async () => {
+    it('does not use a status filter when none is given', async () => {
       mockDb.user.findMany.mockResolvedValue([]);
       mockDb.user.count.mockResolvedValue(0);
 
@@ -104,7 +104,7 @@ describe('UserAdminService', () => {
   });
 
   describe('approve', () => {
-    it('schaltet PENDING_APPROVAL-Konten frei, nimmt sie ins default-Household auf und auditiert', async () => {
+    it('approves PENDING_APPROVAL accounts, adds them to the default household and audits', async () => {
       mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.PENDING_APPROVAL });
       mockDb.household.findUnique.mockResolvedValue({ id: 'default' });
 
@@ -114,7 +114,7 @@ describe('UserAdminService', () => {
         where: { id: 'user-1' },
         data: { status: UserStatus.ACTIVE },
       });
-      // AP-20: Mitgliedschaft im Beta-Referenz-Household ergaenzen
+      // AP-20: add the membership in the beta reference household
       expect(mockDb.householdMembership.upsert).toHaveBeenCalledWith({
         where: {
           householdId_userId: { householdId: 'default', userId: 'user-1' },
@@ -131,7 +131,7 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('ueberspringt die Household-Mitgliedschaft, wenn das default-Household fehlt', async () => {
+    it('skips the household membership when the default household is missing', async () => {
       mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.PENDING_APPROVAL });
       mockDb.household.findUnique.mockResolvedValue(null);
 
@@ -143,13 +143,13 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('wirft NotFoundException bei unbekanntem User', async () => {
+    it('throws NotFoundException for an unknown user', async () => {
       mockDb.user.findUnique.mockResolvedValue(null);
 
       await expect(service.approve(adminUser, 'user-1')).rejects.toThrow(NotFoundException);
     });
 
-    it('wirft ConflictException, wenn das Konto nicht PENDING_APPROVAL ist', async () => {
+    it('throws ConflictException when the account is not PENDING_APPROVAL', async () => {
       mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.ACTIVE });
 
       await expect(service.approve(adminUser, 'user-1')).rejects.toThrow(ConflictException);
@@ -157,7 +157,7 @@ describe('UserAdminService', () => {
   });
 
   describe('reject', () => {
-    it('lehnt PENDING_APPROVAL-Konten ab (DISABLED) und auditiert', async () => {
+    it('rejects PENDING_APPROVAL accounts (DISABLED) and audits', async () => {
       mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.PENDING_APPROVAL });
 
       await service.reject(adminUser, 'user-1');
@@ -171,7 +171,7 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('wirft ConflictException, wenn das Konto nicht PENDING_APPROVAL ist', async () => {
+    it('throws ConflictException when the account is not PENDING_APPROVAL', async () => {
       mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.ACTIVE });
 
       await expect(service.reject(adminUser, 'user-1')).rejects.toThrow(ConflictException);
@@ -179,7 +179,7 @@ describe('UserAdminService', () => {
   });
 
   describe('disable', () => {
-    it('sperrt aktive Konten und auditiert', async () => {
+    it('disables active accounts and audits', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.ACTIVE,
         role: GlobalRole.USER,
@@ -204,12 +204,12 @@ describe('UserAdminService', () => {
 
     it('verhindert Selbstsperrung', async () => {
       await expect(service.disable(adminUser, 'admin-1')).rejects.toThrow(
-        'Sie koennen sich nicht selbst sperren',
+        'You cannot disable yourself',
       );
       expect(mockDb.user.findUnique).not.toHaveBeenCalled();
     });
 
-    it('wirft ConflictException, wenn das Konto nicht aktiv ist', async () => {
+    it('throws ConflictException when the account is not active', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.DISABLED,
         role: GlobalRole.USER,
@@ -218,7 +218,7 @@ describe('UserAdminService', () => {
       await expect(service.disable(adminUser, 'user-2')).rejects.toThrow(ConflictException);
     });
 
-    it('verhindert das Sperren des letzten aktiven ADMIN (Letzter-Admin-Schutz)', async () => {
+    it('prevents disabling the last active ADMIN (last-admin protection)', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.ACTIVE,
         role: GlobalRole.ADMIN,
@@ -226,18 +226,18 @@ describe('UserAdminService', () => {
       mockDb.user.count.mockResolvedValue(1);
 
       await expect(service.disable(adminUser, 'user-2')).rejects.toThrow(
-        'Der letzte aktive Administrator',
+        'The last active administrator',
       );
       expect(mockDb.user.update).not.toHaveBeenCalled();
     });
 
-    it('wiederholt P2034-Serialisierungskonflikte begrenzt und fuehrt dann aus', async () => {
+    it('retries P2034 serialization conflicts a limited number of times and then executes', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.ACTIVE,
         role: GlobalRole.USER,
       });
       mockDb.user.count.mockResolvedValue(2);
-      // Erster Transaktionsaufruf scheitert mit P2034, zweiter laeuft durch.
+      // The first transaction call fails with P2034, the second succeeds.
       const original = mockDb.$transaction.getMockImplementation();
       let calls = 0;
       mockDb.$transaction.mockImplementation(
@@ -262,7 +262,7 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('meldet dauerhafte P2034-Konflikte als ConflictException statt 500', async () => {
+    it('reports persistent P2034 conflicts as ConflictException instead of 500', async () => {
       mockDb.$transaction.mockImplementation(() => Promise.reject({ code: 'P2034' }));
 
       await expect(service.disable(adminUser, 'user-2')).rejects.toThrow(ConflictException);
@@ -270,7 +270,7 @@ describe('UserAdminService', () => {
   });
 
   describe('enable', () => {
-    it('entsperrt gesperrte Konten und auditiert', async () => {
+    it('re-enables disabled accounts and audits', async () => {
       mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.DISABLED });
 
       await service.enable(adminUser, 'user-2');
@@ -284,7 +284,7 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('wirft ConflictException, wenn das Konto nicht gesperrt ist', async () => {
+    it('throws ConflictException when the account is not disabled', async () => {
       mockDb.user.findUnique.mockResolvedValue({ status: UserStatus.ACTIVE });
 
       await expect(service.enable(adminUser, 'user-2')).rejects.toThrow(ConflictException);
@@ -292,7 +292,7 @@ describe('UserAdminService', () => {
   });
 
   describe('setRole', () => {
-    it('setzt die globale Rolle und auditiert from/to', async () => {
+    it('sets the global role and audits from/to', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.ACTIVE,
         role: GlobalRole.USER,
@@ -312,19 +312,19 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('wirft ConflictException, wenn die Rolle bereits gesetzt ist', async () => {
+    it('throws ConflictException when the role is already set', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.ACTIVE,
         role: GlobalRole.ADMIN,
       });
 
       await expect(service.setRole(adminUser, 'user-2', GlobalRole.ADMIN)).rejects.toThrow(
-        'Rolle ist bereits gesetzt',
+        'Role is already set',
       );
       expect(mockDb.user.update).not.toHaveBeenCalled();
     });
 
-    it('verhindert die Herabstufung des letzten aktiven ADMIN', async () => {
+    it('prevents demoting the last active ADMIN', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.ACTIVE,
         role: GlobalRole.ADMIN,
@@ -332,12 +332,12 @@ describe('UserAdminService', () => {
       mockDb.user.count.mockResolvedValue(1);
 
       await expect(service.setRole(adminUser, 'user-2', GlobalRole.USER)).rejects.toThrow(
-        'Der letzte aktive Administrator',
+        'The last active administrator',
       );
       expect(mockDb.user.update).not.toHaveBeenCalled();
     });
 
-    it('erlaubt die Herabstufung, solange ein weiterer aktiver ADMIN existiert', async () => {
+    it('allows the demotion as long as another active ADMIN exists', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.ACTIVE,
         role: GlobalRole.ADMIN,
@@ -352,7 +352,7 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('wiederholt P2034-Serialisierungskonflikte bei setRole begrenzt', async () => {
+    it('retries P2034 serialization conflicts in setRole a limited number of times', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         status: UserStatus.ACTIVE,
         role: GlobalRole.ADMIN,
@@ -384,7 +384,7 @@ describe('UserAdminService', () => {
   });
 
   describe('bindOidcIdentity', () => {
-    it('bindet (issuer, subject) an ein lokales Konto und auditiert', async () => {
+    it('binds (issuer, subject) to a local account and audits', async () => {
       mockDb.user.findUnique.mockResolvedValue({ id: 'user-2' });
 
       await service.bindOidcIdentity(adminUser, 'user-2', 'https://issuer.example.com', 'sub-1');
@@ -398,7 +398,7 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('wirft NotFoundException bei unbekanntem User', async () => {
+    it('throws NotFoundException for an unknown user', async () => {
       mockDb.user.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -406,7 +406,7 @@ describe('UserAdminService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('uebersetzt P2002 (bereits gebundene Identitaet) in ConflictException', async () => {
+    it('translates P2002 (already bound identity) into ConflictException', async () => {
       mockDb.user.findUnique.mockResolvedValue({ id: 'user-2' });
       const conflict = new Error('Unique constraint failed on the fields: (`oidcIssuer`,`oidcSubject`)');
       (conflict as { code?: string }).code = 'P2002';
@@ -414,12 +414,12 @@ describe('UserAdminService', () => {
 
       await expect(
         service.bindOidcIdentity(adminUser, 'user-2', 'https://issuer.example.com', 'sub-1'),
-      ).rejects.toThrow('bereits an ein anderes Konto gebunden');
+      ).rejects.toThrow('already bound to another account');
     });
   });
 
   describe('unbindOidcIdentity', () => {
-    it('loest die OIDC-Bindung und auditiert', async () => {
+    it('removes the OIDC binding and audits', async () => {
       mockDb.user.findUnique.mockResolvedValue({ oidcIssuer: 'https://issuer.example.com' });
 
       await service.unbindOidcIdentity(adminUser, 'user-2');
@@ -433,11 +433,11 @@ describe('UserAdminService', () => {
       });
     });
 
-    it('wirft ConflictException bei Konto ohne Bindung', async () => {
+    it('throws ConflictException for an account without a binding', async () => {
       mockDb.user.findUnique.mockResolvedValue({ oidcIssuer: null });
 
       await expect(service.unbindOidcIdentity(adminUser, 'user-2')).rejects.toThrow(
-        'Konto hat keine OIDC-Bindung',
+        'Account has no OIDC binding',
       );
       expect(mockDb.user.update).not.toHaveBeenCalled();
     });

@@ -8,13 +8,13 @@ import { PrivacyService, PrivacyExport } from './privacy.service';
 /**
  * Privacy/GDPR-API (AP-19).
  *
- * Berechtigungsgrenze: NUR USER und ADMIN (Rollenhierarchie) – READ_ONLY
- * erhaelt 403 (konsistent zu Profil/Praeferenzen, ADR-007). Die Identitaet
- * kommt ausschliesslich aus der Session (`@CurrentUser`), nie aus
- * Pfad-/Query-Parametern -> kein IDOR.
+ * Permission boundary: only USER and ADMIN (role hierarchy) - READ_ONLY
+ * gets 403 (consistent with profile/preferences, ADR-007). The identity
+ * comes exclusively from the session (`@CurrentUser`), never from
+ * path/query parameters -> no IDOR.
  *
- * - `GET /privacy/export`  – Export der eigenen personenbezogenen Daten
- * - `DELETE /privacy/account` – Loeschung des eigenen Kontos inkl. Daten
+ * - `GET /privacy/export` - export of one's own personal data
+ * - `DELETE /privacy/account` – deletion of one's own account incl. data
  */
 @Controller('privacy')
 @Roles(GlobalRole.USER)

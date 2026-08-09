@@ -5,45 +5,45 @@ import { getSettingDefinition, type SettingDefinition } from './settings-catalog
 import { validateSettingValue } from './settings-validation';
 
 /**
- * Zentrale Konfigurationsaufloesung (AP-17).
+ * Central configuration resolution (AP-17).
  *
- * Deterministische Prioritaetskette fuer JEDEN katalogisierten Schluessel:
- *   1. gueltiger, aktivierter, datenbankgestuetzter UI-Wert gewinnt,
- *   2. sonst gilt der validierte `.env`-Wert als Fallback,
- *   3. sonst ausschliesslich der sichere, dokumentierte Code-Default
- *      oder die betroffene optionale Funktion degradiert.
+ * Deterministic priority chain for EVERY catalogued key:
+ *   1. a valid, enabled, database-backed UI value wins,
+ *   2. otherwise the validated `.env` value applies as fallback,
+ *   3. otherwise only the safe, documented code default applies or the
+ *      affected optional feature degrades.
  *
- * API und Worker verwenden exakt diese Aufloesung – Features lesen niemals
- * direkt `process.env` und umgehen damit keine UI-Overrides. Secrets werden
- * intern entschluesselt und nur an berechtigte Feature-Konsumenten
- * zurueckgegeben; die Admin-UI maskiert sie grundsaetzlich.
+ * API and worker use exactly this resolution — features never read
+ * `process.env` directly and therefore cannot bypass UI overrides.
+ * Secrets are decrypted internally and only returned to authorized
+ * feature consumers; the admin UI masks them by default.
  *
- * Ein ungueltiger UI-Wert aktiviert NIE einen defekten effektiven Zustand:
- * er wird uebersprungen, die zuvor wirksame Konfiguration (ENV/Default)
- * bleibt aktiv und `uiValueInvalid` macht den Fehler administrativ sichtbar.
+ * An invalid UI value never activates a broken effective state:
+ * it is skipped, the previously effective configuration (ENV/default)
+ * stays active and `uiValueInvalid` makes the error visible to admins.
  */
 
 export type SettingSource = 'UI' | 'ENV' | 'DEFAULT';
 
 export interface SettingResolution {
   key: string;
-  /** Effektiver, validierter Wert (undefined = nicht verfuegbar -> Degradation). */
+  /** Effective, validated value (undefined = unavailable -> degradation). */
   value: string | number | boolean | undefined;
-  /** Quelle des effektiven Werts. */
+  /** Source of the effective value. */
   source: SettingSource;
-  /** Menschenlesbarer Grund fuer die Admin-UI (deutsch). */
+  /** Human-readable reason for the admin UI (German). */
   reason: string;
-  /** Ein validierter UI-Wert ist aktiv. */
+  /** A validated UI value is active. */
   uiValuePresent: boolean;
-  /** UI-Wert vorhanden, aber ungueltig (wird ignoriert; ENV/Default aktiv). */
+  /** UI value present but invalid (ignored; ENV/default active). */
   uiValueInvalid: boolean;
-  /** Zeitpunkt der letzten UI-Aenderung (falls vorhanden). */
+  /** Timestamp of the last UI change (if any). */
   uiUpdatedAt: Date | null;
   /**
-   * Nur restart-Kategorie: validierter UI-Wert, der erst beim naechsten
-   * Prozessstart aktiv wird (Boot-Preload). `value`/`source` beschreiben
-   * bis dahin den tatsaechlich aktiven Wert (ENV/Default) – der
-   * Neustart-Wert wird nie fälschlich als bereits aktiv dargestellt.
+   * Restart category only: validated UI value that only becomes active at
+   * the next process start (boot preload). `value`/`source` describe the
+   * actually active value until then (ENV/default) — the restart value is
+   * never falsely presented as already active.
    */
   pendingRestartValue?: string | number | boolean;
 }
@@ -59,14 +59,14 @@ export class SettingsResolverService {
   ) {}
 
   /**
-   * Volloaufloesung eines katalogisierten Schluessels.
-   * Wirft einen Fehler fuer unbekannte (nicht katalogisierte) Schluessel –
-   * die Allowlist gilt ausnahmslos.
+   * Full resolution of a catalogued key.
+   * Throws an error for unknown (non-catalogued) keys —
+   * the allowlist applies without exception.
    */
   async resolve(key: string): Promise<SettingResolution> {
     const definition = getSettingDefinition(key);
     if (!definition) {
-      throw new Error(`Unbekannter Settings-Schluessel '${key}' – nicht im Katalog (Allowlist).`);
+      throw new Error(`Unknown settings key '${key}' – not in the catalog (allowlist).`);
     }
 
     const stored = await this.db.globalIntegrationSetting.findUnique({ where: { key } });
@@ -74,9 +74,9 @@ export class SettingsResolverService {
   }
 
   /**
-   * Gebuendelte Aufloesung mehrerer Schluessel mit EINEM Datenbank-Zugriff
-   * (vermeidet N+1 Round-Trips, z. B. fuer die Katalogansicht der Admin-UI).
-   * Wirft wie `resolve` fuer unbekannte Schluessel.
+   * Bundled resolution of multiple keys with a SINGLE database access
+   * (avoids N+1 round trips, e.g. for the admin UI catalog view).
+   * Throws like `resolve` for unknown keys.
    */
   async resolveMany(keys: string[]): Promise<Map<string, SettingResolution>> {
     const uniqueKeys = [...new Set(keys)];
@@ -89,36 +89,36 @@ export class SettingsResolverService {
     for (const key of uniqueKeys) {
       const definition = getSettingDefinition(key);
       if (!definition) {
-        throw new Error(`Unbekannter Settings-Schluessel '${key}' – nicht im Katalog (Allowlist).`);
+        throw new Error(`Unknown settings key '${key}' – not in the catalog (allowlist).`);
       }
       results.set(key, await this.resolveStored(definition, storedByKey.get(key) ?? null));
     }
     return results;
   }
 
-  /** Effektiver String-Wert (z. B. URLs, Modelle, Provider). */
+  /** Effective string value (e.g. URLs, models, providers). */
   async getEffectiveString(key: string): Promise<string | undefined> {
     const resolution = await this.resolve(key);
     return typeof resolution.value === 'string' ? resolution.value : undefined;
   }
 
-  /** Effektiver Boolean-Wert (z. B. Feature-Schalter). */
+  /** Effective boolean value (e.g. feature switches). */
   async getEffectiveBoolean(key: string): Promise<boolean | undefined> {
     const resolution = await this.resolve(key);
     return typeof resolution.value === 'boolean' ? resolution.value : undefined;
   }
 
-  /** Effektiver numerischer Wert (z. B. Timeouts, Limits). */
+  /** Effective numeric value (e.g. timeouts, limits). */
   async getEffectiveNumber(key: string): Promise<number | undefined> {
     const resolution = await this.resolve(key);
     return typeof resolution.value === 'number' ? resolution.value : undefined;
   }
 
-  // --- Intern ---
+  // --- Internal ---
 
   /**
-   * Aufloesung gegen eine bereits geladene DB-Zeile (oder null). Gemeinsame
-   * Logik von `resolve` und `resolveMany`.
+   * Resolution against an already loaded DB row (or null). Shared
+   * logic of `resolve` and `resolveMany`.
    */
   private async resolveStored(
     definition: SettingDefinition,
@@ -137,15 +137,15 @@ export class SettingsResolverService {
         const coerced = validateSettingValue(definition, rawValue);
         if (coerced.ok) {
           if (definition.category === 'restart') {
-            // Restart-Kategorie: Der DB-Wert wird erst beim naechsten
-            // Prozessstart aktiv (Boot-Preload). Bis dahin bleibt der
-            // ENV-/Default-Wert wirksam; der neue Wert wird explizit als
-            // "nach Neustart" (pendingRestartValue) geliefert und niemals
-            // als bereits aktiv dargestellt.
+            // Restart category: the DB value only becomes active at the next
+            // process start (boot preload). Until then the ENV/default value
+            // stays effective; the new value is explicitly delivered as
+            // "after restart" (pendingRestartValue) and never presented as
+            // already active.
             const active = await this.resolveEnvOrDefault(definition);
-            // m8: Ist der DB-Wert bereits aktiv (identisch zu .env/Default –
-            // z. B. weil der Preload ihn nach einem Neustart in die Umgebung
-            // geschrieben hat), gibt es nichts Pendentes.
+            // If the DB value is already active (identical to .env/default —
+            // e.g. because the preload wrote it into the environment after a
+            // restart), there is nothing pending.
             const alreadyActive =
               active.value !== undefined && String(active.value) === String(coerced.value);
             return {
@@ -169,9 +169,9 @@ export class SettingsResolverService {
             uiUpdatedAt: stored.updatedAt,
           };
         }
-        // Ungueltiger UI-Wert: ignorieren, ENV/Default aktiv lassen.
+        // Invalid UI value: ignore, keep ENV/default active.
         this.logger.warn(
-          `UI-Wert fuer '${definition.key}' ungueltig (${coerced.error}) – ENV/Default bleibt aktiv.`,
+          `UI value for '${definition.key}' invalid (${coerced.error}) – ENV/default stays active.`,
         );
         const fallback = await this.resolveEnvOrDefault(definition);
         return {
@@ -181,7 +181,7 @@ export class SettingsResolverService {
           uiUpdatedAt: stored.updatedAt,
         };
       }
-      // Stored-Zeile ohne verwertbaren Wert: wie "nicht gesetzt" behandeln.
+      // Stored row without a usable value: treat as "unset".
       const fallback = await this.resolveEnvOrDefault(definition);
       return { ...fallback, uiValuePresent: false, uiValueInvalid: false, uiUpdatedAt: null };
     }
@@ -211,9 +211,9 @@ export class SettingsResolverService {
           reason: `Fallback: Wert aus .env/Umgebung (${definition.envVar})`,
         };
       }
-      // Ungueltiger Env-Wert: auf sicheren Default degradieren.
+      // Invalid env value: degrade to the safe default.
       this.logger.warn(
-        `Env-Wert fuer '${definition.envVar}' ungueltig (${coerced.error}) – Default wird verwendet.`,
+        `Env value for '${definition.envVar}' invalid (${coerced.error}) – default is used.`,
       );
     }
 

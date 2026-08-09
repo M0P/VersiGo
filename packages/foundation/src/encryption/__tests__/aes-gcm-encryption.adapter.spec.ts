@@ -14,7 +14,7 @@ function buildConfig(): AppConfigService {
 }
 
 describe('AesGcmEncryptionAdapter', () => {
-  it('verschluesselt und entschluesselt einen Klartext korrekt', async () => {
+  it('encrypts and decrypts a plaintext correctly', async () => {
     const adapter = new AesGcmEncryptionAdapter(buildConfig());
     const plain = 'geheimer-api-key-12345';
 
@@ -25,7 +25,7 @@ describe('AesGcmEncryptionAdapter', () => {
     expect(decrypted).toBe(plain);
   });
 
-  it('erzeugt unterschiedliche Chiffrate fuer denselben Klartext (zufaelliger IV)', async () => {
+  it('produces different ciphertexts for the same plaintext (random IV)', async () => {
     const adapter = new AesGcmEncryptionAdapter(buildConfig());
     const plain = 'gleicher-wert';
 
@@ -35,7 +35,7 @@ describe('AesGcmEncryptionAdapter', () => {
     expect(c1).not.toBe(c2);
   });
 
-  it('wirft einen Fehler bei manipuliertem Chiffrat', async () => {
+  it('throws an error for a tampered ciphertext', async () => {
     const adapter = new AesGcmEncryptionAdapter(buildConfig());
     const cipherText = await adapter.encrypt('wert');
     const tampered = cipherText.slice(0, -4) + 'abcd';
@@ -43,10 +43,10 @@ describe('AesGcmEncryptionAdapter', () => {
     await expect(adapter.decrypt(tampered)).rejects.toThrow();
   });
 
-  it('wirft einen Fehler bei ungueltigem Format', async () => {
+  it('throws an error for an invalid format', async () => {
     const adapter = new AesGcmEncryptionAdapter(buildConfig());
-    await expect(adapter.decrypt('kein-gueltiges-format')).rejects.toThrow(
-      /Ungueltiges Chiffrat-Format/,
+    await expect(adapter.decrypt('not-a-valid-format')).rejects.toThrow(
+      /Invalid ciphertext format/,
     );
   });
 });

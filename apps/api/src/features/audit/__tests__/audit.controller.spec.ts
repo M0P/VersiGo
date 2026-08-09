@@ -16,12 +16,12 @@ function createMockService(): ServiceLike {
 }
 
 describe('AuditController', () => {
-  it('fordert auf Controller-Ebene die ADMIN-Rolle an', () => {
+  it('requires the ADMIN role at the controller level', () => {
     const roles = Reflect.getMetadata(ROLES_KEY, AuditController);
     expect(roles).toContain(GlobalRole.ADMIN);
   });
 
-  it('verweigert nicht-ADMIN-Rollen (USER/READ_ONLY) den Zugriff mit 403', () => {
+  it('denies non-ADMIN roles (USER/READ_ONLY) access with 403', () => {
     const required = Reflect.getMetadata(ROLES_KEY, AuditController);
     const reflector = { getAllAndOverride: () => required } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
@@ -48,7 +48,7 @@ describe('AuditController', () => {
     }
   });
 
-  it('listEvents delegiert an den Service', async () => {
+  it('listEvents delegates to the service', async () => {
     const service = createMockService();
     const controller = new AuditController(service as never);
     const expected = { events: [], total: 0 };
@@ -61,7 +61,7 @@ describe('AuditController', () => {
     expect(service.listEvents).toHaveBeenCalledWith(query);
   });
 
-  it('getEvent delegiert an den Service', async () => {
+  it('getEvent delegates to the service', async () => {
     const service = createMockService();
     const controller = new AuditController(service as never);
     const expected = { id: 'e1', diffJson: null };

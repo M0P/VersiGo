@@ -4,10 +4,9 @@ import { ConfigFoundationModule } from '../config/config.module';
 import { AppConfigService } from '../config';
 
 /**
- * Gemeinsame Queue-Infrastruktur fuer API und Worker auf Basis von BullMQ.
- * Enthaelt keine fachlichen Queues oder Job-Prozessoren; Feature-Slices
- * registrieren eigene Queues ueber BullModule.registerQueue in ihrem
- * eigenen Modul.
+ * Shared queue infrastructure for API and worker based on BullMQ.
+ * Contains no domain queues or job processors; feature slices register
+ * their own queues via BullModule.registerQueue in their own module.
  */
 @Module({
   imports: [

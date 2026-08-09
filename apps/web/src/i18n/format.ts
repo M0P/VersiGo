@@ -1,14 +1,14 @@
 import type { Language } from './core';
 
 /**
- * AP-21: Sprachabhaengige Formatierungshilfen (Zahlen, Waehrungen, Datum).
+ * AP-21: language-dependent formatting helpers (numbers, currencies, dates).
  *
- * Stellt sicher, dass Zahlen, Waehrungen und Datumsangaben der aktiven
- * UI-Sprache folgen (Acceptance: "Zahlen, Waehrungen und Datum folgen der
- * aktiven Sprache"), unabhaengig von der Browser-Locale.
+ * Ensures that numbers, currencies and dates follow the active UI language
+ * (acceptance: "numbers, currencies and dates follow the active language"),
+ * independent of the browser locale.
  */
 
-/** BCP-47-Locale der aktiven UI-Sprache (Konvention im Projekt: de-DE/en-GB). */
+/** BCP-47 locale of the active UI language (project convention: de-DE/en-GB). */
 export function localeOf(language: Language): string {
   return language === 'de' ? 'de-DE' : 'en-GB';
 }
@@ -34,8 +34,8 @@ export function formatDate(
 ): string {
   if (value === null || value === undefined || value === '') return '';
   const date = new Date(value);
-  // Ungueltige Eingaben (RangeError im Intl-Call) abfangen: leeren String
-  // zurueckgeben statt zu crashen; Rohwert als Fallback fuer Zeichenketten.
+  // Catch invalid inputs (RangeError in the Intl call): return an empty
+  // string instead of crashing; the raw value is the fallback for strings.
   if (Number.isNaN(date.getTime())) return String(value);
   return new Intl.DateTimeFormat(localeOf(language)).format(date);
 }

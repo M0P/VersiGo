@@ -7,13 +7,13 @@ import {
 import { CapabilityFlagsService } from '@versigo/foundation';
 
 /**
- * Feature-Schalter fuer Familien-Freigaben (BugFix-05).
+ * Feature switch for family sharing (BugFix-05).
  *
- * Deaktiviert ein Admin `FAMILY_SHARING_ENABLED` ueber die Feature-
- * Verwaltung (Kategorie runtime, wirkt sofort), liefern ALLE
- * Family-Sharing-Endpunkte 403, unabhaengig von Rolle oder
- * Household-Mitgliedschaft. Die Freigabe-Liste bleibt damit auch fuer
- * bestehende Mitglieder gesperrt, bis der Schalter wieder aktiv ist.
+ * If an admin disables `FAMILY_SHARING_ENABLED` via feature management
+ * (category runtime, takes effect immediately), ALL family-sharing
+ * endpoints return 403, regardless of role or household membership. The
+ * share list thus stays locked even for existing members until the
+ * switch is active again.
  */
 @Injectable()
 export class FamilySharingGuard implements CanActivate {
@@ -22,7 +22,7 @@ export class FamilySharingGuard implements CanActivate {
   async canActivate(_context: ExecutionContext): Promise<boolean> {
     if (!(await this.capabilities.isEnabled('familySharing'))) {
       throw new ForbiddenException(
-        'Familien-Freigaben sind deaktiviert (FAMILY_SHARING_ENABLED=false)',
+        'Family sharing is disabled (FAMILY_SHARING_ENABLED=false)',
       );
     }
     return true;

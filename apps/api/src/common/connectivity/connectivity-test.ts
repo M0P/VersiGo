@@ -3,7 +3,7 @@ import axios, { type AxiosResponse } from 'axios';
 import { assertSafeTestEndpoint, UnsafeEndpointError } from './connectivity-guard';
 
 /**
- * HTTP connectivity test with optional TLS relaxation (BugFix-06, Teil 2).
+ * HTTP connectivity test with optional TLS relaxation (BugFix-06, part 2).
  *
  * The test is the final step of the SSRF guard (`assertSafeTestEndpoint`):
  * the guard validates the URL first, this helper only performs the actual
@@ -56,9 +56,9 @@ export async function testEndpoint(
 ): Promise<TestEndpointResult> {
   const timeoutMs = options.timeoutMs ?? 5_000;
   let currentUrl = url;
-  // Origin (protocol + host + port) des urspruenglich geprueften Endpunkts:
-  // Das Integrationstoken wird NUR auf Redirects innerhalb dieses Origins
-  // weitergegeben (Schutz gegen Open-Redirect-Credential-Disclosure).
+  // Origin (protocol + host + port) of the endpoint that was originally
+  // checked: the integration token is only forwarded to redirects within
+  // this origin (protection against open-redirect credential disclosure).
   let originalOrigin: string;
   try {
     originalOrigin = new URL(url).origin;

@@ -1,23 +1,22 @@
 /**
- * Port/Interface fuer den Paperless-ngx-Adapter.
+ * Port/interface for the Paperless-ngx adapter.
  *
- * Alle Methoden sind so ausgelegt, dass sie niemals die Kernfunktionen
- * blockieren. Fehler in der Paperless-Kommunikation werden geloggt,
- * aber nicht weitergereicht.
+ * All methods are designed to never block the core functionality. Errors in
+ * the Paperless communication are logged, but never passed through.
  *
- * Wenn Paperless deaktiviert ist (oder keine Token hinterlegt sind),
- * liefert der Adapter selbst null zurueck; eine separate NoOp-Implementierung
- * existiert nicht mehr (BugFix-07: toten Code entfernt).
+ * When Paperless is disabled (or no token is configured), the adapter itself
+ * returns null; a separate NoOp implementation no longer exists (BugFix-07:
+ * dead code removed).
  */
 
 export interface PaperlessDocumentRef {
-  /** Paperless-interner Dokumenten-ID */
+  /** Paperless-internal document ID */
   paperlessId: number;
-  /** API-Deep-Link-URL zum Dokument */
+  /** API deep-link URL to the document */
   deepLink: string;
-  /** Synchronisation einer Momentaufnahme der Metadaten */
+  /** Snapshot of the metadata synchronization */
   metadata: PaperlessDocumentMetadata | null;
-  /** Status der letzten Synchronisation */
+  /** Status of the last synchronization */
   syncStatus: 'ok' | 'error' | 'not_synced';
 }
 
@@ -48,32 +47,32 @@ export interface PaperlessSearchResult {
 
 export interface IPaperlessAdapter {
   /**
-   * Erzeugt aus einem Paperless-Dokumentenverweis einen Deep Link.
-   * Gibt null zurueck, wenn das Dokument in Paperless nicht existiert.
+   * Builds a deep link from a Paperless document reference.
+   * Returns null if the document does not exist in Paperless.
    */
   getDeepLink(paperlessId: number): Promise<string | null>;
 
   /**
-   * Ruft Metadaten eines Paperless-Dokuments ab.
-   * Gibt null bei Fehler oder fehlendem Dokument zurueck.
+   * Fetches metadata of a Paperless document.
+   * Returns null on error or missing document.
    */
   getDocumentMetadata(paperlessId: number): Promise<PaperlessDocumentMetadata | null>;
 
   /**
-   * Synchronisiert Metadaten eines Dokuments.
+   * Synchronizes metadata of a document.
    */
   syncDocument(paperlessId: number): Promise<PaperlessSyncResult>;
 
   /**
-   * Sucht nach Dokumenten in Paperless anhand eines Suchbegriffs.
+   * Searches Paperless documents by a search term.
    *
-   * Hinweis: Aktuell wird nur die erste Suchergebnisseite zurueckgegeben.
-   * Bei grossen Ergebnismengen sollte die Paginierung implementiert werden.
+   * Note: currently only the first result page is returned. For large result
+   * sets pagination should be implemented.
    */
   searchDocuments(query: string): Promise<PaperlessSearchResult[]>;
 
   /**
-   * Prueft die Verbindung zur Paperless-API.
+   * Checks the connection to the Paperless API.
    */
   healthCheck(): Promise<boolean>;
 }

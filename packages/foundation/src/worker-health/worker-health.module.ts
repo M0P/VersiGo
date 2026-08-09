@@ -5,13 +5,13 @@ import { WorkerHeartbeatService } from './worker-heartbeat.service';
 import { WorkerLivenessService } from './worker-liveness.service';
 
 /**
- * AP-19: Worker-Health-Foundation.
+ * AP-19: worker health foundation.
  *
- * Stellt Heartbeat-Leser/-Schreiber und den Liveness-Server bereit.
- * - Worker-Prozess: ruft `WorkerHeartbeatService.start()` und
- *   `WorkerLivenessService.start()` im Bootstrap auf.
- * - API-Prozess: nutzt ausschliesslich `WorkerHeartbeatService.getStatus()`
- *   fuer GET /ready; Liveness-Server und Heartbeat-Interval laufen dort nie.
+ * Provides the heartbeat reader/writer and the liveness server.
+ * - Worker process: calls `WorkerHeartbeatService.start()` and
+ *   `WorkerLivenessService.start()` during bootstrap.
+ * - API process: uses only `WorkerHeartbeatService.getStatus()`
+ *   for GET /ready; liveness server and heartbeat interval never run there.
  */
 @Module({
   imports: [DatabaseModule, ConfigFoundationModule],

@@ -21,7 +21,7 @@ that only the repository maintainers can see:
 
 1. Open the repository on GitHub.
 2. Go to **Security** -> **Report a vulnerability** (or use the direct URL
-   `https://github.com/M0P/insura/security/advisories/new`).
+   `https://github.com/M0P/VersiGo/security/advisories/new`).
 3. Describe the vulnerability, including:
    - the affected component and version,
    - a description of the vulnerability and its impact,

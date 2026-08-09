@@ -55,7 +55,7 @@ describe('FamilySharingService', () => {
   });
 
   describe('create', () => {
-    it('erstellt eine Freigabe und protokolliert Audit', async () => {
+    it('creates a share and logs an audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: 'policy-1', householdId });
 
@@ -64,7 +64,7 @@ describe('FamilySharingService', () => {
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' }) // source
         .mockResolvedValueOnce({ householdId, userId: targetUserId, role: 'MEMBER' }); // target
 
-      // Keine doppelte Freigabe
+      // No duplicate share
       mockDb.objectShare.findFirst.mockResolvedValue(null);
 
       mockDb.objectShare.create.mockResolvedValue({
@@ -95,7 +95,7 @@ describe('FamilySharingService', () => {
       );
     });
 
-    it('verweigert Erstellung ohne Household-Mitgliedschaft', async () => {
+    it('refuses creation without household membership', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -108,7 +108,7 @@ describe('FamilySharingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Erstellung wenn targetUser nicht im Household', async () => {
+    it('refuses creation when the target user is not in the household', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' })
         .mockResolvedValueOnce(null);
@@ -123,7 +123,7 @@ describe('FamilySharingService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('verweigert Freigabe an sich selbst', async () => {
+    it('refuses sharing with oneself', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' });
 
@@ -137,7 +137,7 @@ describe('FamilySharingService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('verweigert ALL_OWNED mit scopeRef', async () => {
+    it('refuses ALL_OWNED with a scopeRef', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' })
         .mockResolvedValueOnce({ householdId, userId: targetUserId, role: 'MEMBER' });
@@ -152,7 +152,7 @@ describe('FamilySharingService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('verweigert INSURANCE ohne scopeRef', async () => {
+    it('refuses INSURANCE without a scopeRef', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' })
         .mockResolvedValueOnce({ householdId, userId: targetUserId, role: 'MEMBER' });
@@ -166,7 +166,7 @@ describe('FamilySharingService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('verweigert wenn Policy nicht existiert', async () => {
+    it('refuses when the policy does not exist', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' })
         .mockResolvedValueOnce({ householdId, userId: targetUserId, role: 'MEMBER' });
@@ -182,7 +182,7 @@ describe('FamilySharingService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('verweigert doppelte Freigabe', async () => {
+    it('refuses a duplicate share', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' })
         .mockResolvedValueOnce({ householdId, userId: targetUserId, role: 'MEMBER' });
@@ -201,7 +201,7 @@ describe('FamilySharingService', () => {
   });
 
   describe('findAll', () => {
-    it('gibt alle Freigaben des Households zurueck', async () => {
+    it('returns all shares of the household', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findMany.mockResolvedValue([
         { id: 's1', householdId, sourceUserId: userId, targetUserId: 'user-3' },
@@ -218,7 +218,7 @@ describe('FamilySharingService', () => {
   });
 
   describe('findIncoming', () => {
-    it('gibt eingehende Freigaben zurueck', async () => {
+    it('returns incoming shares', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findMany.mockResolvedValue([
         { id: 's1', sourceUserId: 'user-3', targetUserId: userId },
@@ -236,7 +236,7 @@ describe('FamilySharingService', () => {
   });
 
   describe('findOutgoing', () => {
-    it('gibt ausgehende Freigaben zurueck', async () => {
+    it('returns outgoing shares', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findMany.mockResolvedValue([
         { id: 's1', sourceUserId: userId, targetUserId: 'user-3' },
@@ -254,7 +254,7 @@ describe('FamilySharingService', () => {
   });
 
   describe('listMembers', () => {
-    it('liefert die anderen Household-Mitglieder ohne den Aufrufer', async () => {
+    it('returns the other household members without the caller', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.householdMembership.findMany.mockResolvedValue([
         {
@@ -281,7 +281,7 @@ describe('FamilySharingService', () => {
       );
     });
 
-    it('lehnt Nicht-Mitglieder ab', async () => {
+    it('rejects non-members', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(service.listMembers(householdId, userId)).rejects.toThrow(ForbiddenException);
@@ -290,7 +290,7 @@ describe('FamilySharingService', () => {
   });
 
   describe('findOne', () => {
-    it('gibt eine einzelne Freigabe zurueck', async () => {
+    it('returns a single share', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findFirst.mockResolvedValue({
         id: shareId,
@@ -304,7 +304,7 @@ describe('FamilySharingService', () => {
       expect(result.id).toBe(shareId);
     });
 
-    it('wirft NotFoundException bei fehlender Freigabe', async () => {
+    it('throws NotFoundException when the share is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findFirst.mockResolvedValue(null);
 
@@ -315,7 +315,7 @@ describe('FamilySharingService', () => {
   });
 
   describe('update', () => {
-    it('aktualisiert eine Freigabe und protokolliert Audit', async () => {
+    it('updates a share and logs an audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findFirst.mockResolvedValue({
         id: shareId,
@@ -344,7 +344,7 @@ describe('FamilySharingService', () => {
       );
     });
 
-    it('verweigert Aktualisierung durch Nicht-Eigentuemer', async () => {
+    it('refuses updates by non-owners', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findFirst.mockResolvedValue({
         id: shareId,
@@ -360,7 +360,7 @@ describe('FamilySharingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('wirft NotFoundException bei fehlender Freigabe', async () => {
+    it('throws NotFoundException when the share is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findFirst.mockResolvedValue(null);
 
@@ -373,7 +373,7 @@ describe('FamilySharingService', () => {
   });
 
   describe('remove', () => {
-    it('entzieht eine Freigabe und protokolliert Audit', async () => {
+    it('revokes a share and logs an audit', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' })
         .mockResolvedValueOnce({ householdId, userId, role: 'OWNER' });
@@ -401,7 +401,7 @@ describe('FamilySharingService', () => {
       );
     });
 
-    it('erlaubt globalem ADMIN das Loeschen fremder Freigaben', async () => {
+    it('allows a global ADMIN to delete foreign shares', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'MEMBER' })
         .mockResolvedValueOnce({ householdId, userId, role: 'OWNER' });
@@ -418,7 +418,7 @@ describe('FamilySharingService', () => {
       expect(result.success).toBe(true);
     });
 
-    it('verweigert Entzug durch Nicht-Berechtigte', async () => {
+    it('refuses revocation by unauthorized users', async () => {
       mockDb.householdMembership.findUnique
         .mockResolvedValueOnce({ householdId, userId, role: 'VIEWER' })
         .mockResolvedValueOnce({ householdId, userId, role: 'VIEWER' });
@@ -434,7 +434,7 @@ describe('FamilySharingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('wirft NotFoundException bei fehlender Freigabe', async () => {
+    it('throws NotFoundException when the share is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.objectShare.findFirst.mockResolvedValue(null);
 
@@ -449,7 +449,7 @@ describe('FamilySharingService', () => {
     const otherUserId = 'viewer-1';
     const policyId = 'policy-1';
 
-    it('erlaubt Zugriff fuer den Owner', async () => {
+    it('allows access for the owner', async () => {
       const result = await service.checkPermission(
         householdId, ownerUserId, ownerUserId,
         ObjectShareScopeType.INSURANCE, policyId, ObjectSharePermission.READ,
@@ -459,7 +459,7 @@ describe('FamilySharingService', () => {
       expect(mockDb.objectShare.findMany).not.toHaveBeenCalled();
     });
 
-    it('erlaubt Zugriff bei ALL_OWNED Freigabe', async () => {
+    it('allows access for an ALL_OWNED share', async () => {
       mockDb.objectShare.findMany.mockResolvedValue([
         {
           id: 's1',
@@ -476,7 +476,7 @@ describe('FamilySharingService', () => {
       expect(result).toBe(true);
     });
 
-    it('erlaubt Zugriff bei konkreter INSURANCE Freigabe', async () => {
+    it('allows access for a concrete INSURANCE share', async () => {
       mockDb.objectShare.findMany.mockResolvedValue([
         {
           id: 's1',
@@ -493,7 +493,7 @@ describe('FamilySharingService', () => {
       expect(result).toBe(true);
     });
 
-    it('verweigert Zugriff ohne Freigabe', async () => {
+    it('denies access without a share', async () => {
       mockDb.objectShare.findMany.mockResolvedValue([]);
 
       const result = await service.checkPermission(
@@ -504,7 +504,7 @@ describe('FamilySharingService', () => {
       expect(result).toBe(false);
     });
 
-    it('verweigert Zugriff bei falscher Permission', async () => {
+    it('denies access for a wrong permission', async () => {
       mockDb.objectShare.findMany.mockResolvedValue([]);
 
       const result = await service.checkPermission(
@@ -515,7 +515,7 @@ describe('FamilySharingService', () => {
       expect(result).toBe(false);
     });
 
-    it('verweigert Zugriff bei falscher scopeRef', async () => {
+    it('denies access for a wrong scopeRef', async () => {
       mockDb.objectShare.findMany.mockResolvedValue([
         {
           id: 's1',
@@ -532,7 +532,7 @@ describe('FamilySharingService', () => {
       expect(result).toBe(false);
     });
 
-    it('erlaubt Zugriff bei CATEGORY Freigabe auf passende Insurance', async () => {
+    it('allows access for a CATEGORY share on a matching insurance', async () => {
       mockDb.objectShare.findMany.mockResolvedValue([
         {
           id: 's1',
@@ -550,7 +550,7 @@ describe('FamilySharingService', () => {
       expect(result).toBe(true);
     });
 
-    it('verweigert Zugriff bei CATEGORY Freigabe auf nicht passende Insurance', async () => {
+    it('denies access for a CATEGORY share on a non-matching insurance', async () => {
       mockDb.objectShare.findMany.mockResolvedValue([
         {
           id: 's1',

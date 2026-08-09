@@ -4,12 +4,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 
 /**
- * Integrationstests fuer Household-Isolation der Admin-Settings.
- * Prueft, dass ein Household nicht auf Settings eines anderen
- * Households zugreifen kann.
+ * Integration tests for household isolation of the admin settings.
+ * Verifies that one household cannot access the settings of another
+ * household.
  *
- * Diese Tests arbeiten mit einem gemockten DatabaseService, der die
- * Isolation auf Datenbankebene (WHERE-Klausel mit householdId) simuliert.
+ * These tests work with a mocked DatabaseService that simulates the
+ * isolation at the database level (WHERE clause with householdId).
  */
 
 const mockHousehold1Settings = [
@@ -19,7 +19,7 @@ const mockHousehold1Settings = [
 const mockHousehold2Settings: typeof mockHousehold1Settings = [];
 
 function createIsolatedMockDb() {
-  // Simuliere Datenbank-Isolation: jedes Household sieht nur eigene Daten
+  // Simulates database isolation: each household sees only its own data
   const allSettings: Map<string, typeof mockHousehold1Settings> = new Map();
   allSettings.set('household-1', [...mockHousehold1Settings]);
   allSettings.set('household-2', [...mockHousehold2Settings]);
@@ -76,7 +76,7 @@ function createMockEncryption() {
 }
 
 describe('Household Isolation – Admin Settings', () => {
-  it('Household-1 sieht nur eigene Settings, nicht die von Household-2', async () => {
+  it('household 1 only sees its own settings, not those of household 2', async () => {
     const { SettingsStoreService } = await import('../settings-store.service');
     const mockDb = createIsolatedMockDb();
     const mockEncryption = createMockEncryption();
@@ -90,7 +90,7 @@ describe('Household Isolation – Admin Settings', () => {
     expect(h2Settings).toHaveLength(0);
   });
 
-  it('Household-1 kann nicht auf Setting von Household-2 zugreifen', async () => {
+  it('household 1 cannot access a setting of household 2', async () => {
     const { SettingsStoreService } = await import('../settings-store.service');
     const mockDb = createIsolatedMockDb();
     const mockEncryption = createMockEncryption();
@@ -101,18 +101,18 @@ describe('Household Isolation – Admin Settings', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('deleteHouseholdSetting in Household-2 loescht nicht in Household-1', async () => {
+  it('deleteHouseholdSetting in household 2 does not delete in household 1', async () => {
     const { SettingsStoreService } = await import('../settings-store.service');
     const mockDb = createIsolatedMockDb();
     const mockEncryption = createMockEncryption();
     const service = new SettingsStoreService(mockDb as any, mockEncryption as any);
 
-    // Loeschen eines nicht existierenden Settings in Household-2
+    // Deleting a non-existent setting in household 2
     await expect(
       service.deleteHouseholdSetting('household-2', 'h1-key'),
     ).rejects.toThrow(NotFoundException);
 
-    // Household-1 sollte sein Setting noch haben
+    // Household 1 should still have its setting
     const h1Settings = await service.listHouseholdSettings('household-1');
     expect(h1Settings).toHaveLength(1);
   });

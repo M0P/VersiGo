@@ -3,21 +3,21 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { testEndpoint } from '../connectivity-test';
 
 /**
- * BugFix-06 (Teil 2) – Redirect-Revalidierung: `testEndpoint` folgt
- * Redirects niemals blind, sondern validiert jedes 3xx-Ziel erneut gegen
- * den SSRF-Guard (`assertSafeTestEndpoint`). Ein oeffentlicher Endpunkt
- * darf den Server-Request also nicht auf private/metadata-Adressen
- * umleiten, auch wenn `CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS` deaktiviert
- * ist. Zudem wird das Integrationstoken nur auf Redirects innerhalb des
- * urspruenglichen Origins weitergegeben (kein Open-Redirect-Leak).
+ * BugFix-06 (part 2) – redirect revalidation: `testEndpoint` never follows
+ * redirects blindly but revalidates every 3xx target against the SSRF guard
+ * (`assertSafeTestEndpoint`). A public endpoint therefore cannot redirect
+ * the server request to private/metadata addresses, even when
+ * `CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS` is disabled. In addition, the
+ * integration token is only passed on to redirects within the original
+ * origin (no open-redirect leak).
  */
 describe('connectivity-test (BugFix-06: redirect re-validation)', () => {
   let server: Server;
   let serverB: Server;
   let baseUrl = '';
 
-  // Recordings, damit die Requests ohne Response-Body-Pruefung beobachtbar
-  // sind (testEndpoint liefert nur Status/Message).
+  // Recordings so the requests are observable without a response-body
+  // check (testEndpoint only returns status/message).
   let crossHostTokenSeen: boolean;
   let sameHostTokenSeen: boolean;
 
@@ -25,8 +25,8 @@ describe('connectivity-test (BugFix-06: redirect re-validation)', () => {
     crossHostTokenSeen = false;
     sameHostTokenSeen = false;
 
-    // Server B auf 127.0.0.2 (anderer Origin): prueft, ob das Token
-    // cross-origin weitergegeben wurde.
+    // Server B on 127.0.0.2 (different origin): checks whether the token
+    // was passed cross-origin.
     serverB = createServer((req, res) => {
       crossHostTokenSeen = Boolean(req.headers.authorization);
       res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -87,37 +87,37 @@ describe('connectivity-test (BugFix-06: redirect re-validation)', () => {
     ]);
   });
 
-  it('meldet einen erreichbaren Endpunkt (HTTP 200)', async () => {
+  it('reports a reachable endpoint (HTTP 200)', async () => {
     const result = await testEndpoint(`${baseUrl}/ok`, { allowPrivate: true });
     expect(result.success).toBe(true);
     expect(result.message).toBe('HTTP 200: OK');
   });
 
-  it('folgt einem Redirect auf ein privates Ziel im strikten Modus NICHT', async () => {
+  it('does NOT follow a redirect to a private target in strict mode', async () => {
     const result = await testEndpoint(`${baseUrl}/redirect-private`);
     expect(result.success).toBe(false);
-    expect(result.message).toContain('gesperrten Bereich');
+    expect(result.message).toContain('is in a blocked range');
   });
 
-  it('folgt einem Redirect auf Cloud-Metadata auch im Lockerungsmodus NICHT', async () => {
+  it('does NOT follow a redirect to cloud metadata even in relaxation mode', async () => {
     const result = await testEndpoint(`${baseUrl}/redirect-metadata`, { allowPrivate: true });
     expect(result.success).toBe(false);
-    expect(result.message).toContain('Cloud-Metadata');
+    expect(result.message).toContain('blocked cloud metadata address');
   });
 
-  it('folgt einem Redirect auf ein erlaubtes Ziel im Lockerungsmodus', async () => {
+  it('follows a redirect to an allowed target in relaxation mode', async () => {
     const result = await testEndpoint(`${baseUrl}/redirect-ok`, { allowPrivate: true });
     expect(result.success).toBe(true);
     expect(result.message).toBe('HTTP 200: OK');
   });
 
-  it('begrenzt die Anzahl der Redirects (Redirect-Loop)', async () => {
+  it('limits the number of redirects (redirect loop)', async () => {
     const result = await testEndpoint(`${baseUrl}/redirect-loop-a`, { allowPrivate: true });
     expect(result.success).toBe(false);
     expect(result.message).toContain('too many redirects');
   });
 
-  it('gibt das Token NICHT an einen Redirect auf anderen Origin weiter', async () => {
+  it('does NOT pass the token to a redirect on another origin', async () => {
     crossHostTokenSeen = false;
     const result = await testEndpoint(`${baseUrl}/redirect-cross-origin`, {
       allowPrivate: true,
@@ -127,7 +127,7 @@ describe('connectivity-test (BugFix-06: redirect re-validation)', () => {
     expect(crossHostTokenSeen).toBe(false);
   });
 
-  it('gibt das Token bei einem Redirect innerhalb desselben Origins weiter', async () => {
+  it('passes the token on a redirect within the same origin', async () => {
     sameHostTokenSeen = false;
     const result = await testEndpoint(`${baseUrl}/redirect-ok-token`, {
       allowPrivate: true,

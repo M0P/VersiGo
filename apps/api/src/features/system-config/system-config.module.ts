@@ -5,9 +5,9 @@ import { SystemConfigController } from './system-config.controller';
 import { SystemConfigService } from './system-config.service';
 
 /**
- * Zentrale Systemkonfiguration (AP-17): Admin-UI-Endpunkte fuer den
- * versionierten Settings-Katalog mit UI > .env > Default-Aufloesung,
- * verschluesselter Persistenz, Audit und Connectivity-Tests.
+ * Central system configuration (AP-17): admin-UI endpoints for the
+ * versioned settings catalog with UI > .env > default resolution,
+ * encrypted persistence, audit and connectivity tests.
  */
 @Module({
   imports: [AdminSettingsModule, SettingsFoundationModule],

@@ -4,13 +4,13 @@ import { Roles } from '../identity/roles.decorator';
 import { MonitoringService } from './monitoring.service';
 
 /**
- * Admin-Monitoring-API (AP-19). Nur globale ADMINs.
+ * Admin monitoring API (AP-19). Global ADMINs only.
  *
- * - `GET /admin/monitoring/queues` – Queue-Zaehler (keine Payloads)
- * - `GET /admin/monitoring/queues/failed` – fehlgeschlagene Jobs (redigiert)
- * - `POST /admin/monitoring/queues/failed/:jobId/retry` – Job erneut einreihen
- * - `GET /admin/monitoring/ai-jobs` – AI-Extraktions-Job-Uebersicht (DB)
- * - `GET /admin/monitoring/integrations` – Integrationsstatus (keine Secrets)
+ * - `GET /admin/monitoring/queues` – queue counters (no payloads)
+ * - `GET /admin/monitoring/queues/failed` – failed jobs (redacted)
+ * - `POST /admin/monitoring/queues/failed/:jobId/retry` – re-enqueue a job
+ * - `GET /admin/monitoring/ai-jobs` – AI extraction job overview (DB)
+ * - `GET /admin/monitoring/integrations` – integration status (no secrets)
  */
 @Controller('admin/monitoring')
 @Roles(GlobalRole.ADMIN)

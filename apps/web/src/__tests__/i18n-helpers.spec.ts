@@ -47,9 +47,9 @@ describe('formatCurrency', () => {
     expect(formatCurrency(1234.5, 'en')).toBe('€1,234.50');
   });
 
-  it('formats with the German (de-DE) locale (Komma als Dezimaltrenner)', () => {
-    // ICU-Varianten koennen vor dem Eurozeichen ein geschuetztes Leerzeichen
-    // (U+00A0) ausgeben – normalisieren, damit der Test laufzeitstabil ist.
+  it('formats with the German (de-DE) locale (comma as decimal separator)', () => {
+    // ICU variants may output a protected space (U+00A0) before the euro sign -
+    // normalize so the test is stable across ICU versions.
     const de = formatCurrency(1234.5, 'de').replace(/\u00a0/g, ' ');
     expect(de).toBe('1.234,50 €');
   });
@@ -63,14 +63,14 @@ describe('formatNumber', () => {
 });
 
 describe('formatDate', () => {
-  it('formats with the English (en-GB) locale (Tag/Monat/Jahr)', () => {
+  it('formats with the English (en-GB) locale (day/month/year)', () => {
     expect(formatDate('2026-01-02', 'en')).toMatch(/^\d{1,2}\/\d{1,2}\/\d{4}$/);
   });
 
-  it('formats with the German (de-DE) locale (Tag.Monat.Jahr)', () => {
-    // Kein exakter String: je nach ICU-Version wird nicht auf zwei Stellen
-    // aufgefuellt ('2.1.2026' vs. '02.01.2026') – das Formatmuster ist der
-    // stabile Kern der Assertion.
+  it('formats with the German (de-DE) locale (day.month.year)', () => {
+    // No exact string: depending on the ICU version the value is not padded
+    // to two digits ('2.1.2026' vs. '02.01.2026') - the format pattern is the
+    // stable core of the assertion.
     expect(formatDate('2026-01-02', 'de')).toMatch(/^\d{1,2}\.\d{1,2}\.\d{4}$/);
   });
 

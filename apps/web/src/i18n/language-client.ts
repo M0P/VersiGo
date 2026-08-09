@@ -1,10 +1,10 @@
 /**
- * AP-21: API-Client fuer die Sprachpraeferenz (/user/language).
+ * AP-21: API client for the language preference (/user/language).
  *
- * Der Endpunkt ist fuer ALLE authentifizierten Rollen freigegeben
- * (READ_ONLY eingeschlossen). READ_ONLY-Aenderungen werden serverseitig
- * nur in der Sitzung gespeichert (persistence: 'session'); USER/ADMIN
- * erhalten eine dauerhafte Konto-Einstellung (persistence: 'persistent').
+ * The endpoint is enabled for ALL authenticated roles
+ * (READ_ONLY included). READ_ONLY changes are stored server-side
+ * only in the session (persistence: 'session'); USER/ADMIN
+ * get a persistent account setting (persistence: 'persistent').
  */
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
@@ -18,7 +18,7 @@ export type LanguagePreference = {
   persistence: LanguagePersistence;
 };
 
-/** Liest die aufgeloeste Sprachpraeferenz des angemeldeten Nutzers. */
+/** Reads the resolved language preference of the signed-in user. */
 export async function fetchLanguagePreference(): Promise<LanguagePreference | null> {
   try {
     const res = await fetch(`${API_BASE}/user/language`, { credentials: 'include' });
@@ -29,7 +29,7 @@ export async function fetchLanguagePreference(): Promise<LanguagePreference | nu
   }
 }
 
-/** Speichert die Sprachwahl (READ_ONLY: nur Sitzung, USER/ADMIN: Konto). */
+/** Stores the language choice (READ_ONLY: session only, USER/ADMIN: account). */
 export async function saveLanguagePreference(
   language: string,
 ): Promise<LanguagePreference | null> {

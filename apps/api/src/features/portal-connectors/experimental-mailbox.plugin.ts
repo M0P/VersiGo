@@ -6,24 +6,23 @@ import type {
 } from './portal-connector.interface';
 
 /**
- * Experimentelles, deaktiviertes Plugin: Mailbox-/Dokumentenabruf per
- * Browser-Automation (AP-18).
+ * Experimental, disabled plugin: mailbox/document retrieval via browser
+ * automation (AP-18).
  *
- * Erfuellt das Akzeptanzkriterium "Mailbox-/Dokumentenabruf ist als
- * experimentelles, deaktiviertes Plugin modelliert":
- * - Das Plugin ist in der Registry registriert und als experimentell
- *   sichtbar (API listet es mit `available: false`).
- * - `isAvailable()` liefert immer false: Es gibt in AP-18 bewusst keinen
- *   Freischaltpfad, bis ein echter, sicherer Adapter (z. B. dokumentierte
- *   API statt Browser-Automation, Stufe 2 in docs/06-integrations.md)
- *   existiert und dessen Sicherheits-/Datenschutz-Bewertung abgeschlossen
- *   ist.
- * - Alle Sync-/Abruf-Methoden werfen einen kontrollierten Fehler, falls sie
- *   trotzdem aufgerufen werden. Der Portal-Link (Deeplink + Zugangshinweise)
- *   ist davon nicht betroffen.
+ * Satisfies the acceptance criterion "mailbox/document retrieval is
+ * modeled as an experimental, disabled plugin":
+ * - The plugin is registered in the registry and visible as experimental
+ *   (the API lists it with `available: false`).
+ * - `isAvailable()` always returns false: in AP-18 there is deliberately
+ *   no release path until a real, secure adapter (e.g. a documented API
+ *   instead of browser automation, stage 2 in docs/06-integrations.md)
+ *   exists and its security/privacy assessment is complete.
+ * - All sync/retrieval methods throw a controlled error if they are
+ *   called anyway. The portal link (deep link + access hints) is not
+ *   affected by this.
  *
- * Browser-Automation (Stufe 3) ist per docs/06-integrations.md bewusst kein
- * Kernsystem und wird hier nur modelliert, nicht betrieben.
+ * Browser automation (stage 3) is deliberately not a core system per
+ * docs/06-integrations.md and is only modeled here, not operated.
  */
 
 const PLUGIN_KEY = 'mailbox-sync-browser-automation';

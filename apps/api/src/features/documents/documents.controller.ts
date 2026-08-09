@@ -62,8 +62,8 @@ export class DocumentsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreatePaperlessLinkDto,
   ) {
-    // BugFix-07 (Q3): Bindet ein Paperless-Dokument als PolicyDocument
-    // (storageType PAPERLESS_LINK), dedupliziert pro (policyId, storageRef).
+    // BugFix-07 (Q3): binds a Paperless document as a PolicyDocument
+    // (storageType PAPERLESS_LINK), deduplicated per (policyId, storageRef).
     return this.service.linkPaperlessDocument(
       householdId,
       user.id,

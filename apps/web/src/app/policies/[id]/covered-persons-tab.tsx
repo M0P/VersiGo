@@ -35,18 +35,18 @@ export default function CoveredPersonsTab({ policyId }: { policyId: string }): R
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Gemeinsame Ladelogik fuer Mount-Effekt und Handler-Reloads. Ein
-  // Monoton-zaehler (`requestSeq`) invalidiert in-flight Requests bei jedem
-  // neuen Ladevorgang sowie bei Unmount/policyId-Wechsel: Nur die neueste
-  // Anfrage darf Zustand schreiben – auch nach Submits/Deletes, die nach
-  // einem policyId-Wechsel noch eintreffen (BugFix-05, Befund 8: kein
-  // Fremddaten-Leak von Versicherung A unter B).
+  // Shared loading logic for the mount effect and handler reloads. A
+  // monotonically increasing counter (`requestSeq`) invalidates in-flight
+  // requests on every new load as well as on unmount/policyId change: only
+  // the newest request may write state – also after submits/deletes that
+  // still arrive after a policyId change (BugFix-05, finding 8: no
+  // foreign-data leak from policy A under B).
   const requestSeq = useRef(0);
 
   const reloadPersons = async () => {
     const seq = ++requestSeq.current;
-    // BugFix-05 (Befund 8): State zuruecksetzen, damit beim policyId-Wechsel
-    // keine Daten der vorherigen Versicherung angezeigt werden.
+    // BugFix-05 (finding 8): reset state so a policyId change does not
+    // display data from the previous policy.
     setPersons([]);
     setLoading(true);
     setError(null);
@@ -67,32 +67,31 @@ export default function CoveredPersonsTab({ policyId }: { policyId: string }): R
     }
   };
 
-  // BugFix-05 (Befund 4): Beim Mount und bei jedem policyId-Wechsel neu laden –
-  // sonst bleibt der Spinner haengen (leere Liste) bzw. es erscheinen Daten der
-  // vorherigen Versicherung. Der Cleanup invalidiert in-flight Requests des
-  // vorherigen policyId bzw. nach Unmount (keine Zustands-Updates danach).
-  // BugFix-05 (Befund 8): Beim policyId-Wechsel wird auch das Formular
-  // zurueckgesetzt – ein offenes Formular mit Daten der Versicherung A darf
-  // nicht unter B stehen bleiben (ein spaeterer Submit-Fehler wuerde sonst
-  // unter B gerendert bzw. die Felder von A weiterhin anzeigen).
+  // BugFix-05 (finding 4): reload on mount and on every policyId change –
+  // otherwise the spinner stays stuck (empty list) or data from the
+  // previous policy is shown. The cleanup invalidates in-flight requests
+  // of the previous policyId / after unmount (no state updates afterwards).
+  // BugFix-05 (finding 8): the form is also reset on a policyId change – an
+  // open form holding data of policy A must not remain under B (a later
+  // submit error would otherwise render under B or the fields of A would
+  // stay visible).
   useEffect(() => {
     setShowForm(false);
     setEditingId(null);
     setForm({ personName: '', relationType: '', birthDate: '' });
     setFormError(null);
     void reloadPersons();
-    // policyId steuert die Datenquelle; t ist bewusst nicht in den Dependencies
-    // (Sprachwechsel soll die Liste nicht neu laden).
+    // policyId controls the data source; `t` is deliberately not in the
+    // dependencies (a language switch must not reload the list).
     return () => { requestSeq.current += 1; };
   }, [policyId]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    // BugFix-05 (Befund 8): Seq-Token wie beim Reload/Delete – ein Submit-
-    // Fehler einer aelteren Anfrage darf nach policyId-Wechsel keine
-    // Fehlermeldung im (bereits zurueckgesetzten) Formular der neuen
-    // Versicherung rendern. Der Erfolgspfad laeuft ueber reloadPersons(),
-    // das selbst einen neuen Seq-Stand setzt.
+    // BugFix-05 (finding 8): seq token like on reload/delete – a submit
+    // error of an older request must not render an error message in the
+    // (already reset) form of the new policy after a policyId change. The
+    // success path runs through reloadPersons(), which sets a new seq itself.
     const seq = requestSeq.current;
     setFormError(null);
     setSubmitting(true);
@@ -122,16 +121,16 @@ export default function CoveredPersonsTab({ policyId }: { policyId: string }): R
         const data = await res.json().catch(() => null);
         throw new Error(data?.message ?? t('common.unknownError'));
       }
-      // BugFix-05 (Befund 8, Review-Runde 5): Auch die Formular-Reset-Writes
-      // sind seq-gesichert – ein spaeter Erfolg eines Submits von A darf nach
-      // policyId-Wechsel nicht B's offenes Formular schliessen/leeren.
+      // BugFix-05 (finding 8, review round 5): the form-reset writes are
+      // also seq-guarded – a late success of a submit from A must not
+      // close/clear B's open form after a policyId change.
       if (seq === requestSeq.current) {
         setForm({ personName: '', relationType: '', birthDate: '' });
         setEditingId(null);
         setShowForm(false);
-        // Erfolgs-Reload nur, wenn kein policyId-Wechsel zwischenzeitlich
-        // stattfand – sonst wuerde die veraltete Closure Daten von A unter B
-        // laden. Der neue policyId-Effekt laedt B bereits selbst.
+        // Success reload only if no policyId change happened in the meantime
+        // – otherwise the stale closure would load policy A's data under B.
+        // The new policyId effect already loads B itself.
         reloadPersons();
       }
     } catch (err) {
@@ -155,9 +154,8 @@ export default function CoveredPersonsTab({ policyId }: { policyId: string }): R
 
   const handleDelete = async (id: string) => {
     if (!window.confirm(t('policies.confirmDeletePerson'))) return;
-    // BugFix-05 (Befund 8): Seq-Token wie beim Reload – ein Fehler einer
-    // aelteren Anfrage darf nach policyId-Wechsel keine Fehlermeldung unter
-    // der neuen Versicherung rendern.
+    // BugFix-05 (finding 8): seq token like on reload – an error of an
+    // older request must not render an error message under the new policy.
     const seq = ++requestSeq.current;
     try {
       const res = await fetch(`${API_BASE}/households/default/policies/${policyId}/covered-persons/${id}`, {
@@ -165,9 +163,9 @@ export default function CoveredPersonsTab({ policyId }: { policyId: string }): R
         credentials: 'include',
       });
       if (!res.ok) throw new Error(t('common.unknownError'));
-      // BugFix-05 (Befund 8, Review-Runde 4): Auch der Erfolgs-Reload ist
-      // seq-gesichert – nach einem policyId-Wechsel darf die veraltete Closure
-      // keine Daten von A unter B laden.
+      // BugFix-05 (finding 8, review round 4): the success reload is also
+      // seq-guarded – after a policyId change the stale closure must not
+      // load policy A's data under B.
       if (seq === requestSeq.current) reloadPersons();
     } catch {
       if (seq === requestSeq.current) setError(t('common.unknownError'));

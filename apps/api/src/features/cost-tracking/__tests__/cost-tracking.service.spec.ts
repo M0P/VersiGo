@@ -57,7 +57,7 @@ describe('CostTrackingService', () => {
   }
 
   describe('create', () => {
-    it('erstellt eine Kostenposition und protokolliert Audit', async () => {
+    it('creates a cost entry and logs an audit', async () => {
       mockMembership();
       mockPolicy();
       mockDb.policyCostEntry.create.mockResolvedValue({
@@ -85,13 +85,13 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('BugFix-08: beendet den Vorgaenger automatisch bei Kosten-Erhoehung (validFrom)', async () => {
+    it('BugFix-08: ends the predecessor automatically on cost increase (validFrom)', async () => {
       mockMembership();
       mockPolicy();
-      // Bestehender Eintrag ab 01.01.2024 (offen), neue Erhoehung ab 01.01.2025.
-      // findMany spiegelt die Sicht der interaktiven Transaktion wider: Der
-      // eben erzeugte Eintrag ist bereits sichtbar und darf NICHT als sein
-      // eigener Vorgaenger beendet werden.
+      // Existing entry from 01.01.2024 (open), new increase from 01.01.2025.
+      // findMany mirrors the view of the interactive transaction: the just
+      // created entry is already visible and must NOT be ended as its own
+      // predecessor.
       mockDb.policyCostEntry.create.mockResolvedValue({
         id: entryId,
         policyId,
@@ -122,8 +122,8 @@ describe('CostTrackingService', () => {
         frequency: PaymentFrequency.MONTHLY,
       });
 
-      // Vorgaenger (c1) wird auf letzte Millisekunde vor dem neuen validFrom
-      // gesetzt – NICHT der neu erzeugte Eintrag selbst.
+      // Predecessor (c1) is set to the last millisecond before the new validFrom
+      // – NOT the newly created entry itself.
       expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'c1' },
@@ -137,7 +137,7 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('verweigert Erstellung ohne Household-Mitgliedschaft', async () => {
+    it('refuses creation without household membership', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -149,7 +149,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Erstellung bei fehlender Policy', async () => {
+    it('refuses creation when the policy is missing', async () => {
       mockMembership();
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
@@ -162,7 +162,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('verweigert Erstellung bei validTo <= validFrom', async () => {
+    it('refuses creation when validTo <= validFrom', async () => {
       mockMembership();
       mockPolicy();
 
@@ -176,7 +176,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('verweigert Erstellung bei doppeltem validFrom', async () => {
+    it('refuses creation on duplicate validFrom', async () => {
       mockMembership();
       mockPolicy();
       mockDb.policyCostEntry.findFirst.mockResolvedValue({ id: 'c1' });
@@ -192,7 +192,7 @@ describe('CostTrackingService', () => {
   });
 
   describe('findAll', () => {
-    it('gibt alle CostEntries einer Policy zurueck', async () => {
+    it('returns all cost entries of a policy', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyCostEntry.findMany.mockResolvedValue([
@@ -210,7 +210,7 @@ describe('CostTrackingService', () => {
   });
 
   describe('findOne', () => {
-    it('wirft NotFoundException bei fehlendem CostEntry', async () => {
+    it('throws NotFoundException when the CostEntry is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyCostEntry.findFirst.mockResolvedValue(null);
@@ -220,7 +220,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('gibt einen CostEntry zurueck', async () => {
+    it('returns a cost entry', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyCostEntry.findFirst.mockResolvedValue({
@@ -237,7 +237,7 @@ describe('CostTrackingService', () => {
   });
 
   describe('update', () => {
-    it('aktualisiert einen CostEntry und protokolliert Audit', async () => {
+    it('updates a cost entry and logs an audit', async () => {
       mockMembership();
       mockPolicy();
       mockDb.policyCostEntry.findFirst.mockResolvedValue({
@@ -264,7 +264,7 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('verweigert Aktualisierung bei validTo <= validFrom', async () => {
+    it('refuses update when validTo <= validFrom', async () => {
       mockMembership();
       mockPolicy();
       mockDb.policyCostEntry.findFirst.mockResolvedValue({
@@ -283,10 +283,10 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('BugFix-08: synchronisiert den Vorgaenger bei validFrom-Aenderung neu', async () => {
+    it('BugFix-08: re-synchronizes the predecessor when validFrom changes', async () => {
       mockMembership();
       mockPolicy();
-      // findFirst: 1) bearbeiteter Eintrag, 2) Kollisionscheck, 3) restorePredecessor.
+      // findFirst: 1) edited entry, 2) collision check, 3) restorePredecessor.
       mockDb.policyCostEntry.findFirst
         .mockResolvedValueOnce({
           id: entryId,
@@ -303,8 +303,8 @@ describe('CostTrackingService', () => {
         grossAmount: 150,
         frequency: 'MONTHLY',
       });
-      // findMany spiegelt die Transaktionssicht: auch der bearbeitete Eintrag
-      // ist sichtbar und darf NICHT als sein eigener Vorgaenger beendet werden.
+      // findMany mirrors the transaction view: the edited entry is also
+      // visible and must NOT be ended as its own predecessor.
       mockDb.policyCostEntry.findMany.mockResolvedValue([
         {
           id: 'c1',
@@ -326,8 +326,8 @@ describe('CostTrackingService', () => {
         validFrom: '2025-07-01',
       });
 
-      // c1 wird auf letzte Millisekunde vor dem neuen validFrom beendet –
-      // nicht der bearbeitete Eintrag selbst.
+      // c1 is ended at the last millisecond before the new validFrom –
+      // not the edited entry itself.
       expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'c1' },
@@ -336,10 +336,10 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('BugFix-08: validFrom nach hinten verschoben schliesst die Luecke (Vorgaenger wird wieder geoeffnet)', async () => {
+    it('BugFix-08: validFrom shifted backwards closes the gap (predecessor is reopened)', async () => {
       mockMembership();
       mockPolicy();
-      // findFirst: 1) bearbeiteter Eintrag, 2) Kollisionscheck, 3) restorePredecessor.
+      // findFirst: 1) edited entry, 2) collision check, 3) restorePredecessor.
       mockDb.policyCostEntry.findFirst
         .mockResolvedValueOnce({
           id: entryId,
@@ -351,13 +351,13 @@ describe('CostTrackingService', () => {
         })
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ id: 'c1' });
-      // update: 1) Eintrag selbst, 2) c1 wieder geoeffnet, 3) c1 am neuen validFrom beendet.
+      // update: 1) the entry itself, 2) c1 reopened, 3) c1 ended at the new validFrom.
       mockDb.policyCostEntry.update
         .mockResolvedValueOnce({ id: entryId, grossAmount: 150, frequency: 'MONTHLY' })
         .mockResolvedValueOnce({ id: 'c1', validTo: null })
         .mockResolvedValueOnce({ id: 'c1', validTo: new Date('2026-12-31T23:59:59.999Z') });
-      // Transaktionssicht NACH restorePredecessor: c1 ist wieder geoeffnet
-      // (validTo null) und existiert neben dem bearbeiteten Eintrag c2.
+      // Transaction view AFTER restorePredecessor: c1 is reopened (validTo
+      // null) and exists next to the edited entry c2.
       mockDb.policyCostEntry.findMany.mockResolvedValue([
         {
           id: 'c1',
@@ -379,14 +379,14 @@ describe('CostTrackingService', () => {
         validFrom: '2027-01-01',
       });
 
-      // 1) c1 wird zuerst wieder geoeffnet (kein Zeitraum ohne Eintrag) ...
+      // 1) c1 is reopened first (no period without an entry) ...
       expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'c1' },
           data: expect.objectContaining({ validTo: null }),
         }),
       );
-      // 2) ... und anschliessend am NEUEN validFrom beendet (deckt 2025+2026 ab).
+      // 2) ... and then ended at the NEW validFrom (covers 2025+2026).
       expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'c1' },
@@ -395,12 +395,12 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('BugFix-08: validFrom hinter eigenes auto-beendetes validTo verschoben entfernt das veraltete validTo (Middle-Entry, Review 3)', async () => {
+    it('BugFix-08: validFrom shifted behind its own auto-ended validTo removes the obsolete validTo (middle entry, review 3)', async () => {
       mockMembership();
       mockPolicy();
-      // c2 wurde durch c3 automatisch beendet: validTo = 2025-05-31T23:59:59.999.
-      // findFirst: 1) bearbeiteter Eintrag, 2) Auto-End-Signatur (c3 beginnt
-      // 1ms nach c2.validTo), 3) Kollisionscheck, 4) restorePredecessor.
+      // c2 was auto-ended by c3: validTo = 2025-05-31T23:59:59.999.
+      // findFirst: 1) edited entry, 2) auto-end signature (c3 begins
+      // 1ms after c2.validTo), 3) collision check, 4) restorePredecessor.
       mockDb.policyCostEntry.findFirst
         .mockResolvedValueOnce({
           id: entryId,
@@ -413,14 +413,14 @@ describe('CostTrackingService', () => {
         .mockResolvedValueOnce({ id: 'c3' })
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ id: 'c1' });
-      // update: 1) c2 selbst (veraltetes validTo entfernt), 2) c1 wieder
-      // geoeffnet, 3) c3 am neuen validFrom beendet.
+      // update: 1) c2 itself (obsolete validTo removed), 2) c1 reopened,
+      // 3) c3 ended at the new validFrom.
       mockDb.policyCostEntry.update
         .mockResolvedValueOnce({ id: entryId, grossAmount: 150, frequency: 'MONTHLY', validTo: null })
         .mockResolvedValueOnce({ id: 'c1', validTo: null })
         .mockResolvedValueOnce({ id: 'c3', validTo: new Date('2025-12-31T23:59:59.999Z') });
-      // Transaktionssicht nach restorePredecessor: c1 offen, c2 ausgeschlossen,
-      // c3 offen.
+      // Transaction view after restorePredecessor: c1 open, c2 excluded,
+      // c3 open.
       mockDb.policyCostEntry.findMany.mockResolvedValue([
         { id: 'c1', grossAmount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: null },
         { id: entryId, grossAmount: 150, frequency: 'MONTHLY', validFrom: new Date('2025-01-01'), validTo: null },
@@ -431,19 +431,19 @@ describe('CostTrackingService', () => {
         validFrom: '2026-01-01',
       });
 
-      // 1) c2: das veraltete (auto-beendete) validTo entfaellt – der Eintrag
-      // ist ab dem neuen validFrom aktiv.
+      // 1) c2: the obsolete (auto-ended) validTo is dropped – the entry
+      // becomes active from the new validFrom.
       expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: entryId },
           data: expect.objectContaining({ validFrom: new Date('2026-01-01'), validTo: null }),
         }),
       );
-      // 2) c1 wird wieder geoeffnet (deckt bis zur naechsten Erhoehung).
+      // 2) c1 is reopened (covers until the next increase).
       expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'c1' }, data: expect.objectContaining({ validTo: null }) }),
       );
-      // 3) c3 wird am neuen validFrom beendet – kein Zeitraum ohne Eintrag.
+      // 3) c3 is ended at the new validFrom – no period without an entry.
       expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'c3' },
@@ -452,11 +452,11 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('BugFix-08: manuell gesetztes validTo wird bei validFrom-Verschiebung nicht stillschweigend entfernt (Review 4)', async () => {
+    it('BugFix-08: a manually set validTo is not silently removed when validFrom is shifted (review 4)', async () => {
       mockMembership();
       mockPolicy();
-      // Manuell gesetztes validTo (2025-06-30) OHNE Nachfolger-Signatur:
-      // kein Eintrag beginnt exakt 1ms spaeter (2025-07-01).
+      // Manually set validTo (2025-06-30) WITHOUT a successor signature:
+      // no entry begins exactly 1ms later (2025-07-01).
       mockDb.policyCostEntry.findFirst
         .mockResolvedValueOnce({
           id: entryId,
@@ -477,10 +477,10 @@ describe('CostTrackingService', () => {
   });
 
   describe('remove', () => {
-    it('loescht einen CostEntry und protokolliert Audit', async () => {
+    it('deletes a CostEntry and logs an audit', async () => {
       mockMembership();
       mockPolicy();
-      // findFirst: 1) zu loeschender Eintrag, 2) restorePredecessor (keiner beendet).
+      // findFirst: 1) entry to delete, 2) restorePredecessor (nothing ended).
       mockDb.policyCostEntry.findFirst
         .mockResolvedValueOnce({
           id: entryId,
@@ -505,11 +505,11 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('BugFix-08: Loeschen einer Erhoehung oeffnet den Vorgaenger wieder (keine Luecke)', async () => {
+    it('BugFix-08: deleting an increase reopens the predecessor (no gap)', async () => {
       mockMembership();
       mockPolicy();
-      // findFirst: 1) zu loeschender Eintrag (Erhoehung ab 2025-01-01),
-      // 2) restorePredecessor findet den automatisch beendeten Vorgaenger c1.
+      // findFirst: 1) entry to delete (increase from 2025-01-01),
+      // 2) restorePredecessor finds the auto-ended predecessor c1.
       mockDb.policyCostEntry.findFirst
         .mockResolvedValueOnce({
           id: entryId,
@@ -525,7 +525,7 @@ describe('CostTrackingService', () => {
 
       await service.remove(householdId, userId, policyId, entryId);
 
-      // c1 (beendet am 2024-12-31T23:59:59.999) wird wieder geoeffnet.
+      // c1 (ended at 2024-12-31T23:59:59.999) is reopened.
       expect(mockDb.policyCostEntry.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'c1' },
@@ -535,7 +535,7 @@ describe('CostTrackingService', () => {
     });
   });
 
-  describe('getSchedule (BugFix-08: Perioden-Tabelle incurred/expected)', () => {
+  describe('getSchedule (BugFix-08: period table incurred/expected)', () => {
     function mockScheduleData(
       policy: Record<string, unknown>,
       entries: Array<Record<string, unknown>>,
@@ -545,7 +545,7 @@ describe('CostTrackingService', () => {
       mockDb.policyCostEntry.findMany.mockResolvedValue(entries);
     }
 
-    it('paidToDate = Summe der vollen begonnenen Perioden (keine Tagesanteile)', async () => {
+    it('paidToDate = sum of fully started periods (no daily fractions)', async () => {
       mockScheduleData(
         { startDate: new Date('2024-01-15'), paymentFrequency: PaymentFrequency.MONTHLY },
         [
@@ -560,7 +560,7 @@ describe('CostTrackingService', () => {
         ],
       );
 
-      // Fixer Zeitpunkt: 3 volle Perioden begonnen (15.01., 15.02., 15.03.).
+      // Fixed point in time: 3 full periods started (15.01., 15.02., 15.03.).
       const result = await service.getSchedule(
         householdId,
         user,
@@ -570,7 +570,7 @@ describe('CostTrackingService', () => {
 
       expect(result.current?.frequency).toBe('MONTHLY');
       expect(result.paidToDate).toBe(300);
-      // Vergangenheit = incurred, Zukunft = expected (projiziert aus aktivem Eintrag).
+      // Past = incurred, future = expected (projected from the active entry).
       expect(result.periods[0].status).toBe('incurred');
       expect(result.periods[0].amount).toBe(100);
       expect(result.periods[2].periodLabel).toBe('03/2024');
@@ -579,7 +579,7 @@ describe('CostTrackingService', () => {
       expect(result.periods[3].amount).toBe(100);
     });
 
-    it('nutzt die Jahresfrequenz der Versicherung (jaehrlich, 01/2024, ...)', async () => {
+    it('uses the yearly frequency of the policy (annual, 01/2024, ...)', async () => {
       mockScheduleData(
         { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.ANNUAL },
         [
@@ -607,7 +607,7 @@ describe('CostTrackingService', () => {
       expect(result.current?.annualGross).toBe(500);
     });
 
-    it('BugFix-08: Frequenzwechsel – Erhoehung ab 06/2024 fliesst in alle Folgeperioden ein', async () => {
+    it('BugFix-08: frequency switch – increase from 06/2024 flows into all following periods', async () => {
       mockScheduleData(
         { startDate: new Date('2024-01-15'), paymentFrequency: PaymentFrequency.MONTHLY },
         [
@@ -637,7 +637,7 @@ describe('CostTrackingService', () => {
         new Date('2024-08-31T12:00:00.000Z'),
       );
 
-      // 5 Perioden zu 100 (01-05/2024) + 3 Perioden zu 120 (06-08/2024).
+      // 5 periods of 100 (01-05/2024) + 3 periods of 120 (06-08/2024).
       expect(result.paidToDate).toBe(5 * 100 + 3 * 120);
       expect(result.periods[5].periodLabel).toBe('06/2024');
       expect(result.periods[5].amount).toBe(120);
@@ -645,7 +645,7 @@ describe('CostTrackingService', () => {
       expect(result.current?.grossAmount).toBe(120);
     });
 
-    it('BugFix-08: Kosten-Erhoehung mitten im Jahr (increase-mid-year)', async () => {
+    it('BugFix-08: cost increase mid-year (increase-mid-year)', async () => {
       mockScheduleData(
         { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
         [
@@ -675,15 +675,15 @@ describe('CostTrackingService', () => {
         new Date('2024-12-15T12:00:00.000Z'),
       );
 
-      // Alle 12 Perioden 2024 begonnen: 5 * 100 + 7 * 150.
+      // All 12 periods of 2024 started: 5 * 100 + 7 * 150.
       expect(result.paidToDate).toBe(5 * 100 + 7 * 150);
       expect(result.periods[4].amount).toBe(100);
       expect(result.periods[5].amount).toBe(150);
     });
 
-    it('skaliert Eintraege, deren Frequenz von der Abrechnungsfrequenz abweicht', async () => {
-      // Versicherung MONTHLY, Kosten-Eintrag QUARTERLY (300): jede Monatsperiode
-      // schuldet 300/3 = 100 – Jahres-Summe bleibt konsistent.
+    it('scales entries whose frequency differs from the billing frequency', async () => {
+      // Insurance MONTHLY, cost entry QUARTERLY (300): each monthly period
+      // owes 300/3 = 100 – the annual sum stays consistent.
       mockScheduleData(
         { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
         [
@@ -711,7 +711,7 @@ describe('CostTrackingService', () => {
       }
     });
 
-    it('realigned Perioden nach kurzen Monaten am Anker (Schaltjahr 2024)', async () => {
+    it('realigns periods after short months at the anchor (leap year 2024)', async () => {
       mockScheduleData(
         { startDate: new Date('2024-01-31'), paymentFrequency: PaymentFrequency.MONTHLY },
         [
@@ -738,7 +738,7 @@ describe('CostTrackingService', () => {
       expect(result.periods[2].periodStart).toBe('2024-03-31T00:00:00.000Z');
     });
 
-    it('liefert leere Periodenliste ohne CostEntries', async () => {
+    it('returns an empty period list without cost entries', async () => {
       mockScheduleData(
         { startDate: new Date('2024-01-15'), paymentFrequency: PaymentFrequency.MONTHLY },
         [],
@@ -756,7 +756,7 @@ describe('CostTrackingService', () => {
       expect(result.periods).toEqual([]);
     });
 
-    it('wirft NotFoundException bei fehlender Policy', async () => {
+    it('throws NotFoundException when the policy is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
@@ -766,8 +766,8 @@ describe('CostTrackingService', () => {
     });
   });
 
-  describe('getHouseholdSummary (BugFix-08 Q5: Haushaltsuebersicht)', () => {
-    it('aggregiert paidToDate, Monat, Jahr und perYear-Buckets ueber alle Policies', async () => {
+  describe('getHouseholdSummary (BugFix-08 Q5: household overview)', () => {
+    it('aggregates paidToDate, month, year and per-year buckets across all policies', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([
         {
@@ -797,12 +797,12 @@ describe('CostTrackingService', () => {
       );
 
       expect(result.policyCount).toBe(2);
-      // p1: 15 Monatsperioden begonnen (01/2024-03/2025) -> 1500, p2: 2 Jahresperioden -> 1000.
+      // p1: 15 monthly periods started (01/2024-03/2025) -> 1500, p2: 2 yearly periods -> 1000.
       expect(result.totals.paidToDate).toBe(2500);
       expect(result.totals.perYear).toBe(1700);
       // 100 (MONTHLY) + 500/12 (ANNUAL) = 141.67.
       expect(result.totals.perMonth).toBe(141.67);
-      // Historische Buckets: 2024 -> 1200 + 500, 2025 -> 3 * 100 + 500.
+      // Historical buckets: 2024 -> 1200 + 500, 2025 -> 3 * 100 + 500.
       expect(result.perYear).toEqual([
         { year: 2024, amount: 1700 },
         { year: 2025, amount: 800 },
@@ -811,7 +811,7 @@ describe('CostTrackingService', () => {
       expect(result.policies[0].perMonth).toBe(100);
     });
 
-    it('bugFix-08: perYear-Bucket beachtet Kosten-Erhoehung mitten im Jahr', async () => {
+    it('bugFix-08: perYear bucket accounts for a cost increase mid-year', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([
         {
@@ -832,12 +832,12 @@ describe('CostTrackingService', () => {
         new Date('2024-12-31T12:00:00.000Z'),
       );
 
-      // 6 * 100 + 6 * 150 = 1500 im Jahr 2024.
+      // 6 * 100 + 6 * 150 = 1500 in the year 2024.
       expect(result.perYear).toEqual([{ year: 2024, amount: 1500 }]);
       expect(result.totals.paidToDate).toBe(1500);
     });
 
-    it('ignoriert archivierte Policies', async () => {
+    it('ignores archived policies', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([]);
 
@@ -857,7 +857,7 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('behandelt Policies ohne CostEntries', async () => {
+    it('handles policies without cost entries', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([
         { id: 'p1', householdId, type: 'HAFTPFLICHT', insurerName: 'P1', costEntries: [] },
@@ -884,10 +884,10 @@ describe('CostTrackingService', () => {
       expect(result.totals.paidToDate).toBe(1000);
     });
 
-    it('READ_ONLY: summiert nur explizit freigegebene Policies (AP-16)', async () => {
+    it('READ_ONLY: sums only explicitly shared policies (AP-16)', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
       const readOnlyUser = { ...user, role: GlobalRole.READ_ONLY };
-      // Keine Freigaben -> getReadablePolicyIds liefert [].
+      // No shares -> getReadablePolicyIds returns [].
       mockDb.objectShare.findMany.mockResolvedValue([]);
       mockDb.insurancePolicy.findMany.mockResolvedValue([]);
 
@@ -905,7 +905,7 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('READ_ONLY: nutzt freigegebene Policy-IDs als Filter', async () => {
+    it('READ_ONLY: uses shared policy IDs as a filter', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
       const readOnlyUser = { ...user, role: GlobalRole.READ_ONLY };
       mockDb.objectShare.findMany.mockResolvedValue([
@@ -913,7 +913,7 @@ describe('CostTrackingService', () => {
       ]);
       mockDb.insurancePolicy.findMany
         .mockResolvedValueOnce([{ id: 'p1', householdId, archivedAt: null, type: 'KFZ', insurerName: 'P1' }]) // getReadablePolicyIds
-        .mockResolvedValueOnce([]); // Summary ohne Treffer (Freigabe deckt nichts ab)
+        .mockResolvedValueOnce([]); // Summary without hits (share covers nothing)
 
       const result = await service.getHouseholdSummary(
         householdId,
@@ -930,8 +930,8 @@ describe('CostTrackingService', () => {
     });
   });
 
-  describe('Household-Isolation', () => {
-    it('verweigert Zugriff ohne Mitgliedschaft bei findAll', async () => {
+  describe('Household isolation', () => {
+    it('refuses access without membership for findAll', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -939,7 +939,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Zugriff ohne Mitgliedschaft bei getSchedule', async () => {
+    it('refuses access without membership for getSchedule', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -947,7 +947,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Zugriff ohne Mitgliedschaft bei getHouseholdSummary', async () => {
+    it('refuses access without membership for getHouseholdSummary', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -955,7 +955,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('READ_ONLY: verweigert findAll ohne explizite Freigabe (AP-16)', async () => {
+    it('READ_ONLY: refuses findAll without explicit share (AP-16)', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.objectShare.findMany.mockResolvedValue([]);
@@ -966,7 +966,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('READ_ONLY: verweigert findOne ohne explizite Freigabe (AP-16)', async () => {
+    it('READ_ONLY: refuses findOne without explicit share (AP-16)', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.objectShare.findMany.mockResolvedValue([]);
@@ -977,7 +977,7 @@ describe('CostTrackingService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('READ_ONLY: verweigert getSchedule ohne explizite Freigabe (AP-16)', async () => {
+    it('READ_ONLY: refuses getSchedule without explicit share (AP-16)', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'READ_ONLY' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.objectShare.findMany.mockResolvedValue([]);

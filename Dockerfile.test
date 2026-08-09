@@ -33,6 +33,8 @@ COPY apps ./apps
 COPY packages ./packages
 COPY prisma ./prisma
 COPY eslint.config.mjs ./eslint.config.mjs
+COPY scripts/dependency-licenses.mjs ./scripts/dependency-licenses.mjs
+COPY docs/third-party-notices.md ./docs/third-party-notices.md
 
 RUN --mount=type=cache,id=versigo-pnpm-store,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \

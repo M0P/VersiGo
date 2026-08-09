@@ -6,10 +6,10 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { getSettingDefinition } from '@versigo/foundation';
 import { SystemConfigService } from '../system-config.service';
 
-// SSRF-Guard wird im Service-Spec gemockt (eigene Guard-Spec testet die
-// Blockliste); hier wird nur der Aufrufpfad verifiziert. `UnsafeEndpointError`
-// muss als echte Error-Klasse exportiert werden, damit die `instanceof`-
-// Pruefung im Service funktioniert.
+// The SSRF guard is mocked in the service spec (the dedicated guard spec
+// tests the blocklist); here only the call path is verified.
+// `UnsafeEndpointError` must be exported as a real error class so that the
+// `instanceof` check in the service works.
 const { assertSafeTestEndpoint, UnsafeEndpointError } = vi.hoisted(() => {
   class UnsafeEndpointError extends Error {
     constructor(message: string) {
@@ -59,15 +59,15 @@ function createMockResolver() {
       key,
       value: definition.defaultValue,
       source: 'DEFAULT' as const,
-      reason: 'Kein Wert konfiguriert – sicherer Code-Default aktiv',
+      reason: 'No value configured – safe code default active',
       uiValuePresent: false,
       uiValueInvalid: false,
       uiUpdatedAt: null,
     };
     if (definition.category === 'restart') {
-      // Vereinfachtes Mock: fuer Restart-Keys liegt ein pendenter Wert vor
-      // (die vollstaendige Semantik inkl. "bereits aktiv"-Unterdrueckung
-      // testet die Resolver-Spec).
+      // Simplified mock: for restart keys a pending value exists
+      // (the full semantics incl. the "already active" suppression are
+      // covered by the resolver spec).
       return { ...resolution, pendingRestartValue: definition.defaultValue };
     }
     return resolution;
@@ -118,7 +118,7 @@ describe('SystemConfigService', () => {
   });
 
   describe('list', () => {
-    it('liefert Eintraege fuer alle UI-konfigurierbaren Schluessel (keine Bootstrap-Keys)', async () => {
+    it('returns entries for all UI-configurable keys (no bootstrap keys)', async () => {
       const { db, service } = createService();
       const entries = await service.list();
 
@@ -131,7 +131,7 @@ describe('SystemConfigService', () => {
       expect(db.globalIntegrationSetting.findMany).toHaveBeenCalled();
     });
 
-    it('markiert Secrets und maskiert deren effektiven Wert', async () => {
+    it('marks secrets and masks their effective value', async () => {
       const { service } = createService();
       const entries = await service.list();
       const secretEntry = entries.find((e) => e.key === 'AI_OPENAI_COMPAT_API_KEY');
@@ -142,15 +142,15 @@ describe('SystemConfigService', () => {
       expect(secretEntry!.secretSet).toBe(false);
     });
 
-    it('markiert Neustart-Settings nur bei pendentem Wert als restartRequired', async () => {
+    it('marks restart settings as restartRequired only for a pending value', async () => {
       const { service } = createService();
       const entries = await service.list();
       const restartEntry = entries.find((e) => e.key === 'STORAGE_ENABLED');
       const runtimeEntry = entries.find((e) => e.key === 'AI_ENABLED');
 
       expect(restartEntry).toBeDefined();
-      // m8: "Neustart erforderlich" + pendingRestartValue nur fuer
-      // Restart-Keys mit pendentem (noch nicht aktivem) Wert.
+      // m8: "restart required" + pendingRestartValue only for restart
+      // keys with a pending (not yet active) value.
       expect(restartEntry!.restartRequired).toBe(true);
       expect(restartEntry!.pendingRestartValue).toBe(false);
       expect(runtimeEntry!.restartRequired).toBe(false);
@@ -159,30 +159,30 @@ describe('SystemConfigService', () => {
   });
 
   describe('get', () => {
-    it('wirft NotFoundException fuer unbekannten Schluessel', async () => {
+    it('throws NotFoundException for an unknown key', async () => {
       const { service } = createService();
       await expect(service.get('UNKNOWN_KEY')).rejects.toThrow(NotFoundException);
     });
 
-    it('wirft ForbiddenException fuer Bootstrap-Schluessel', async () => {
+    it('throws ForbiddenException for bootstrap keys', async () => {
       const { service } = createService();
       await expect(service.get('DATABASE_URL')).rejects.toThrow(ForbiddenException);
     });
 
-    it('liefert die Katalogansicht eines bekannten Schluessels', async () => {
+    it('returns the catalog view of a known key', async () => {
       const { service } = createService();
       const entry = await service.get('AI_ENABLED');
 
       expect(entry.key).toBe('AI_ENABLED');
       expect(entry.type).toBe('boolean');
       expect(entry.source).toBe('DEFAULT');
-      // Benutzername statt roher User-UUID (m6).
+      // Username instead of the raw user UUID (m6).
       expect(entry.uiUpdatedBy).toBe('admin');
     });
   });
 
   describe('update', () => {
-    it('persistiert einen validen Wert kanonisch und auditiert ohne Werte', async () => {
+    it('persists a valid value canonically and audits without values', async () => {
       const { db, store, service } = createService();
 
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null); // Neuanlage
@@ -204,13 +204,13 @@ describe('SystemConfigService', () => {
           }),
         }),
       );
-      // Kein Wert in der Audit-Diff – nur Key + Redaction-Flag
+      // No value in the audit diff – only key + redaction flag
       const auditCall = db.auditEvent.create.mock.calls[0][0].data as any;
       expect(auditCall.diffJson).toEqual({ key: 'AI_ENABLED', redacted: true });
       expect(entry.key).toBe('AI_ENABLED');
     });
 
-    it('aktualisiert einen bestehenden Wert ueber updateGlobalSetting', async () => {
+    it('updates an existing value via updateGlobalSetting', async () => {
       const { store, service } = createService();
 
       await service.update('AI_ENABLED', 'false', ACTOR);
@@ -224,7 +224,7 @@ describe('SystemConfigService', () => {
       expect(store.createGlobalSetting).not.toHaveBeenCalled();
     });
 
-    it('lehnt ungueltige Werte ab und persistiert nichts', async () => {
+    it('rejects invalid values and persists nothing', async () => {
       const { store, service } = createService();
 
       await expect(service.update('AI_ENABLED', 'yes', ACTOR)).rejects.toThrow(
@@ -240,7 +240,7 @@ describe('SystemConfigService', () => {
       expect(store.updateGlobalSetting).not.toHaveBeenCalled();
     });
 
-    it('persistiert Secrets verschluesselt (isSecret true) und auditiert ohne Klartext', async () => {
+    it('persists secrets encrypted (isSecret true) and audits without plain text', async () => {
       const { db, store, service } = createService();
 
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
@@ -256,7 +256,7 @@ describe('SystemConfigService', () => {
       expect(JSON.stringify(auditCall.diffJson)).not.toContain('sk-secret-123');
     });
 
-    it('lehnt Bootstrap-Schluessel ab', async () => {
+    it('rejects bootstrap keys', async () => {
       const { store, service } = createService();
       await expect(service.update('DATABASE_URL', 'postgres://x', ACTOR)).rejects.toThrow(
         ForbiddenException,
@@ -266,7 +266,7 @@ describe('SystemConfigService', () => {
   });
 
   describe('reset', () => {
-    it('loescht die UI-Zeile und auditiert den Reset', async () => {
+    it('deletes the UI row and audits the reset', async () => {
       const { db, store, service } = createService();
 
       await service.reset('AI_ENABLED', ACTOR);
@@ -279,7 +279,7 @@ describe('SystemConfigService', () => {
       );
     });
 
-    it('ist idempotent, wenn keine UI-Zeile existiert', async () => {
+    it('is idempotent when no UI row exists', async () => {
       const { db, store, service } = createService();
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
 
@@ -289,22 +289,22 @@ describe('SystemConfigService', () => {
   });
 
   describe('testConnectivity', () => {
-    it('wirft NotFoundException fuer unbekannte Schluessel', async () => {
+    it('throws NotFoundException for unknown keys', async () => {
       const { service } = createService();
       await expect(service.testConnectivity('NOPE', ACTOR)).rejects.toThrow(NotFoundException);
     });
 
-    it('wirft BadRequestException fuer nicht pruefbare Schluessel', async () => {
+    it('throws BadRequestException for keys that cannot be tested', async () => {
       const { service } = createService();
       await expect(service.testConnectivity('AI_PROVIDER', ACTOR)).rejects.toThrow(
         BadRequestException,
       );
     });
 
-    it('meldet Erfolg bei erreichbarem Endpunkt (Ollama) und auditiert den Test', async () => {
+    it('reports success for a reachable endpoint (Ollama) and audits the test', async () => {
       const { db, service } = createService();
-      // Der eigentliche Request laeuft seit BugFix-06 Teil 2 ueber
-      // testEndpoint() (axios, TLS-Lockerung moeglich) – also axios statt
+      // Since BugFix-06 part 2 the actual request runs via
+      // testEndpoint() (axios, TLS relaxation possible) – so axios instead
       // globalem fetch mocken.
       const axiosGetMock = vi
         .spyOn(axios, 'get')
@@ -318,14 +318,14 @@ describe('SystemConfigService', () => {
         'http://localhost:11434/api/tags',
         expect.objectContaining({ signal: expect.anything() }),
       );
-      // SSRF-Guard wird VOR dem Request aufgerufen (Guard selbst ist in der
-      // eigenen Spec getestet, hier nur der Aufrufpfad).
+      // The SSRF guard is called BEFORE the request (the guard itself is
+      // tested in its own spec; here only the call path).
       expect(assertSafeTestEndpoint).toHaveBeenCalledWith(
         'http://localhost:11434/api/tags',
         expect.objectContaining({ allowPrivate: false }),
       );
-      // Connectivity-Tests werden revisionssicher auditiert (M1) – ohne
-      // URLs/Tokens, nur Key + Status.
+      // Connectivity tests are audited revision-safe (M1) – without
+      // URLs/tokens, only key + status.
       const auditCall = db.auditEvent.create.mock.calls[0][0].data as any;
       expect(auditCall.action).toBe('SYSTEM_CONFIG_TESTED');
       expect(auditCall.entityId).toBe('AI_OLLAMA_BASE_URL');
@@ -334,7 +334,7 @@ describe('SystemConfigService', () => {
       axiosGetMock.mockRestore();
     });
 
-    it('meldet Verbindungsfehler sicher ohne Secrets', async () => {
+    it('reports connection errors safely without secrets', async () => {
       const { service } = createService();
       const axiosGetMock = vi
         .spyOn(axios, 'get')
@@ -348,10 +348,10 @@ describe('SystemConfigService', () => {
       axiosGetMock.mockRestore();
     });
 
-    it('lehnt unsichere Endpunkte (SSRF) ab, ohne sie anzufragen', async () => {
+    it('rejects unsafe endpoints (SSRF) without querying them', async () => {
       const { service } = createService();
       assertSafeTestEndpoint.mockRejectedValueOnce(
-        new UnsafeEndpointError('Adresse liegt in einem gesperrten Bereich'),
+        new UnsafeEndpointError('Address lies in a blocked range'),
       );
       const axiosGetMock = vi.spyOn(axios, 'get');
 

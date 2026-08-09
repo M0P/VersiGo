@@ -10,25 +10,26 @@ import {
 import { WorkerModule } from './worker.module';
 
 /**
- * Worker-Startpunkt. Bootet einen Standalone-Application-Context,
- * kein HTTP-Server. Initialisiert nur die gemeinsame Foundation
- * (Config, Datenbank, Queue-Infrastruktur, Capability-Flags) und
- * registriert die fachlichen Job-Prozessoren (AiExtractionProcessor).
+ * Worker entry point. Boots a standalone application context,
+ * no HTTP server. Initializes only the shared foundation
+ * (config, database, queue infrastructure, capability flags) and
+ * registers the domain job processors (AiExtractionProcessor).
  *
- * AP-17: Vor dem Nest-Bootstrap werden Neustart-Settings (Kategorie
- * "restart") aus der Datenbank in process.env geschrieben, damit sie ab
- * dem ersten Prozessstart wirken (Fail-soft bei nicht erreichbarer DB).
+ * AP-17: Before the Nest bootstrap, restart settings (category
+ * "restart") are written from the database into process.env so they
+ * take effect from the first process start (fail-soft if the DB is
+ * unreachable).
  *
- * AP-19: Nach dem Bootstrap startet der Worker seinen Heartbeat
- * (Datenbank-Upsert fuer GET /ready der API) und einen minimalen
- * Liveness-Server (WORKER_HEALTH_PORT, Standard 3100) fuer den
- * Compose-Healthcheck.
+ * AP-19: After the bootstrap the worker starts its heartbeat
+ * (database upsert for the API's GET /ready) and a minimal liveness
+ * server (WORKER_HEALTH_PORT, default 3100) for the compose
+ * healthcheck.
  *
- * Hinweis: createApplicationContext() emittiert – anders als der
- * HTTP-Server (`NestFactory.create`) – kein 'Nest application
- * successfully started'. Der Worker loggt daher nach erfolgreichem
- * Bootstrap eine eigene Ready-Meldung, auf die u. a. der Compose-
- * Smoke-Test wartet.
+ * Note: createApplicationContext() – unlike the HTTP server
+ * (`NestFactory.create`) – does not emit 'Nest application
+ * successfully started'. The worker therefore logs its own ready
+ * message after a successful bootstrap, which the compose smoke test
+ * waits for among other things.
  */
 async function bootstrap(): Promise<void> {
   await preloadRestartSettingsIntoEnv();
@@ -36,26 +37,26 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.createApplicationContext(WorkerModule);
   app.enableShutdownHooks();
 
-  // AP-19: Health-/Readiness-Grundlage des Workers
+  // AP-19: health/readiness foundation of the worker
   app.get(WorkerHeartbeatService).start();
   app.get(WorkerLivenessService).start();
 
-  // BugFix-06 (Teil 3.4): Admin-Neustart ueber die UI. Der Worker
-  // konsumiert die Redis-Neustart-Anforderung und beendet sich sauber,
-  // damit er die Restart-Kategorie-Settings beim naechsten Start
-  // uebernimmt (Compose restart: unless-stopped).
+  // BugFix-06 (part 3.4): admin restart via the UI. The worker consumes
+  // the Redis restart request and shuts down cleanly so that it picks up
+  // the restart-category settings on the next start
+  // (compose restart: unless-stopped).
   const restartCoordinator = app.get(RestartCoordinatorService);
   restartCoordinator.watchRestartRequests((payload) => {
     new Logger('RestartWatcher').log(
-      `Neustart durch '${payload.requestedBy}' angefordert` +
-        (payload.reason ? ` (Grund: ${payload.reason})` : '') +
-        ' – Worker wird sauber beendet.',
+      `Restart requested by '${payload.requestedBy}'` +
+        (payload.reason ? ` (reason: ${payload.reason})` : '') +
+        ' – worker is shutting down cleanly.',
     );
     void app.close().then(() => process.exit(0));
   });
 
   new Logger('WorkerBootstrap').log(
-    'Worker bereit - Queue-Infrastruktur verbunden (PostgreSQL + Redis).',
+    'Worker ready - queue infrastructure connected (PostgreSQL + Redis).',
   );
 
   process.on('SIGTERM', () => {

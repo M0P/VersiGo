@@ -59,15 +59,16 @@ interface OpenAiRuntimeConfig {
   model: string;
   timeout: number;
   configured: boolean;
-  /** BugFix-06: HTTPS-Agent mit deaktivierter Zertifikatsvalidierung (opt-in). */
+  /** BugFix-06: HTTPS agent with disabled certificate validation (opt-in). */
   httpsAgent?: import('https').Agent;
 }
 
 /**
- * OpenAI-kompatibler Adapter (AP-17): liest seine Konfiguration pro Aufruf
- * ueber die zentrale Settings-Aufloesung (UI > .env > Default). Dadurch
- * wirken Admin-UI-Aenderungen an AI_OPENAI_COMPAT_* sofort, ohne Neustart.
- * Der API-Key wird intern entschluesselt geliefert und nie protokolliert.
+ * OpenAI-compatible adapter (AP-17): reads its configuration per call
+ * via the central settings resolution (UI > .env > default). This
+ * means admin UI changes to AI_OPENAI_COMPAT_* take effect immediately,
+ * without a restart.
+ * The API key is supplied internally decrypted and never logged.
  */
 @Injectable()
 export class OpenAiCompatAdapter implements IAIAdapter {
@@ -92,8 +93,8 @@ export class OpenAiCompatAdapter implements IAIAdapter {
 
     if (configured && baseUrl.startsWith('http://')) {
       this.logger.warn(
-        'AI_OPENAI_COMPAT_BASE_URL verwendet HTTP. Der API-Key wird im Klartext ' +
-          'uebertragen. Verwende https:// fuer Produktionsumgebungen.',
+        'AI_OPENAI_COMPAT_BASE_URL uses HTTP. The API key is transmitted ' +
+          'in plaintext. Use https:// for production environments.',
       );
     }
 
@@ -169,7 +170,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
 
     const parsed = tryParseExtractionResponse(raw, config.model);
     if (!parsed) {
-      this.logger.warn(`Konnte JSON nicht parsen aus AI-Antwort: ${raw.substring(0, 200)}`);
+      this.logger.warn(`Could not parse JSON from AI response: ${raw.substring(0, 200)}`);
       return null;
     }
 
@@ -229,12 +230,12 @@ export class OpenAiCompatAdapter implements IAIAdapter {
   private logError(method: string, err: unknown): void {
     if (err instanceof AxiosError) {
       this.logger.warn(
-        `OpenAI-API ${method} fehlgeschlagen: status=${err.response?.status ?? 'keine Antwort'}, message=${err.message}`,
+        `OpenAI API ${method} failed: status=${err.response?.status ?? 'no response'}, message=${err.message}`,
       );
     } else if (err instanceof Error) {
-      this.logger.warn(`OpenAI-API ${method} Fehler: ${err.message}`);
+      this.logger.warn(`OpenAI API ${method} error: ${err.message}`);
     } else {
-      this.logger.warn(`OpenAI-API ${method} unbekannter Fehler`);
+      this.logger.warn(`OpenAI API ${method} unknown error`);
     }
   }
 }

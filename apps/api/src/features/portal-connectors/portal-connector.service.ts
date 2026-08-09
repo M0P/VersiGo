@@ -13,7 +13,7 @@ import type {
   PortalConnectorPlugin,
 } from './portal-connector.interface';
 
-/** Oeffentliche Sicht auf einen Katalog-Eintrag (ohne interne Details). */
+/** Public view of a catalog entry (without internal details). */
 export interface PortalCatalogView {
   providerKey: string;
   displayName: string;
@@ -23,7 +23,7 @@ export interface PortalCatalogView {
   experimentalCapabilities: PortalCapability[];
 }
 
-/** Oeffentliche Sicht auf ein Connector-Plugin inkl. Verfuegbarkeit. */
+/** Public view of a connector plugin incl. availability. */
 export interface PortalConnectorView {
   key: string;
   displayName: string;
@@ -34,8 +34,8 @@ export interface PortalConnectorView {
 }
 
 /**
- * Angereicherte Sicht auf einen Portal-Link.
- * `credentialsEncrypted` wird NIE zurueckgegeben – nur `credentialsSet`.
+ * Enriched view of a portal link.
+ * `credentialsEncrypted` is NEVER returned - only `credentialsSet`.
  */
 export interface EnrichedPortalLink {
   id: string;
@@ -57,13 +57,13 @@ export interface EnrichedPortalLink {
 }
 
 /**
- * Zentrale Fassade der Portal-Connectoren (AP-18).
+ * Central facade of the portal connectors (AP-18).
  *
- * Stellt Katalog, Plugin-Registry und Deep-Link-Aufloesung bereit und
- * reichert Portal-Links fuer die API-Antworten an. Alle Methoden sind
- * bewusst fehlertolerant: Ein unbekannter oder deaktivierter Connector
- * liefert kontrollierte leere Ergebnisse, ohne den Portal-Link zu
- * beeintraechtigen (Resilienz-Akzeptanzkriterium).
+ * Provides catalog, plugin registry and deep-link resolution and
+ * enriches portal links for the API responses. All methods are
+ * deliberately fault-tolerant: an unknown or disabled connector
+ * returns controlled empty results without corrupting the portal link
+ * (resilience acceptance criterion).
  */
 @Injectable()
 export class PortalConnectorService {
@@ -75,28 +75,28 @@ export class PortalConnectorService {
     return PORTAL_CATALOG_VERSION;
   }
 
-  /** Katalog-Eintraege als flache, unveraenderbare Sicht. */
+  /** Catalog entries as a flat, immutable view. */
   listCatalog(): PortalCatalogView[] {
     return listPortalCatalog().map((entry) => this.toCatalogView(entry));
   }
 
-  /** Einzelner Katalog-Eintrag oder null. */
+  /** Single catalog entry or null. */
   getCatalogEntry(providerKey: string): PortalCatalogView | null {
     const entry = getPortalCatalogEntry(providerKey);
     return entry ? this.toCatalogView(entry) : null;
   }
 
-  /** Alle registrierten Plugins inkl. Verfuegbarkeit. */
+  /** All registered plugins incl. availability. */
   listPlugins(): PortalConnectorView[] {
     return this.registry.list().map((plugin) => this.toConnectorView(plugin));
   }
 
   /**
-   * Health-Check eines Plugins. Unbekannte Plugins melden kontrolliert
-   * "nicht verfuegbar" (HTTP 200 mit Degradations-Status) statt zu brechen.
-   * Auch ein werfender `healthCheck()` eines Plugins wird abgefangen und
-   * als kontrollierter Degradations-Status gemeldet (Resilienz-Regel:
-   * ein fehlerhaftes Plugin darf nie einen HTTP-500 ausloesen).
+   * Health check of a plugin. Unknown plugins report "unavailable" in a
+   * controlled way (HTTP 200 with degradation status) instead of breaking.
+   * A throwing `healthCheck()` of a plugin is also caught and reported as
+   * a controlled degradation status (resilience rule: a faulty plugin
+   * must never cause an HTTP-500).
    */
   async getPluginHealth(key: string): Promise<PortalConnectorHealth> {
     const plugin = this.registry.get(key);
@@ -124,17 +124,16 @@ export class PortalConnectorService {
   }
 
   /**
-   * Deep-Link-Aufloesung (Kernumfang).
-   * Reihenfolge: manuell gesetzter `portalUrl` > Katalog-Deep-Link-Vorlage
-   * (mit {contractNumber}-Substitution, falls Platzhalter vorhanden).
-   * Liefert null, wenn kein Deeplink bestimmbar ist.
+   * Deep-link resolution (core scope).
+   * Order: manually set `portalUrl` > catalog deep-link template (with
+   * {contractNumber} substitution if a placeholder exists).
+   * Returns null if no deep link can be determined.
    *
-   * Defense-in-depth: Eine manuell gesetzte `portalUrl` wird nur uebernommen,
-   * wenn sie ein http(s)-Schema hat. Die DTO-Ebene blockiert andere Schemata
-   * bereits bei create/update; diese Pruefung schuetzt zusaetzlich Daten, die
-   * ausserhalb des validierten API-Pfads entstanden sind, davor, als
-   * `deepLinkUrl` in ein `<a href>` gerendert zu werden (kein `javascript:`/
-   * `data:`-Ziel).
+   * Defense-in-depth: a manually set `portalUrl` is only adopted when it
+   * has an http(s) scheme. The DTO layer already blocks other schemes at
+   * create/update; this check additionally protects data created outside
+   * the validated API path from being rendered as `deepLinkUrl` into an
+   * `<a href>` (no `javascript:`/`data:` target).
    */
   resolveDeepLink(
     link: { portalUrl: string | null; providerKey: string },
@@ -150,13 +149,12 @@ export class PortalConnectorService {
   }
 
   /**
-   * Defense-in-depth (Single Source of Truth fuer die Link-Ausgabe):
-   * Nur http(s)-URLs werden als `portalUrl` an den Client durchgereicht
-   * (getrimmt und in einem einheitlichen Format). Die DTO-Ebene blockiert
-   * andere Schemata bereits bei create/update; diese Pruefung schuetzt
-   * zusaetzlich Daten, die ausserhalb des validierten API-Pfads entstanden
-   * sind, davor, als Link-Ziel in ein `<a href>` gerendert zu werden
-   * (kein `javascript:`/`data:`-Ziel).
+   * Defense-in-depth (single source of truth for link output):
+   * Only http(s) URLs are passed to the client as `portalUrl` (trimmed
+   * and in a uniform format). The DTO layer already blocks other schemes
+   * at create/update; this check additionally protects data created
+   * outside the validated API path from being rendered as a link target
+   * in an `<a href>` (no `javascript:`/`data:` target).
    */
   private parseHttpUrl(value: string | null): URL | null {
     const manual = value?.trim();
@@ -170,9 +168,9 @@ export class PortalConnectorService {
   }
 
   /**
-   * Reichert einen Portal-Link fuer API-Antworten an. Entfernt dabei
-   * `credentialsEncrypted` (nie ausgeben) und ergaenzt `credentialsSet`,
-   * `deepLinkUrl`, Katalog- und Connector-Sicht.
+   * Enriches a portal link for API responses. Removes
+   * `credentialsEncrypted` (never returned) and adds `credentialsSet`,
+   * `deepLinkUrl`, catalog and connector views.
    */
   enrichPortalLink(link: PortalAccountLink, contractNumber: string | null): EnrichedPortalLink {
     const entry = getPortalCatalogEntry(link.providerKey);

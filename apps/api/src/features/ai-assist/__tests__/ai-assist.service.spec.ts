@@ -104,7 +104,7 @@ describe('AiAssistService', () => {
   });
 
   describe('startExtraction', () => {
-    it('startet einen Extraktions-Job', async () => {
+    it('starts an extraction job', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.aiExtractionJob.findFirst.mockResolvedValue(null);
@@ -124,7 +124,7 @@ describe('AiAssistService', () => {
       expect(mockDb.aiExtractionJob.create).toHaveBeenCalled();
     });
 
-    it('verweigert ohne Household-Mitgliedschaft', async () => {
+    it('refuses without household membership', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -132,7 +132,7 @@ describe('AiAssistService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('wirft Fehler bei fehlender Policy', async () => {
+    it('throws an error when the policy is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
@@ -141,7 +141,7 @@ describe('AiAssistService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('gibt existierenden Job zurueck bei laufender Extraktion', async () => {
+    it('returns the existing job for a running extraction', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.aiExtractionJob.findFirst.mockResolvedValue({ id: 'existing-job', policyId, status: 'PENDING' });
@@ -152,7 +152,7 @@ describe('AiAssistService', () => {
       expect(mockDb.aiExtractionJob.create).not.toHaveBeenCalled();
     });
 
-    it('wirft ForbiddenException bei deaktiviertem AI', async () => {
+    it('throws ForbiddenException when AI is disabled', async () => {
       const mockSettings = createMockSettings(false);
       const mockRegistry = createMockProviderRegistry();
       const mockQueue = createMockQueue();
@@ -172,7 +172,7 @@ describe('AiAssistService', () => {
   });
 
   describe('getJobStatus', () => {
-    it('gibt Job-Status zurueck', async () => {
+    it('returns the job status', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.aiExtractionJob.findFirst.mockResolvedValue({
         id: 'job-1',
@@ -187,7 +187,7 @@ describe('AiAssistService', () => {
       expect(result.extractedFieldsJson).toEqual({ insurerName: 'Test AG' });
     });
 
-    it('wirft NotFoundException bei unbekanntem Job', async () => {
+    it('throws NotFoundException for an unknown job', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.aiExtractionJob.findFirst.mockResolvedValue(null);
 
@@ -198,7 +198,7 @@ describe('AiAssistService', () => {
   });
 
   describe('listJobs', () => {
-    it('listet alle Jobs einer Policy', async () => {
+    it('lists all jobs of a policy', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.aiExtractionJob.findMany.mockResolvedValue([
         { id: 'job-1', policyId, status: 'COMPLETED' },
@@ -215,7 +215,7 @@ describe('AiAssistService', () => {
   });
 
   describe('summarize', () => {
-    it('erstellt Zusammenfassung', async () => {
+    it('creates a summary', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findMany.mockResolvedValue([]);
@@ -230,7 +230,7 @@ describe('AiAssistService', () => {
       expect(result).toBeNull(); // NoOp adapter returns null
     });
 
-    it('wirft ForbiddenException bei deaktiviertem AI', async () => {
+    it('throws ForbiddenException when AI is disabled', async () => {
       const mockSettings = createMockSettings(false);
       const mockRegistry = createMockProviderRegistry();
       const mockQueue = createMockQueue();
@@ -248,7 +248,7 @@ describe('AiAssistService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('wirft NotFoundException bei fehlender Policy', async () => {
+    it('throws NotFoundException when the policy is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
@@ -257,8 +257,8 @@ describe('AiAssistService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('erstellt Zusammenfassung erfolgreich und bereinigt alte Eintraege via Transaktion', async () => {
-      // Verwende einen gemockten Adapter, der Daten zurueckgibt
+    it('creates a summary successfully and prunes old entries via a transaction', async () => {
+      // Use a mocked adapter that returns data
       const mockAdapter = {
         providerKey: 'test-provider',
         summarizeCoverage: vi.fn().mockResolvedValue({
@@ -287,10 +287,10 @@ describe('AiAssistService', () => {
         { id: 'doc-1', fileName: 'test.pdf', mimeType: 'application/pdf' },
       ]);
 
-      // Simuliere 6 alte Zusammenfassungen (eine wird geloescht)
+      // Simulate 6 old summaries (one gets deleted)
       const oldSummaries = Array.from({ length: 6 }, (_, i) => ({ id: `old-${i + 1}` }));
       const txMock = createMockTx();
-      txMock.aiCoverageSummary.findMany.mockResolvedValue(oldSummaries.slice(5)); // nach skip 5 bleibt 1
+      txMock.aiCoverageSummary.findMany.mockResolvedValue(oldSummaries.slice(5)); // after skip 5, 1 remains
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockDb.$transaction.mockImplementation(async (cb: (tx: any) => Promise<any>) => cb(txMock));
 
@@ -299,13 +299,13 @@ describe('AiAssistService', () => {
       expect(result).not.toBeNull();
       expect(result?.summaryMarkdown).toBe('# Test Zusammenfassung');
       expect(txMock.aiCoverageSummary.create).toHaveBeenCalled();
-      // Pruefe, dass alte Eintraege bereinigt wurden
+      // Verify that old entries were pruned
       expect(txMock.aiCoverageSummary.deleteMany).toHaveBeenCalled();
     });
   });
 
   describe('getLatestSummaryWithSources', () => {
-    it('gibt Zusammenfassung mit aufgeloesten Quelldokumenten zurueck', async () => {
+    it('returns a summary with resolved source documents', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.aiCoverageSummary.findFirst.mockResolvedValue({
         id: 'summary-1',
@@ -329,7 +329,7 @@ describe('AiAssistService', () => {
       expect(result.providerKey).toBe('ollama');
     });
 
-    it('gibt leere sourceDocuments bei fehlenden Referenzen zurueck', async () => {
+    it('returns empty sourceDocuments when references are missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.aiCoverageSummary.findFirst.mockResolvedValue({
         id: 'summary-1',
@@ -347,7 +347,7 @@ describe('AiAssistService', () => {
       expect(result.providerKey).toBe('openai-compat');
     });
 
-    it('wirft NotFoundException bei fehlender Zusammenfassung', async () => {
+    it('throws NotFoundException when the summary is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.aiCoverageSummary.findFirst.mockResolvedValue(null);
 
@@ -356,7 +356,7 @@ describe('AiAssistService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('resolved nur vorhandene Dokumente aus sourceDocumentRefs', async () => {
+    it('resolves only existing documents from sourceDocumentRefs', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.aiCoverageSummary.findFirst.mockResolvedValue({
         id: 'summary-1',
@@ -368,7 +368,7 @@ describe('AiAssistService', () => {
         createdAt: new Date('2025-01-01'),
       });
       mockDb.policyDocument.findMany.mockResolvedValue([
-        { id: 'doc-exists', fileName: 'Vorhanden.pdf' },
+        { id: 'doc-exists', fileName: 'present.pdf' },
       ]);
 
       const result = await service.getLatestSummaryWithSources(householdId, user, policyId);
@@ -379,7 +379,7 @@ describe('AiAssistService', () => {
   });
 
   describe('setDocumentExclusion', () => {
-    it('setzt Ausschlussmarkierung fuer Dokument', async () => {
+    it('sets the exclusion flag for a document', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.policyDocument.findFirst.mockResolvedValue({ id: 'doc-1', policyId });
       mockDb.policyDocument.update.mockResolvedValue({ id: 'doc-1', aiProcessingExcluded: true });
@@ -395,7 +395,7 @@ describe('AiAssistService', () => {
       );
     });
 
-    it('wirft NotFoundException bei unbekanntem Dokument', async () => {
+    it('throws NotFoundException for an unknown document', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.policyDocument.findFirst.mockResolvedValue(null);
 
@@ -406,7 +406,7 @@ describe('AiAssistService', () => {
   });
 
   describe('healthCheck', () => {
-    it('meldet nicht verbunden bei deaktiviertem AI', async () => {
+    it('reports not connected when AI is disabled', async () => {
       const mockSettings = createMockSettings(false);
       const mockRegistry = createMockProviderRegistry();
       const mockQueue = createMockQueue();
@@ -424,7 +424,7 @@ describe('AiAssistService', () => {
       expect(result).toEqual({ connected: false, provider: 'none' });
     });
 
-    it('meldet Provider mit NoOp bei verbundenem AI', async () => {
+    it('reports a provider with NoOp when AI is connected', async () => {
       mockDb.householdMembership.findUnique = vi.fn();
 
       const result = await service.healthCheck();

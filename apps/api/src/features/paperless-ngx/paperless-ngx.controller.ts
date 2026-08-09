@@ -6,18 +6,18 @@ import { PAPERLESS_ADAPTER, IPaperlessAdapter, PaperlessSearchResult } from './p
 import { Roles } from '../identity/roles.decorator';
 
 /**
- * BugFix-07 (Q3): Live-Suche in Paperless-ngx fuer die Policy-Detailansicht.
- * Der Adapter degradiert kontrolliert (leeres Ergebnis), wenn Paperless
- * deaktiviert oder nicht erreichbar ist.
+ * BugFix-07 (Q3): live search in Paperless-ngx for the policy detail view.
+ * The adapter degrades in a controlled way (empty result) when Paperless
+ * is disabled or unreachable.
  */
 class PaperlessSearchQueryDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
-  // Paperless' eigene Query-Syntax erlaubt Feldfilter (z.B. type:1) und
-  // Volltextbegriffe. Wir erlauben ein breites Alphabet (kein riskantes
-  // Encoding noetig – der Begriff wird vor der Weitergabe URL-encodiert),
-  // beschraenken aber die Laenge auf 200 Zeichen.
+  // Paperless' own query syntax allows field filters (e.g. type:1) and
+  // full-text terms. We allow a broad alphabet (no risky encoding needed -
+  // the term is URL-encoded before forwarding) but limit the length to
+  // 200 characters.
   @Matches(/^[\w\s.:",'-]{0,200}$/)
   search?: string;
 }

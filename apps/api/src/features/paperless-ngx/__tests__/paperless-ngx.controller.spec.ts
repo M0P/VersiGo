@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { PaperlessController } from '../paperless-ngx.controller';
 import { IPaperlessAdapter } from '../paperless-ngx.interface';
 
-// BugFix-07 (Q3): GET /paperless/documents – Live-Suche mit kontrollierter
-// Degradierung, wenn Paperless deaktiviert ist.
+// BugFix-07 (Q3): GET /paperless/documents – live search with controlled
+// degradation when Paperless is disabled.
 describe('PaperlessController', () => {
   function createMockAdapter(): IPaperlessAdapter {
     return {
@@ -15,7 +15,7 @@ describe('PaperlessController', () => {
     };
   }
 
-  it('sucht nach einem Suchbegriff und gibt Treffer zurueck', async () => {
+  it('searches for a term and returns matches', async () => {
     const adapter = createMockAdapter();
     adapter.searchDocuments = vi.fn().mockResolvedValue([
       { paperlessId: 42, title: 'KFZ-Versicherung', deepLink: 'https://paperless.example.com/documents/42/', tags: [], correspondent: null },
@@ -29,7 +29,7 @@ describe('PaperlessController', () => {
     expect(result[0].paperlessId).toBe(42);
   });
 
-  it('liefert ein leeres Ergebnis bei leerem Suchbegriff', async () => {
+  it('returns an empty result for an empty search term', async () => {
     const adapter = createMockAdapter();
     const controller = new PaperlessController(adapter);
 
@@ -39,7 +39,7 @@ describe('PaperlessController', () => {
     expect(result).toEqual([]);
   });
 
-  it('liefert ein leeres Ergebnis ohne Suchbegriff', async () => {
+  it('returns an empty result without a search term', async () => {
     const adapter = createMockAdapter();
     const controller = new PaperlessController(adapter);
 
@@ -49,7 +49,7 @@ describe('PaperlessController', () => {
     expect(result).toEqual([]);
   });
 
-  it('degradiert kontrolliert, wenn Paperless nicht konfiguriert ist', async () => {
+  it('degrades in a controlled way when Paperless is not configured', async () => {
     const adapter = createMockAdapter();
     adapter.searchDocuments = vi.fn().mockResolvedValue([]);
     const controller = new PaperlessController(adapter);

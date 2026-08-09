@@ -41,13 +41,13 @@ describe('OllamaAdapter', () => {
     } as never;
   });
 
-  it('hat providerKey "ollama"', () => {
+  it('has providerKey "ollama"', () => {
     const settings = createMockSettings();
     const adapter = new OllamaAdapter(httpService, settings);
     expect(adapter.providerKey).toBe('ollama');
   });
 
-  it('extractContractFacts gibt null bei leeren Dokumenten', async () => {
+  it('extractContractFacts returns null for empty documents', async () => {
     const settings = createMockSettings();
     const adapter = new OllamaAdapter(httpService, settings);
 
@@ -55,7 +55,7 @@ describe('OllamaAdapter', () => {
     expect(result).toBeNull();
   });
 
-  it('extractContractFacts gibt null bei API-Fehler', async () => {
+  it('extractContractFacts returns null on an API error', async () => {
     const settings = createMockSettings();
     const adapter = new OllamaAdapter(httpService, settings);
 
@@ -99,7 +99,7 @@ describe('OllamaAdapter', () => {
     expect(result!.model).toBe('llama3');
   });
 
-  it('summarizeCoverage gibt null bei leeren Dokumenten', async () => {
+  it('summarizeCoverage returns null for empty documents', async () => {
     const settings = createMockSettings();
     const adapter = new OllamaAdapter(httpService, settings);
 
@@ -107,7 +107,7 @@ describe('OllamaAdapter', () => {
     expect(result).toBeNull();
   });
 
-  it('healthCheck gibt false bei API-Fehler', async () => {
+  it('healthCheck returns false on an API error', async () => {
     const settings = createMockSettings();
     const adapter = new OllamaAdapter(httpService, settings);
 

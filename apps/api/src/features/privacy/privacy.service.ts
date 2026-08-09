@@ -11,12 +11,12 @@ import * as path from 'path';
 import type { AuthenticatedUser } from '../identity/auth.service';
 
 /**
- * GDPR-Export (ohne Binärdateien / Roh-AI-Payloads):
- * - Konto (ohne Passwort-Hash, ohne verschluesselte Werte)
- * - Praeferenzen, Household-Mitgliedschaften
- * - Eigene Policen inkl. versicherter Personen, Kosten, Dokument-Metadaten,
- *   Portal-Links (ohne Zugangsdaten/URLs? -> providerKey reicht), AI-Jobs
- * - Eigene Audit-Events (Metadaten)
+ * GDPR export (without binaries / raw AI payloads):
+ * - Account (without password hash, without encrypted values)
+ * - Preferences, household memberships
+ * - Own policies incl. insured persons, costs, document metadata, portal
+ *   links (without access data/URLs? -> providerKey suffices), AI jobs
+ * - Own audit events (metadata)
  */
 export interface PrivacyExport {
   exportedAt: string;
@@ -89,27 +89,27 @@ export interface PrivacyExport {
 }
 
 /**
- * Privacy/GDPR-Slice (AP-19).
+ * Privacy/GDPR slice (AP-19).
  *
- * Berechtigungsgrenzen:
- * - `exportPersonalData` und `deleteAccount` verwenden ausschliesslich die
- *   Session-Identitaet (user.id), niemals Pfad-/Query-Parameter -> kein IDOR.
- * - Rollen-Gate im Controller: @Roles(GlobalRole.USER) -> USER und ADMIN
- *   (hierarchisch), READ_ONLY erhaelt 403 (konsistent zu Profil/Praeferenzen,
- *   ADR-007).
- * - Letzter-Admin-Schutz: Der letzte aktive ADMIN kann sein Konto nicht
- *   selbst loeschen (sonst Lockout des gesamten Systems).
+ * Permission boundaries:
+ * - `exportPersonalData` and `deleteAccount` use exclusively the session
+ *   identity (user.id), never path/query parameters -> no IDOR.
+ * - Role gate in the controller: @Roles(GlobalRole.USER) -> USER and
+ *   ADMIN (hierarchical), READ_ONLY gets 403 (consistent with
+ *   profile/preferences, ADR-007).
+ * - Last-admin protection: the last active ADMIN cannot delete itself
+ *   (otherwise a lockout of the whole system).
  *
- * Loeschsemantik: In einer Transaktion werden zunaechst alle eigenen Policen
- * (Kaskade auf versicherte Personen/Kosten/Dokumente/Portal-Links/AI-Jobs)
- * geloescht, dann die Household-Mitgliedschaften. Ein Household wird nur
- * geloescht, wenn keine Mitglieder UND keine Policen mehr existieren
- * (Invariante: alle Policen eines Households gehoeren dessen Mitgliedern;
- * die Guard verhindert Datenverlust anderer Nutzer). Abschliessend wird der
- * User geloescht (Kaskade auf Credentials/Praeferenzen; Audit-Referenzen
- * werden per SetNull neutralisiert -> Audit-Trail bleibt erhalten).
- * Physische Dateien der Dokumente werden NACH erfolgreichem DB-Commit aus
- * dem Storage entfernt (safe-path-guarded, ENOENT-tolerant).
+ * Deletion semantics: inside one transaction, first all own policies
+ * (cascade to insured persons/costs/documents/portal links/AI jobs) are
+ * deleted, then the household memberships. A household is only deleted
+ * when neither members nor policies remain (invariant: all policies of a
+ * household belong to its members; the guard prevents data loss for
+ * other users). Finally, the user is deleted (cascade to
+ * credentials/preferences; audit references are neutralized via SetNull
+ * -> the audit trail is preserved). Physical document files are removed
+ * from storage AFTER a successful DB commit (safe-path-guarded,
+ * ENOENT-tolerant).
  */
 @Injectable()
 export class PrivacyService {
@@ -133,7 +133,7 @@ export class PrivacyService {
     });
 
     if (!user) {
-      throw new NotFoundException('Benutzer nicht gefunden');
+      throw new NotFoundException('User not found');
     }
 
     const policies = await this.db.insurancePolicy.findMany({
@@ -282,13 +282,13 @@ export class PrivacyService {
         });
         if (activeAdmins <= 1) {
           throw new ConflictException(
-            'Der letzte aktive Administrator kann sein Konto nicht loeschen',
+            'The last active administrator cannot delete their account',
           );
         }
       }
 
-      // 2. Lokale Dateipfade der eigenen INTERNAL-Dokumente sammeln (fuer
-      //    die physische Bereinigung NACH dem DB-Commit).
+      // 2. Collect local file paths of own INTERNAL documents (for the
+      //    physical cleanup AFTER the DB commit).
       const ownedPolicies = await tx.insurancePolicy.findMany({
         where: { ownerUserId: userId },
         select: {
@@ -304,15 +304,15 @@ export class PrivacyService {
           .map((doc) => doc.storageRef as string),
       );
 
-      // 3. Audit-Eintrag VOR der Loeschung (Actor existiert noch; nach dem
-      //    User-Delete wird actorUserId per SetNull neutralisiert, der
-      //    Eintrag bleibt als revisionssicherer Trail erhalten).
+      // 3. Audit entry BEFORE the deletion (the actor still exists; after
+      //    user delete actorUserId is neutralized via SetNull, the entry
+      //    remains as an auditable trail).
       //
-      //    Bewusste Abweichung von der fail-soft-Regel des AuditService.record():
-      //    Der Eintrag wird ATOMAR in dieselbe Transaktion geschrieben, die den
-      //    User loescht. Ein hier fehlschlagendes Audit-Insert bricht die
-      //    gesamte Transaktion ab – kein Konto wird ohne unumstoesslichen
-      //    Loesch-Nachweis entfernt (GDPR-Nachweispflicht). Vgl. ADR-008.
+      //    Deliberate deviation from the fail-soft rule of
+      //    AuditService.record(): the entry is written ATOMICALLY into the
+      //    same transaction that deletes the user. A failing audit insert
+      //    here aborts the entire transaction - no account is deleted
+      //    without a deletion proof (GDPR proof obligation). Cf. ADR-008.
       await tx.auditEvent.create({
         data: {
           actorUserId: userId,
@@ -323,14 +323,14 @@ export class PrivacyService {
         },
       });
 
-      // 4. Eigene Policen loeschen (Kaskade auf CoveredPerson,
+      // 4. Delete own policies (cascade to CoveredPerson,
       //    PolicyCostEntry, PolicyDocument, PortalAccountLink,
-      //    AiExtractionJob, AiCoverageSummary). Muss VOR dem User-Delete
-      //    laufen (FK ownerUserId -> users, Restrict).
+      //    AiExtractionJob, AiCoverageSummary). Must run BEFORE the user
+      //    delete (FK ownerUserId -> users, Restrict).
       await tx.insurancePolicy.deleteMany({ where: { ownerUserId: userId } });
 
-      // 5. Mitgliedschaften aufloesen; Household nur loeschen, wenn weder
-      //    Mitglieder noch Policen verbleiben (kein Datenverlust anderer).
+      // 5. Resolve memberships; delete the household only when neither
+      //    members nor policies remain (no data loss for others).
       const memberships = await tx.householdMembership.findMany({
         where: { userId },
         select: { householdId: true },
@@ -347,32 +347,32 @@ export class PrivacyService {
           await tx.household.delete({ where: { id: membership.householdId } });
         } else {
           this.logger.warn(
-            `Household ${membership.householdId} bleibt erhalten ` +
-              `(noch ${remainingMembers} Mitglieder, ${remainingPolicies} Policen)`,
+            `Household ${membership.householdId} kept ` +
+              `(${remainingMembers} members, ${remainingPolicies} policies remaining)`,
           );
         }
       }
 
-      // 6. User loeschen (Kaskade: Credential, UserPreference; Audit-/
-      //    Settings-Referenzen via SetNull).
+      // 6. Delete the user (cascade: Credential, UserPreference;
+      //    audit/settings references via SetNull).
       await tx.user.delete({ where: { id: userId } });
     });
 
-    // 7. Physische Dateien erst nach erfolgreichem DB-Commit entfernen.
+    // 7. Remove physical files only after a successful DB commit.
     for (const filePath of filesToRemove) {
       await this.removeFileSafely(filePath);
     }
   }
 
   /**
-   * Loescht eine Datei nur, wenn sie nach Aufloesung innerhalb des
-   * Storage-Roots liegt (Path-Traversal-Schutz) und tolerant bei ENOENT.
+   * Deletes a file only when, after resolution, it lies within the
+   * storage root (path-traversal protection) and is tolerant of ENOENT.
    */
   private async removeFileSafely(filePath: string): Promise<void> {
     const root = this.storagePath + path.sep;
     const resolved = path.resolve(filePath);
     if (!resolved.startsWith(root)) {
-      this.logger.warn(`Datei ausserhalb des Storage-Pfads, nicht geloescht: ${resolved}`);
+      this.logger.warn(`File outside the storage path, not deleted: ${resolved}`);
       return;
     }
     try {
@@ -380,9 +380,9 @@ export class PrivacyService {
     } catch (error) {
       const nodeErr = error as NodeJS.ErrnoException;
       if (nodeErr.code === 'ENOENT') {
-        this.logger.warn(`Datei existiert bereits nicht mehr: ${resolved}`);
+        this.logger.warn(`File no longer exists: ${resolved}`);
       } else {
-        this.logger.error(`Datei-Loeschung fehlgeschlagen: ${resolved} (${nodeErr.message})`);
+        this.logger.error(`File deletion failed: ${resolved} (${nodeErr.message})`);
       }
     }
   }

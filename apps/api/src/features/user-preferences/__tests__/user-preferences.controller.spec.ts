@@ -4,12 +4,12 @@ import { GlobalRole } from '@prisma/client';
 import { UserPreferencesController } from '../user-preferences.controller';
 
 describe('UserPreferencesController', () => {
-  it('fordert auf Controller-Ebene die USER-Rolle (oder hoeher) an', () => {
+  it('requires the USER role (or higher) at the controller level', () => {
     const roles = Reflect.getMetadata(ROLES_KEY, UserPreferencesController);
     expect(roles).toContain(GlobalRole.USER);
   });
 
-  it('set delegiert mit der eigenen User-ID, Key und DTO an den Service', async () => {
+  it('set delegates the own user ID, key and DTO to the service', async () => {
     const service = {
       setPreference: vi.fn().mockResolvedValue({ key: 'theme', value: 'dark' }),
     };

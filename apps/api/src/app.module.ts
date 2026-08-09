@@ -27,7 +27,7 @@ import { UserPreferencesModule } from './features/user-preferences/user-preferen
 
 @Module({
   imports: [
-    // Technische Foundations zuerst, global verfuegbar
+    // Technical foundations first, globally available
     ConfigFoundationModule,
     DatabaseModule,
     EncryptionModule,

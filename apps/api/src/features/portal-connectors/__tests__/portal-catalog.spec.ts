@@ -8,17 +8,17 @@ import {
 } from '../portal-catalog';
 
 describe('PortalCatalog', () => {
-  it('hat eine Version und mindestens einen Eintrag', () => {
+  it('has a version and at least one entry', () => {
     expect(PORTAL_CATALOG_VERSION).toBe(1);
     expect(PORTAL_CATALOG.length).toBeGreaterThan(0);
   });
 
-  it('hat eindeutige providerKeys', () => {
+  it('has unique providerKeys', () => {
     const keys = PORTAL_CATALOG.map((e) => e.providerKey);
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('liefert fuer jeden Eintrag Kern-Capability deepLink und Zugangshinweise', () => {
+  it('provides the core capability deepLink and access hints for every entry', () => {
     for (const entry of PORTAL_CATALOG) {
       expect(entry.capabilities).toContain('deepLink');
       expect(entry.accessHint.trim().length).toBeGreaterThan(0);
@@ -26,7 +26,7 @@ describe('PortalCatalog', () => {
     }
   });
 
-  it('hat nur bekannte Deep-Link-Vorlagen (https) oder null', () => {
+  it('only has known deep-link templates (https) or null', () => {
     for (const entry of PORTAL_CATALOG) {
       if (entry.deepLinkTemplate !== null) {
         expect(entry.deepLinkTemplate.startsWith('https://')).toBe(true);
@@ -34,14 +34,14 @@ describe('PortalCatalog', () => {
     }
   });
 
-  it('liefert Eintraege per getPortalCatalogEntry/listPortalCatalog', () => {
+  it('returns entries via getPortalCatalogEntry/listPortalCatalog', () => {
     const entry = getPortalCatalogEntry('huk-coburg');
     expect(entry?.displayName).toBe('HUK-COBURG');
-    expect(getPortalCatalogEntry('gibt-es-nicht')).toBeUndefined();
+    expect(getPortalCatalogEntry('does-not-exist')).toBeUndefined();
     expect(listPortalCatalog()).toHaveLength(PORTAL_CATALOG.length);
   });
 
-  it('loest Deep-Link-Vorlagen deterministisch auf', () => {
+  it('resolves deep-link templates deterministically', () => {
     expect(resolveDeepLinkTemplate(null, 'X')).toBeNull();
     expect(resolveDeepLinkTemplate('', 'X')).toBeNull();
     expect(resolveDeepLinkTemplate(' https://a.de/ ', 'X')).toBe('https://a.de/');

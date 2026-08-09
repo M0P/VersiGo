@@ -5,15 +5,15 @@ import type {
 } from './portal-connector.interface';
 
 /**
- * Registry fuer optionale Portal-Connector-Plugins (AP-18).
+ * Registry for optional portal connector plugins (AP-18).
  *
- * Plugins werden zur Laufzeit des Moduls registriert (experimenteller
- * Mailbox-/Dokumentenabruf). Die Registry haelt keine Fachlogik; sie
- * verwaltet Registrierung, Auflistung und Verfuegbarkeit.
+ * Plugins are registered at module runtime (experimental
+ * mailbox/document retrieval). The registry holds no business logic; it
+ * manages registration, listing and availability.
  *
- * Resilienz: `getAvailable()` liefert fuer deaktivierte oder unbekannte
- * Plugins undefined – der Aufrufer degradiert kontrolliert, statt zu
- * brechen. Der Portal-Link bleibt davon unberuehrt.
+ * Resilience: `getAvailable()` returns for disabled or unknown
+ * Plugins undefined - the caller degrades in a controlled way instead
+ * of breaking. The portal link stays unaffected.
  */
 @Injectable()
 export class PortalConnectorRegistry {
@@ -22,28 +22,28 @@ export class PortalConnectorRegistry {
 
   register(plugin: PortalConnectorPlugin): void {
     if (this.plugins.has(plugin.key)) {
-      this.logger.warn(`Portal-Connector-Plugin '${plugin.key}' doppelt registriert – ueberschrieben`);
+      this.logger.warn(`Portal connector plugin '${plugin.key}' registered twice - overwritten`);
     }
     this.plugins.set(plugin.key, plugin);
     this.logger.log(
-      `Portal-Connector-Plugin '${plugin.key}' registriert ` +
-        `(experimentell=${plugin.experimental}, verfuegbar=${plugin.isAvailable()})`,
+      `Portal connector plugin '${plugin.key}' registered ` +
+        `(experimental=${plugin.experimental}, available=${plugin.isAvailable()})`,
     );
   }
 
-  /** Alle registrierten Plugins (auch deaktivierte/experimentelle). */
+  /** All registered plugins (incl. disabled/experimental ones). */
   list(): PortalConnectorPlugin[] {
     return [...this.plugins.values()];
   }
 
-  /** Plugin per Schluessel oder undefined. */
+  /** Plugin by key or undefined. */
   get(key: string): PortalConnectorPlugin | undefined {
     return this.plugins.get(key);
   }
 
   /**
-   * Liefert ein Plugin nur, wenn es registriert UND verfuegbar ist.
-   * Unbekannte oder deaktivierte Plugins ergeben undefined (Degradation).
+   * Returns a plugin only when it is registered AND available.
+   * Unknown or disabled plugins yield undefined (degradation).
    */
   getAvailable(key: string): PortalConnectorPlugin | undefined {
     const plugin = this.plugins.get(key);
@@ -52,8 +52,8 @@ export class PortalConnectorRegistry {
   }
 
   /**
-   * Verfuegbare Capabilities eines Plugins; leere Liste bei unbekanntem
-   * oder deaktiviertem Plugin.
+   * Available capabilities of a plugin; empty list for an unknown or
+   * disabled plugin.
    */
   capabilitiesOf(key: string): PortalConnectorCapability[] {
     const plugin = this.getAvailable(key);

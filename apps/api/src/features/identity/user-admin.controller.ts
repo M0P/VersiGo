@@ -7,9 +7,9 @@ import { UserAdminService, AdminUserListItem } from './user-admin.service';
 import { BindOidcIdentityDto, ListUsersQueryDto, SetUserRoleDto } from './user-admin.dto';
 
 /**
- * Admin-Verwaltung lokaler Konten (AP-16). Nur fuer globale ADMINs.
- * Alle Aktionen protokollieren einen Audit-Eintrag und schuetzen den
- * letzten aktiven ADMIN vor Sperrung/Herabstufung.
+ * Admin management of local accounts (AP-16). Global admins only.
+ * Every action is recorded in the audit log and protects the last active
+ * ADMIN from being disabled/demoted.
  */
 @Controller('admin/users')
 @Roles(GlobalRole.ADMIN)

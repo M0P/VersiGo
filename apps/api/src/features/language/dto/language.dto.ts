@@ -2,9 +2,9 @@ import { IsIn } from 'class-validator';
 import { SUPPORTED_LANGUAGES } from '../language.constants';
 
 /**
- * AP-21: Sprachwunsch eines Nutzers.
- * Nur exakt 'en' oder 'de' werden akzeptiert; alles andere lehnt die
- * Validierung mit 400 ab und wird niemals gespeichert.
+ * AP-21: a user's language preference.
+ * Only exactly 'en' or 'de' are accepted; everything else is rejected
+ * with 400 validation and is never stored.
  */
 export class SetLanguageDto {
   @IsIn(SUPPORTED_LANGUAGES, {
@@ -15,6 +15,6 @@ export class SetLanguageDto {
 
 export interface LanguagePreferenceDto {
   language: string;
-  /** 'persistent' = dauerhaft im Benutzerkonto (USER/ADMIN), 'session' = nur fuer die Sitzung (READ_ONLY). */
+  /** 'persistent' = stored in the user account (USER/ADMIN), 'session' = only for the session (READ_ONLY). */
   persistence: 'persistent' | 'session';
 }

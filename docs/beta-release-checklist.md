@@ -1,8 +1,8 @@
-# Beta Release Checklist – VersiGo v1.0.0-beta
+# Beta Release Checklist – VersiGo v1.0.0-beta.1
 
-**Version:** 1.0.0-beta  
-**Datum:** 2026-08-03  
-**Branch:** `feat/AP-20-ready-up-for-version-1` → `main`  
+**Version:** 1.0.0-beta.1  
+**Datum:** 2026-08-07  
+**Branch:** `fix/BugFix-09-ci-fix-community-standards-dockerhub` (BugFix-11, PR #28)  
 **Status:** ⏳ In Review
 
 ---
@@ -16,7 +16,7 @@
 | **3** | **Build** | Image-Größen dokumentiert (Vorher/Nachher) | ✅ | Vorher: API 1.12 GB, Worker 1.12 GB, Web 240 MB; Nachher: API ~339 MB, Worker ~333 MB, Web ~206 MB, Migration ~297 MB (siehe `docs/docker-image-guide.md`) |
 | **4** | **Tests** | Lint: 0 Errors | ✅ | `pnpm run lint` |
 | **5** | **Tests** | TypeCheck: 0 Errors (Strict Mode) | ✅ | `pnpm run typecheck` |
-| **6** | **Tests** | Unit Tests: 100% Pass (596 API-Tests, 55 Test-Files, Web 42, Worker 4, Foundation 95) | ✅ | `pnpm run test` |
+| **6** | **Tests** | Unit Tests: 100% Pass (660 API-Tests, 58 Test-Files, Web 47, Worker 4, Foundation 107) | ✅ | `pnpm run test` |
 | **7** | **Tests** | Integration Tests: Household-Isolation, DB | ✅ | Test-Container |
 | **8** | **Tests** | i18n Guard: Keine hartkodierten deutschen UI-Texte | ✅ | `pnpm --filter @versigo/web run test:i18n` |
 | **9** | **Tests** | Compose Smoke Test: Alle Steps Pass (inkl. 8p Household-Aktion, 9/9b Auth-Rejections, 10 Queue-Roundtrip, 11 Auth-Fail-Fast, 12 Produktions-Erfolgspfad mit Session-basierter Household-Aktion) | ✅ | `./scripts/compose-smoke-test.sh --build` (EXIT=0) |
@@ -26,7 +26,7 @@
 | **13** | **Security** | Upload-Validierung, Path-Traversal-Schutz | ✅ | Code Review |
 | **14** | **Security** | SSRF-Schutz bei Integrationen (Allowlists) | ✅ | Code Review |
 | **15** | **Security** | Session Cookies: Secure (Default in Produktion, `COOKIE_SECURE`), HttpOnly, SameSite | ✅ | Code Review |
-| **16** | **Security** | Abhängigkeitsrisiken geprüft (npm audit) | ⚠️ | `pnpm audit --prod`: 26 Advisories (10 moderate, 15 high, 1 critical) – ausschließlich transitiv (tar via bcrypt/node-pre-gyp, next, sharp, postcss, brace-expansion). Kein Upgrade ohne separate Prüfung (R-12); entschärft durch privates, nicht aus dem Internet erreichbares Beta-Hosting |
+| **16** | **Security** | Abhängigkeitsrisiken geprüft (npm audit) | ✅ | `pnpm audit --prod`: **0 Advisories** (BugFix-11/B5: bcrypt 6.0.0 eliminiert den node-pre-gyp/tar/brace-expansion-Graph, next 16.2.12 + Overrides postcss ≥8.5.23/sharp ≥0.35.3/vite ≥6.4.3; vitest 3.2.x). Voll-Audit: 5 verbleibende HIGH ausschließlich Dev-Tooling (eslint/brace-expansion, eslint/js-yaml, @nestjs/cli/fast-uri) – nicht in Laufzeit-Images, Grund+Restrisiko siehe R-12 |
 | **17** | **Docs** | README mit prominentem AI-Warnhinweis (Deutsch) | ✅ | README.md Zeilen 5-12 |
 | **18** | **Docs** | Funktionsübersicht korrekt & vollständig | ✅ | README.md Tabelle |
 | **19** | **Docs** | UI Control Matrix versioniert | ✅ | `docs/ui-control-matrix.md` (v1.3) |
@@ -65,7 +65,7 @@
 | R-09 | Keine vollständige i18n (nur de/en) | Niedrig | AP-21 Scope erfüllt |
 | R-10 | Kein Browser-E2E (Playwright/Puppeteer) in `apps/web` | Niedrig | Kritische UI-Flows: Web-Unit-Tests (42), API-Smoke-Steps pro Rolle, Control-Matrix; kein neues E2E-Framework für Beta (bewusste Grenze) |
 | R-11 | Kein eigenständiges Accessibility-Tooling (z. B. axe); Tastatur/Fokus/Labels/Kontrast folgen dem Design-System | Niedrig | Semantische Buttons/Links, aria-labels, sichtbare Fokus-Styles im Design-System; manuelle Prüfung im Review, kein automatisierter a11y-Lauf (bewusste Grenze) |
-| R-12 | `npm audit --prod`: 26 transitive Advisories (1 critical, 15 high, 10 moderate) | Mittel | Ausschließlich transitiv (tar/bcrypt, next, sharp, postcss); kein Upgrade ohne Regressionstest. Mitigation: privates, nicht aus dem Internet erreichbares Beta-Hosting, kein öffentlicher Betrieb (README-Warnhinweis); Priorisierung als Follow-up (AP-23) dokumentiert |
+| R-12 | `npm audit --prod`: **0 Advisories** (BugFix-11/B5) | **Gelöst** | `pnpm audit --prod` = 0/0/0 (bcrypt 6.0.0 statt 5.1.1 eliminiert den @mapbox/node-pre-gyp→tar/rimraf/glob→minimatch→brace-expansion-Graph; next 16.2.12; pnpm-workspace.yaml `overrides`: postcss ≥8.5.23, sharp ≥0.35.3, vite ≥6.4.3; vitest 3.2.x). Voll-Audit (`pnpm audit`): 5 verbleibende HIGH ausschließlich in Dev-Tooling und damit NICHT in den Laufzeit-Images (API/Worker/Web installieren nur `--prod`-Deps): brace-expansion 1.1.16/5.0.8 via eslint@9-minimatch + @typescript-eslint/typescript-estree (DoS via Expansion, nur lokal bei Lint/Typecheck ausführbar, kein Netzwerk-/Datenzugriff), js-yaml 4.x via @eslint/eslintrc + @nestjs/cli/cosmiconfig (DoS, nur Dev), fast-uri <3.1.5 via @nestjs/cli/ajv (ReDoS, nur beim CLI-Install/Build). Kein Override, da Overrides auf diese fest gepinnten Dev-Ketten Tooling-Breakage riskieren ohne Sicherheitsgewinn für den Betrieb; Behebung folgt mit dem nächsten eslint/@nestjs/cli-Update (Dependabot) |
 | R-13 | CI-Smoke-Job (`compose-smoke`) führt nur einen reduzierten Step-Satz aus (Health/Ready/Web/DB); der vollständige 12-Step-Smoke-Test inkl. Produktions-Erfolgspfad (Schritt 12) läuft nur lokal | Niedrig | Voller Smoke-Test bei jedem Release vor Ort ausgeführt (Checkliste Zeile 9); Schritt 12 verifiziert Bootstrap, Login, Session und Household-Aktion unter `NODE_ENV=production` auf frischer DB. CI-Erweiterung als optionaler Follow-up notiert (PR_DESCRIPTION bekannte Grenzen) |
 
 ---

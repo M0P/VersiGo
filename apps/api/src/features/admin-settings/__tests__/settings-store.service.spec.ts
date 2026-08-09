@@ -135,25 +135,25 @@ describe('SettingsStoreService', () => {
   });
 
   describe('Global Settings', () => {
-    it('listGlobalSettings maskiert Secret-Werte', async () => {
+    it('listGlobalSettings masks secret values', async () => {
       const result = await service.listGlobalSettings();
       expect(result).toHaveLength(2);
       expect(result[0].valuePlain).toBe('test-value');
       expect(result[1].valuePlain).toBe('********');
     });
 
-    it('getGlobalSetting gibt maskierten Wert fuer Secrets zurueck', async () => {
+    it('getGlobalSetting returns a masked value for secrets', async () => {
       const result = await service.getGlobalSetting('secret-key');
       expect(result.valuePlain).toBe('********');
     });
 
-    it('getGlobalSetting wirft NotFoundException bei fehlendem Key', async () => {
-      await expect(service.getGlobalSetting('nicht-da')).rejects.toThrow(
+    it('getGlobalSetting throws NotFoundException for a missing key', async () => {
+      await expect(service.getGlobalSetting('not-there')).rejects.toThrow(
         NotFoundException,
       );
     });
 
-    it('createGlobalSetting mit isSecret=true verschluesselt den Wert', async () => {
+    it('createGlobalSetting with isSecret=true encrypts the value', async () => {
       const result = await service.createGlobalSetting(
         'new-secret',
         'geheim',
@@ -164,7 +164,7 @@ describe('SettingsStoreService', () => {
       expect(result.valuePlain).toBe('********');
     });
 
-    it('createGlobalSetting ohne isSecret speichert im Klartext', async () => {
+    it('createGlobalSetting without isSecret stores plain text', async () => {
       const result = await service.createGlobalSetting(
         'new-plain',
         'sichtbar',
@@ -174,9 +174,9 @@ describe('SettingsStoreService', () => {
       expect(result.valuePlain).toBe('sichtbar');
     });
 
-    it('createGlobalSetting wirft ConflictException bei doppeltem Key', async () => {
-      // Test nur, wenn der Mock den ConflictException-Fall abdeckt
-      // Dafuer muessen wir den Mock anpassen
+    it('createGlobalSetting throws ConflictException for a duplicate key', async () => {
+      // Test only if the mock covers the ConflictException case
+      // For that we must adjust the mock
       const dbWithConflict = {
         ...mockDb,
         globalIntegrationSetting: {
@@ -193,7 +193,7 @@ describe('SettingsStoreService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('updateGlobalSetting mit neuem Wert aktualisiert', async () => {
+    it('updateGlobalSetting with a new value updates', async () => {
       const result = await service.updateGlobalSetting(
         'test-key',
         'neuer-wert',
@@ -202,18 +202,18 @@ describe('SettingsStoreService', () => {
       expect(result.key).toBe('test-key');
     });
 
-    it('updateGlobalSetting wirft NotFoundException bei fehlendem Key', async () => {
+    it('updateGlobalSetting throws NotFoundException for a missing key', async () => {
       await expect(
-        service.updateGlobalSetting('nicht-da', 'wert', false),
+        service.updateGlobalSetting('not-there', 'value', false),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('deleteGlobalSetting loescht Einstellung', async () => {
+    it('deleteGlobalSetting deletes the setting', async () => {
       const result = await service.deleteGlobalSetting('test-key');
       expect(result).toEqual({ success: true });
     });
 
-    it('deleteGlobalSetting wirft NotFoundException bei fehlendem Key', async () => {
+    it('deleteGlobalSetting throws NotFoundException for a missing key', async () => {
       const dbWithNotFound = {
         ...mockDb,
         globalIntegrationSetting: {
@@ -226,25 +226,25 @@ describe('SettingsStoreService', () => {
         mockEncryption as any,
       );
       await expect(
-        serviceWithNotFound.deleteGlobalSetting('nicht-da'),
+        serviceWithNotFound.deleteGlobalSetting('not-there'),
       ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('Household Settings', () => {
-    it('listHouseholdSettings maskiert Secret-Werte', async () => {
+    it('listHouseholdSettings masks secret values', async () => {
       const result = await service.listHouseholdSettings('household-1');
       expect(result).toHaveLength(1);
       expect(result[0].valuePlain).toBe('hs-value');
     });
 
-    it('getHouseholdSetting wirft NotFoundException bei fehlendem Key', async () => {
+    it('getHouseholdSetting throws NotFoundException for a missing key', async () => {
       await expect(
-        service.getHouseholdSetting('household-1', 'nicht-da'),
+        service.getHouseholdSetting('household-1', 'not-there'),
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('createHouseholdSetting mit isSecret=true verschluesselt', async () => {
+    it('createHouseholdSetting with isSecret=true encrypts', async () => {
       const result = await service.createHouseholdSetting(
         'household-1',
         'new-secret',
@@ -255,7 +255,7 @@ describe('SettingsStoreService', () => {
       expect(result.isSecret).toBe(true);
     });
 
-    it('createHouseholdSetting wirft ConflictException bei doppeltem Key', async () => {
+    it('createHouseholdSetting throws ConflictException for a duplicate key', async () => {
       const dbWithConflict = {
         ...mockDb,
         householdIntegrationSetting: {
@@ -277,7 +277,7 @@ describe('SettingsStoreService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('deleteHouseholdSetting loescht Einstellung', async () => {
+    it('deleteHouseholdSetting deletes the setting', async () => {
       const result = await service.deleteHouseholdSetting(
         'household-1',
         'hs-key',
@@ -287,18 +287,18 @@ describe('SettingsStoreService', () => {
   });
 
   describe('Decrypted Values (intern)', () => {
-    it('getDecryptedGlobalValue gibt entschluesselten Wert zurueck', async () => {
+    it('getDecryptedGlobalValue returns the decrypted value', async () => {
       const result = await service.getDecryptedGlobalValue('secret-key');
       expect(mockEncryption.decrypt).toHaveBeenCalledWith('encrypted:data:here');
       expect(result).toBe('data:here');
     });
 
-    it('getDecryptedGlobalValue gibt Klartext-Wert zurueck', async () => {
+    it('getDecryptedGlobalValue returns the plaintext value', async () => {
       const result = await service.getDecryptedGlobalValue('test-key');
       expect(result).toBe('test-value');
     });
 
-    it('getDecryptedGlobalValue gibt null bei fehlendem Key', async () => {
+    it('getDecryptedGlobalValue returns null for a missing key', async () => {
       const dbWithNull = {
         ...mockDb,
         globalIntegrationSetting: {
@@ -310,7 +310,7 @@ describe('SettingsStoreService', () => {
         dbWithNull as any,
         mockEncryption as any,
       );
-      const result = await serviceWithNull.getDecryptedGlobalValue('nicht-da');
+      const result = await serviceWithNull.getDecryptedGlobalValue('not-there');
       expect(result).toBeNull();
     });
   });

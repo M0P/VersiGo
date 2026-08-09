@@ -3,39 +3,37 @@ import Redis from 'ioredis';
 import { AppConfigService } from '../config';
 
 /**
- * Redis-gestuetzter Neustart-Koordinator (BugFix-06, Teil 3.4).
+ * Redis-backed restart coordinator (BugFix-06, part 3.4).
  *
- * Einige Einstellungen (Kategorie "restart", z. B. OIDC-Bootstrap oder
- * boot-aktivierte Secrets) werden nur beim Prozessstart gelesen. Der Admin
- * kann ueber die UI einen kontrollierten Neustart von API und Worker
- * ausloesen:
+ * Some settings (category "restart", e.g. OIDC bootstrap or
+ * boot-activated secrets) are only read at process start. The admin
+ * can trigger a controlled restart of API and worker via the UI:
  *
- * - Die API setzt eine Redis-Anforderung (`versigo:restart:request`) mit
- *   Metadaten (wer, wann, optionaler Grund) und beendet danach ihren
- *   eigenen Prozess kontrolliert. Docker Compose (`restart: unless-stopped`)
- *   startet den Container mit den neuen Einstellungen neu.
- * - Der Worker pollt die Anforderung periodisch (`watchRestartRequests`)
- *   und beendet sich ebenfalls sauber, damit er die neuen Einstellungen
- *   beim naechsten Start uebernimmt.
+ * - The API sets a Redis request (`versigo:restart:request`) with
+ *   metadata (who, when, optional reason) and then exits its own
+ *   process in a controlled way. Docker Compose (`restart: unless-stopped`)
+ *   restarts the container with the new settings.
+ * - The worker polls the request periodically (`watchRestartRequests`)
+ *   and also exits cleanly so it picks up the new settings on the
+ *   next start.
  *
- * Sicherheit: Es werden ausschliesslich Nicht-Secrets uebergeben
- * (Benutzername, Grund). Die Anforderung ist mit einer TTL versehen,
- * damit ein nicht konsumierter Restart (z. B. weil der Worker gerade
- * ausfiel) nicht ewig anhaengt und beim naechsten Start einen
- * unerwarteten Neustart ausloest.
+ * Security: only non-secrets are passed (username, reason). The request
+ * carries a TTL so that an unconsumed restart (e.g. because the worker
+ * was down) does not linger forever and trigger an unexpected restart
+ * on the next start.
  */
 export const RESTART_REQUEST_KEY = 'versigo:restart:request';
 
 export type RestartTarget = 'api' | 'worker';
 
 export type RestartRequestPayload = {
-  /** ISO-Zeitpunkt der Anforderung. */
+  /** ISO timestamp of the request. */
   requestedAt: string;
-  /** Benutzername des anfordernden Admins (kein Secret). */
+  /** Username of the requesting admin (not a secret). */
   requestedBy: string;
-  /** Optionaler Grund, z. B. "OIDC aktiviert". */
+  /** Optional reason, e.g. "OIDC enabled". */
   reason?: string;
-  /** Betroffene Dienste. */
+  /** Affected services. */
   services: RestartTarget[];
 };
 
@@ -60,9 +58,9 @@ export class RestartCoordinatorService implements OnModuleDestroy {
   }
 
   /**
-   * Hinterlegt eine Neustart-Anforderung in Redis (mit TTL). Wirft bei
-   * nicht erreichbarem Redis – der Aufrufer (API) faengt den Fehler ab
-   * und beendet seinen Prozess trotzdem (lokaler Neustart bleibt moeglich).
+   * Stores a restart request in Redis (with TTL). Throws when Redis is
+   * unreachable — the caller (API) catches the error and still exits its
+   * process (local restart stays possible).
    */
   async requestRestart(payload: RestartRequestPayload): Promise<void> {
     await this.ensureConnected();
@@ -75,9 +73,8 @@ export class RestartCoordinatorService implements OnModuleDestroy {
   }
 
   /**
-   * Holt die Neustart-Anforderung atomar ab (lies + loesche) und gibt
-   * sie zurueck, oder `null`, wenn keine vorliegt. Wird vom Worker-
-   * Watcher aufgerufen.
+   * Atomically fetches the restart request (read + delete) and returns
+   * it, or `null` if none is pending. Called by the worker watcher.
    */
   async drainRestartRequest(): Promise<RestartRequestPayload | null> {
     await this.ensureConnected();
@@ -92,17 +89,17 @@ export class RestartCoordinatorService implements OnModuleDestroy {
     try {
       return JSON.parse(raw) as RestartRequestPayload;
     } catch {
-      this.logger.warn('Neustart-Anforderung ist kein gueltiges JSON – ignoriert.');
+      this.logger.warn('Restart request is not valid JSON – ignoring.');
       return null;
     }
   }
 
   /**
-   * Startet einen periodischen Watcher fuer Neustart-Anforderungen.
-   * Wird z. B. vom Worker-Bootstrap genutzt: Sobald eine Anforderung
-   * vorliegt, wird der Callback mit dem Payload aufgerufen und der
-   * Worker kann sich sauber beenden. Fail-soft: Schlaegt der Redis-Zugriff
-   * fehl, wird nur gewarnt und im naechsten Intervall erneut geprueft.
+   * Starts a periodic watcher for restart requests.
+   * Used e.g. by the worker bootstrap: as soon as a request is pending,
+   * the callback is invoked with the payload and the worker can exit
+   * cleanly. Fail-soft: if the Redis access fails, only a warning is
+   * logged and the next interval re-checks.
    */
   watchRestartRequests(
     onRequest: (payload: RestartRequestPayload) => void,
@@ -116,13 +113,13 @@ export class RestartCoordinatorService implements OnModuleDestroy {
         })
         .catch((error: unknown) => {
           this.logger.warn(
-            `Restart-Watcher: Redis-Zugriff fehlgeschlagen: ${
+            `Restart watcher: Redis access failed: ${
               error instanceof Error ? error.message : String(error)
             }`,
           );
         });
     }, intervalMs);
-    // Der Timer soll den Prozess-Exit nicht verzoegern.
+    // The timer must not delay the process exit.
     this.watchTimer.unref?.();
   }
 

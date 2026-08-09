@@ -15,10 +15,10 @@ function buildConfig(overrides: Record<string, string> = {}): AppConfigService {
 }
 
 /**
- * Stellvertreter fuer den SettingsResolverService (BugFix-05): Die Capability-
- * Aufloesung laeuft ueber den Resolver (UI > ENV > DEFAULT). Der Fallback auf
- * AppConfigService wird nur fuer Schluessel ohne statischen Katalog-Default
- * wirksam (z. B. LOCAL_AUTH_ENABLED mit NODE_ENV-abgeleitetem Default).
+ * Stand-in for the SettingsResolverService (BugFix-05): capability
+ * resolution runs through the resolver (UI > ENV > DEFAULT). The fallback to
+ * AppConfigService is only used for keys without a static catalog default
+ * (e.g. LOCAL_AUTH_ENABLED with a NODE_ENV-derived default).
  */
 function createService(options: {
   effectiveBooleans?: Record<string, boolean | undefined>;
@@ -29,7 +29,7 @@ function createService(options: {
     getEffectiveBoolean: vi.fn().mockImplementation(async (key: string) => {
       if (!options.effectiveBooleans) return undefined;
       const value = options.effectiveBooleans[key];
-      // undefined = nicht konfiguriert -> Resolver liefert keinen Wert
+      // undefined = not configured -> resolver returns no value
       return value;
     }),
     resolveMany: vi.fn().mockImplementation(async () => {
@@ -53,7 +53,7 @@ function createService(options: {
 }
 
 describe('CapabilityFlagsService', () => {
-  it('meldet alle Capabilities als deaktiviert, wenn der Resolver nichts kennt und in Produktion nichts konfiguriert ist', async () => {
+  it('reports all capabilities as disabled when the resolver knows nothing and production is not configured', async () => {
     const { service } = createService({
       config: buildConfig({ NODE_ENV: 'production' }),
     });
@@ -67,7 +67,7 @@ describe('CapabilityFlagsService', () => {
     });
   });
 
-  it('aktiviert lokale Auth im Dev-Modus ueber den AppConfig-Fallback (kein Katalog-Default)', async () => {
+  it('enables local auth in dev mode via the AppConfig fallback (no catalog default)', async () => {
     const { service } = createService({
       config: buildConfig({ NODE_ENV: 'development' }),
     });
@@ -75,7 +75,7 @@ describe('CapabilityFlagsService', () => {
     expect(await service.isEnabled('oidc')).toBe(false);
   });
 
-  it('meldet aktivierte Capability korrekt', async () => {
+  it('reports an enabled capability correctly', async () => {
     const { service } = createService({
       effectiveBooleans: { AI_ENABLED: true, PAPERLESS_ENABLED: false },
     });
@@ -85,7 +85,7 @@ describe('CapabilityFlagsService', () => {
 
   it('spiegelt UI-Overrides (Resolver) statt des Env-Snapshots wider', async () => {
     const { service, settings } = createService({
-      // Env sagt false (AppConfig-Default), UI-Wert sagt true -> Resolver gewinnt.
+      // Env says false (AppConfig default), UI value says true -> resolver wins.
       config: buildConfig({ NODE_ENV: 'production' }),
       effectiveBooleans: { AI_ENABLED: true },
     });
@@ -116,11 +116,11 @@ describe('CapabilityFlagsService', () => {
     });
   });
 
-  it('faellt bei fehlender Resolver-Auskunft auf den AppConfig-Default zurueck', async () => {
+  it('falls back to the AppConfig default when the resolver has no answer', async () => {
     const { service } = createService({
       config: buildConfig({ NODE_ENV: 'production', STORAGE_ENABLED: 'false' }),
     });
-    // Resolver liefert undefined -> AppConfig-Fallback greift
+    // Resolver returns undefined -> AppConfig fallback applies
     expect(await service.isEnabled('storage')).toBe(false);
   });
 });

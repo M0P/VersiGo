@@ -1,25 +1,24 @@
 /**
- * Versionierter Settings-Katalog (Allowlist) fuer die zentrale
- * Systemkonfiguration (AP-17).
+ * Versioned settings catalog (allowlist) for the central
+ * system configuration (AP-17).
  *
- * Der Katalog inventarisiert JEDE Konfigurationsvariable der Anwendung
- * (AppConfig-Schema, Compose, `.env.example`) und ordnet sie genau einer
- * Kategorie zu. Nur katalogisierte Schluessel duerfen ueber die Admin-UI
- * gesetzt werden; unbekannte oder freie `.env`-Namen werden strikt
- * abgewiesen ("Allowlist-basiert, kein JSON-Sammelfeld").
+ * The catalog inventories EVERY configuration variable of the application
+ * (AppConfig schema, Compose, `.env.example`) and assigns it to exactly
+ * one category. Only catalogued keys may be set via the admin UI;
+ * unknown or free `.env` names are strictly rejected
+ * ("allowlist-based, no JSON grab-bag field").
  *
- * Kategorien:
- * - `runtime`  : UI-konfigurierbar, wird an der Verwendungsstelle sofort
- *                wirksam (zentrale Aufloesung via SettingsResolverService).
- * - `restart`  : UI-konfigurierbar, wird erst beim naechsten Prozessstart
- *                aktiv (Boot-Preload in API/Worker); die UI zeigt
- *                "Neustart erforderlich" und stellt den Wert nie als
- *                bereits aktiv dar.
- * - `secret`   : UI-konfigurierbar, verschluesselt persistiert, nie im
- *                Klartext ausgegeben, geloggt oder in Audits gespeichert.
- * - `bootstrap`: Infrastrukturkritisch – nur Environment/Compose. Werte
- *                werden nie ueber die UI gespeichert, angezeigt oder
- *                ueberschrieben.
+ * Categories:
+ * - `runtime`  : UI-configurable, takes effect immediately at the place
+ *                of use (central resolution via SettingsResolverService).
+ * - `restart`  : UI-configurable, becomes active only at the next process
+ *                start (boot preload in API/worker); the UI shows
+ *                "restart required" and never presents the value as
+ *                already active.
+ * - `secret`   : UI-configurable, persisted encrypted, never exposed in
+ *                plaintext, logged or stored in audits.
+ * - `bootstrap`: Infrastructure-critical – environment/Compose only. Values
+ *                are never stored, displayed or overwritten via the UI.
  */
 
 export type SettingsCategory = 'runtime' | 'restart' | 'secret' | 'bootstrap';
@@ -29,43 +28,43 @@ export type SettingsValueType = 'boolean' | 'number' | 'string';
 export type SettingsPermission = 'ADMIN';
 
 export interface SettingDefinition {
-  /** Eindeutiger Katalog-Schluessel (identisch mit dem Env-Variablennamen). */
+  /** Unique catalog key (identical to the env variable name). */
   key: string;
-  /** Env-Variablenname als Fallback-Quelle. */
+  /** Env variable name as fallback source. */
   envVar: string;
   category: SettingsCategory;
   type: SettingsValueType;
-  /** UI-Gruppe, unter der der Schluessel gruppiert wird. */
+  /** UI group under which the key is grouped. */
   group: string;
-  /** Sichtbare, verstaendliche Beschreibung (deutsch, fuer Admin-UI + Doku). */
+  /** Visible, comprehensible description (German, for admin UI + docs). */
   description: string;
-  /** Sicherer, dokumentierter Code-Default. Fehlt er, degradiert die Funktion. */
+  /** Safe, documented code default. If missing, the feature degrades. */
   defaultValue?: string | number | boolean;
-  /** Fuer String-Werte: erlaubte Auswahl (z. B. Provider-Namen). */
+  /** For string values: allowed choices (e.g. provider names). */
   allowedValues?: readonly string[];
-  /** Numerische Unter-/Obergrenzen. */
+  /** Numeric lower/upper bounds. */
   min?: number;
   max?: number;
-  /** Optionaler Validierungshinweis fuer die UI. */
+  /** Optional validation hint for the UI. */
   validationHint?: string;
   /**
-   * Secret-Kategorie-Schluessel, der trotzdem beim Boot in `process.env`
-   * vorab geladen werden muss (Konstruktionszeit-Konsumenten, z. B. die
-   * OIDC-Strategie). Nur fuer Kategorie `secret`; restart-Kategorie wird
-   * immer vorab geladen.
+   * Secret-category key that nevertheless must be preloaded into
+   * `process.env` during boot (construction-time consumers, e.g. the
+   * OIDC strategy). Only for category `secret`; restart category is
+   * always preloaded.
    */
   bootActivation?: boolean;
-  /** Ob eine sichere Connectivity-Pruefung existiert (nur fuer die jeweilige Integration). */
+  /** Whether a safe connectivity check exists (only for the respective integration). */
   connectivityTestable: boolean;
-  /** Rechteanforderung (einheitlich: nur globale ADMINS). */
+  /** Permission requirement (uniform: global ADMINS only). */
   permission: SettingsPermission;
 }
 
 export const SETTINGS_CATALOG_VERSION = 2;
 
 /**
- * Vollstaendiger Konfigurationskatalog. Sortiert nach Gruppe, dann Key.
- * Wird im Test gegen die AppConfig-Schema-Keys und die Doku abgeglichen.
+ * Complete configuration catalog. Sorted by group, then key.
+ * Verified in tests against the AppConfig schema keys and the docs.
  */
 export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
   // ====================== KI-Assistent ======================
@@ -284,12 +283,12 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     permission: 'ADMIN',
   },
 
-  // ====================== Connectivity (SSRF-Lockerung) ======================
-  // BugFix-06: Explizit opt-in – der strikte SSRF-Schutz (nur oeffentliche
-  // http(s)-Endpunkte) bleibt der sichere Default. Erst wenn ein Endanwender
-  // Paperless-ngx, Ollama oder einen OIDC-Provider im LAN betreibt, aktiviert
-  // er die Lockerung bewusst; die Cloud-Metadata-Adresse 169.254.169.254
-  // bleibt auch dann gesperrt.
+  // ====================== Connectivity (SSRF relaxation) ======================
+  // BugFix-06: explicit opt-in – the strict SSRF protection (public http(s)
+  // endpoints only) stays the secure default. Only when an end user operates
+  // Paperless-ngx, Ollama or an OIDC provider in the LAN does he consciously
+  // enable the relaxation; the cloud metadata address 169.254.169.254
+  // remains blocked even then.
   {
     key: 'CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS',
     envVar: 'CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS',
@@ -321,7 +320,7 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     permission: 'ADMIN',
   },
 
-  // ====================== Bootstrap / Infrastruktur (nur Environment/Compose) ======================
+  // ====================== Bootstrap / Infrastructure (env/compose only) ======================
   {
     key: 'NODE_ENV',
     envVar: 'NODE_ENV',
@@ -675,19 +674,19 @@ const CATALOG_BY_KEY: ReadonlyMap<string, SettingDefinition> = new Map(
   SETTINGS_CATALOG.map((definition) => [definition.key, definition]),
 );
 
-/** Liefert die Katalog-Definition eines Schluessels oder undefined. */
+/** Returns the catalog definition of a key or undefined. */
 export function getSettingDefinition(key: string): SettingDefinition | undefined {
   return CATALOG_BY_KEY.get(key);
 }
 
-/** Alle Schluessel, die ueber die Admin-UI setzbar sind (nicht bootstrap). */
+/** All keys that can be set via the admin UI (not bootstrap). */
 export function getUiConfigurableKeys(): readonly string[] {
   return SETTINGS_CATALOG.filter((definition) => definition.category !== 'bootstrap').map(
     (definition) => definition.key,
   );
 }
 
-/** Alle Schluessel, die erst nach einem Neustart aktiv werden. */
+/** All keys that only become active after a restart. */
 export function getRestartRequiredKeys(): readonly string[] {
   return SETTINGS_CATALOG.filter((definition) => definition.category === 'restart').map(
     (definition) => definition.key,
@@ -695,9 +694,9 @@ export function getRestartRequiredKeys(): readonly string[] {
 }
 
 /**
- * Alle Schluessel, die beim Boot in `process.env` vorab geladen werden
- * muessen: restart-Kategorie (aktiv nach Neustart) plus Secrets mit
- * `bootActivation` (Konstruktionszeit-Konsumenten, z. B. OIDC_*).
+ * All keys that must be preloaded into `process.env` during boot:
+ * restart category (active after restart) plus secrets with
+ * `bootActivation` (construction-time consumers, e.g. OIDC_*).
  */
 export function getBootPreloadKeys(): readonly string[] {
   return SETTINGS_CATALOG.filter(
@@ -707,7 +706,7 @@ export function getBootPreloadKeys(): readonly string[] {
   ).map((definition) => definition.key);
 }
 
-/** Ein Katalog-Schluessel gilt als geheim (Secret). */
+/** A catalog key is considered a secret. */
 export function isSecretKey(key: string): boolean {
   return getSettingDefinition(key)?.category === 'secret';
 }

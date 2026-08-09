@@ -18,17 +18,16 @@ export class FamilySharingService {
       where: { householdId_userId: { householdId, userId } },
     });
     if (!membership) {
-      throw new ForbiddenException('Isolation: kein Zugriff auf fremdes Household');
+      throw new ForbiddenException('Isolation: no access to a foreign household');
     }
     return membership;
   }
 
   /**
-   * Listet die anderen Mitglieder eines Households (id, username,
-   * displayName, role). Dient der Freigabe-UI als Ziel-Auswahl. Der
-   * aufrufende User selbst wird ausgeschlossen. Nur USER/ADMIN duerfen
-   * diesen Endpunkt rufen (RolesGuard), READ_ONLY-Mitglieder sehen die
-   * vollstaendige Mitgliederliste nie.
+   * Lists the other members of a household (id, username, displayName,
+   * role). Serves as the target picker for the share UI. The calling user
+   * itself is excluded. Only USER/ADMIN may call this endpoint
+   * (RolesGuard); READ_ONLY members never see the complete member list.
    */
   async listMembers(householdId: string, userId: string) {
     await this.assertHouseholdAccess(householdId, userId);
@@ -47,46 +46,46 @@ export class FamilySharingService {
   }
 
   /**
-   * Erstellt eine neue Freigabe.
-   * sourceUserId wird automatisch aus dem aktuellen User gesetzt.
-   * targetUserId muss im selben Household aktiv sein.
+   * Creates a new share.
+   * sourceUserId is set automatically from the current user.
+   * targetUserId must be active in the same household.
    */
   async create(householdId: string, userId: string, dto: CreateShareDto) {
     await this.assertHouseholdAccess(householdId, userId);
 
-    // Prüfen, dass targetUserId ebenfalls im Household ist.
+    // Verify that targetUserId is also in the household.
     const targetMembership = await this.db.householdMembership.findUnique({
       where: { householdId_userId: { householdId, userId: dto.targetUserId } },
     });
     if (!targetMembership) {
-      throw new BadRequestException('Zielbenutzer ist nicht Mitglied dieses Households');
+      throw new BadRequestException('Target user is not a member of this household');
     }
 
     if (dto.targetUserId === userId) {
-      throw new BadRequestException('Freigabe an sich selbst ist nicht sinnvoll');
+      throw new BadRequestException('Sharing with yourself is not meaningful');
     }
 
-    // Bei scoped shares (INSURANCE, DOCUMENT, CATEGORY) muss scopeRef gesetzt sein
+    // For scoped shares (INSURANCE, DOCUMENT, CATEGORY), scopeRef must be set
     if (dto.scopeType !== ObjectShareScopeType.ALL_OWNED && !dto.scopeRef) {
-      throw new BadRequestException('scopeRef ist für diesen scopeType erforderlich');
+      throw new BadRequestException('scopeRef is required for this scopeType');
     }
 
-    // Für ALL_OWNED darf scopeRef nicht gesetzt sein
+    // For ALL_OWNED scopeRef must not be set
     if (dto.scopeType === ObjectShareScopeType.ALL_OWNED && dto.scopeRef) {
-      throw new BadRequestException('scopeRef darf bei ALL_OWNED nicht gesetzt sein');
+      throw new BadRequestException('scopeRef must not be set for ALL_OWNED');
     }
 
-    // Bei INSURANCE-Scope: prüfen, ob die Policy existiert und zum Household gehört
+    // For INSURANCE scope: verify the policy exists and belongs to the household
     if (dto.scopeType === ObjectShareScopeType.INSURANCE && dto.scopeRef) {
       const policy = await this.db.insurancePolicy.findFirst({
         where: { id: dto.scopeRef, householdId },
       });
       if (!policy) {
-        throw new NotFoundException('Versicherungspolice nicht gefunden');
+        throw new NotFoundException('Policy not found');
       }
     }
 
-    // Bei DOCUMENT-Scope: prüfen, ob das Dokument existiert und zum Household gehört
+    // For DOCUMENT scope: verify the document exists and belongs to the household
     if (dto.scopeType === ObjectShareScopeType.DOCUMENT && dto.scopeRef) {
       const document = await this.db.policyDocument.findFirst({
         where: {
@@ -95,11 +94,11 @@ export class FamilySharingService {
         },
       });
       if (!document) {
-        throw new NotFoundException('Dokument nicht gefunden');
+        throw new NotFoundException('Document not found');
       }
     }
 
-    // Auf doppelte Freigabe prüfen (gleicher source, target, scopeType, scopeRef)
+    // Check for duplicate share (same source, target, scopeType, scopeRef)
     const existing = await this.db.objectShare.findFirst({
       where: {
         householdId,
@@ -110,7 +109,7 @@ export class FamilySharingService {
       },
     });
     if (existing) {
-      throw new BadRequestException('Eine solche Freigabe existiert bereits');
+      throw new BadRequestException('Such a share already exists');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -149,10 +148,10 @@ export class FamilySharingService {
   }
 
   /**
-   * Listet alle Freigaben in einem Household.
-   * READ_ONLY sieht ausschliesslich Freigaben, an denen der User beteiligt
-   * ist (als Quelle oder Ziel) – er bekommt keinen Einblick in die
-   * Freigaben anderer Household-Mitglieder.
+   * Lists all shares in a household.
+   * READ_ONLY sees exclusively shares in which the user is involved (as
+   * source or target) - it gets no insight into the shares of other
+   * household members.
    */
   async findAll(householdId: string, user: AuthenticatedUser) {
     await this.assertHouseholdAccess(householdId, user.id);
@@ -169,7 +168,7 @@ export class FamilySharingService {
   }
 
   /**
-   * Listet alle eingehenden Freigaben für den aktuellen User.
+   * Lists all incoming shares for the current user.
    */
   async findIncoming(householdId: string, userId: string) {
     await this.assertHouseholdAccess(householdId, userId);
@@ -181,7 +180,7 @@ export class FamilySharingService {
   }
 
   /**
-   * Listet alle ausgehenden Freigaben des aktuellen Users.
+   * Lists all outgoing shares of the current user.
    */
   async findOutgoing(householdId: string, userId: string) {
     await this.assertHouseholdAccess(householdId, userId);
@@ -193,8 +192,8 @@ export class FamilySharingService {
   }
 
   /**
-   * Aktualisiert die Berechtigung einer Freigabe.
-   * Nur der Source-User kann die Freigabe ändern.
+   * Updates the permission of a share.
+   * Only the source user can change the share.
    */
   async update(householdId: string, userId: string, shareId: string, dto: UpdateShareDto) {
     await this.assertHouseholdAccess(householdId, userId);
@@ -204,11 +203,11 @@ export class FamilySharingService {
     });
 
     if (!share) {
-      throw new NotFoundException('Freigabe nicht gefunden');
+      throw new NotFoundException('Share not found');
     }
 
     if (share.sourceUserId !== userId) {
-      throw new ForbiddenException('Nur der Eigentümer kann die Freigabe ändern');
+      throw new ForbiddenException('Only the owner can change the share');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -239,8 +238,9 @@ export class FamilySharingService {
   }
 
   /**
-   * Entzieht (löscht) eine Freigabe.
-   * Der Entzug wirkt unmittelbar, da die Berechtigung zur Laufzeit geprüft wird.
+   * Revokes (deletes) a share.
+   * The revocation takes effect immediately because permissions are
+   * checked at runtime.
    */
   async remove(householdId: string, user: AuthenticatedUser, shareId: string) {
     await this.assertHouseholdAccess(householdId, user.id);
@@ -250,15 +250,15 @@ export class FamilySharingService {
     });
 
     if (!share) {
-      throw new NotFoundException('Freigabe nicht gefunden');
+      throw new NotFoundException('Share not found');
     }
 
-    // Nur der Source-User oder ein globaler ADMIN kann eine Freigabe entziehen
+    // Only the source user or a global ADMIN can revoke a share
     const isSource = share.sourceUserId === user.id;
     const isGlobalAdmin = user.role === GlobalRole.ADMIN;
 
     if (!isSource && !isGlobalAdmin) {
-      throw new ForbiddenException('Nicht berechtigt, diese Freigabe zu entziehen');
+      throw new ForbiddenException('Not authorized to revoke this share');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -289,15 +289,15 @@ export class FamilySharingService {
   }
 
   /**
-   * Prüft, ob ein User auf ein bestimmtes Objekt zugreifen darf.
-   * Wird von anderen Features (Policies, Dokumente) als Permission-Guard verwendet.
+   * Checks whether a user may access a specific object.
+   * Used by other features (policies, documents) as a permission guard.
    *
-   * Berechtigungslogik:
-   * 1. User ist Owner des Objekts -> Zugriff erlaubt
-   * 2. Es existiert eine Freigabe vom Owner zum User mit passendem Scope
-   * 3. ALL_OWNED deckt alle Objekte des Owners ab
-   * 4. CATEGORY deckt alle Objekte einer Kategorie ab
-   * 5. INSURANCE/DOCUMENT deckt das konkrete Objekt ab
+   * Permission logic:
+   * 1. User is the owner of the object -> access allowed
+   * 2. A share exists from the owner to the user with a matching scope
+   * 3. ALL_OWNED covers all objects of the owner
+   * 4. CATEGORY covers all objects of a category
+   * 5. INSURANCE/DOCUMENT covers the concrete object
    */
   async checkPermission(
     householdId: string,
@@ -307,12 +307,12 @@ export class FamilySharingService {
     scopeRef: string,
     requiredPermission: ObjectSharePermission,
   ): Promise<boolean> {
-    // Fall 1: Der anfragende User ist der Owner -> immer Zugriff
+    // Case 1: the requesting user is the owner -> always allow
     if (requestingUserId === ownerUserId) {
       return true;
     }
 
-    // Fall 2: Prüfen auf bestehende Freigabe
+    // Case 2: check for an existing share
     const shares = await this.db.objectShare.findMany({
       where: {
         householdId,
@@ -330,7 +330,7 @@ export class FamilySharingService {
         return true;
       }
       if (share.scopeType === ObjectShareScopeType.CATEGORY && scopeType === ObjectShareScopeType.INSURANCE) {
-        // CATEGORY-Freigaben auf Insurance-Ebene: scopeRef ist die Kategorie der Police
+        // CATEGORY shares at the insurance level: scopeRef is the policy's category
         const policy = await this.db.insurancePolicy.findUnique({
           where: { id: scopeRef },
           select: { type: true },
@@ -345,8 +345,8 @@ export class FamilySharingService {
   }
 
   /**
-   * Findet eine einzelne Freigabe.
-   * READ_ONLY darf nur Freigaben sehen, an denen er beteiligt ist.
+   * Finds a single share.
+   * READ_ONLY may only see shares in which it is involved.
    */
   async findOne(householdId: string, user: AuthenticatedUser, shareId: string) {
     await this.assertHouseholdAccess(householdId, user.id);
@@ -356,7 +356,7 @@ export class FamilySharingService {
     });
 
     if (!share) {
-      throw new NotFoundException('Freigabe nicht gefunden');
+      throw new NotFoundException('Share not found');
     }
 
     if (
@@ -364,7 +364,7 @@ export class FamilySharingService {
       share.sourceUserId !== user.id &&
       share.targetUserId !== user.id
     ) {
-      throw new ForbiddenException('Nicht berechtigt, diese Freigabe zu sehen');
+      throw new ForbiddenException('Not authorized to view this share');
     }
 
     return share;

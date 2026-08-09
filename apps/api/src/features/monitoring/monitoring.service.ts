@@ -17,10 +17,9 @@ export interface QueueOverviewItem {
 }
 
 /**
- * Fehlgeschlagene BullMQ-Jobs – bewusst REDIGIERT:
- * Job-Payloads (`job.data`, z. B. policyId/Dokument-Referenzen) und
- * Fehlermeldungen werden niemals vollstaendig zurueckgegeben. Die
- * `failedReason` wird auf 500 Zeichen gekuerzt.
+ * Failed BullMQ jobs – deliberately REDACTED: job payloads (`job.data`,
+ * e.g. policyId/document references) and error messages are never
+ * returned in full. The `failedReason` is truncated to 500 characters.
  */
 export interface FailedJobItem {
   id: string;
@@ -31,15 +30,15 @@ export interface FailedJobItem {
 }
 
 /**
- * Admin-Monitoring (AP-19).
+ * Admin monitoring (AP-19).
  *
- * Liefert Betriebszustaende der Queue-/Job-/Integrations-Schicht, ohne
- * sensitive Daten offenzulegen:
- * - BullMQ-Queue-Zaehler (keine Payloads)
- * - Fehlgeschlagene Jobs (redigiert, retry-faehig)
- * - AI-Extraktions-Jobs aus der DB (ohne errorMessage/extractedFieldsJson)
- * - Integrationsstatus (Paperless/AI/Storage/Portal-Connectoren/Portal-Links)
- *   – nur enabled/connected/Anzahl, niemals URLs, Tokens oder Zugangsdaten.
+ * Reports the operational state of the queue/job/integration layer
+ * without exposing sensitive data:
+ * - BullMQ queue counters (no payloads)
+ * - Failed jobs (redacted, retryable)
+ * - AI extraction jobs from the DB (without errorMessage/extractedFieldsJson)
+ * - Integration status (Paperless/AI/Storage/portal connectors/portal links)
+ *   – only enabled/connected/counts, never URLs, tokens or credentials.
  */
 @Injectable()
 export class MonitoringService {
@@ -55,7 +54,7 @@ export class MonitoringService {
     private readonly portalConnectors: PortalConnectorService,
   ) {}
 
-  /** Uebersicht aller registrierten Queues (nur Zaehler, keine Payloads). */
+  /** Overview of all registered queues (counters only, no payloads). */
   async queueOverview(): Promise<QueueOverviewItem[]> {
     const counts = await this.aiExtractionQueue.getJobCounts();
     return [
@@ -70,7 +69,7 @@ export class MonitoringService {
     ];
   }
 
-  /** Fehlgeschlagene Jobs aller registrierten Queues (redigiert). */
+  /** Failed jobs of all registered queues (redacted). */
   async listFailedJobs(): Promise<FailedJobItem[]> {
     const failed = await this.aiExtractionQueue.getFailed(0, 20);
     return failed.map((job) => ({
@@ -82,20 +81,20 @@ export class MonitoringService {
     }));
   }
 
-  /** Retry eines fehlgeschlagenen Jobs (kein Zugriff auf den Payload). */
+  /** Retries a failed job (no access to the payload). */
   async retryFailedJob(jobId: string): Promise<{ retried: boolean }> {
     const job = await this.aiExtractionQueue.getJob(jobId);
     if (!job) {
-      throw new NotFoundException('Job nicht gefunden');
+      throw new NotFoundException('Job not found');
     }
     await job.retry();
-    this.logger.log(`Fehlgeschlagener Job ${jobId} erneut eingereiht (Admin)`);
+    this.logger.log(`Failed job ${jobId} re-enqueued (Admin)`);
     return { retried: true };
   }
 
   /**
-   * AI-Extraktions-Jobs aus der Datenbank. `errorMessage` und
-   * `extractedFieldsJson` werden bewusst NICHT zurueckgegeben.
+   * AI extraction jobs from the database. `errorMessage` and
+   * `extractedFieldsJson` are deliberately NOT returned.
    */
   async aiJobs(): Promise<{
     statusCounts: Record<string, number>;
@@ -149,13 +148,14 @@ export class MonitoringService {
   }
 
   /**
-   * Integrationsstatus ohne sensitive Werte: nur enabled/connected und
-   * Sync-Status-Zaehler. URLs, Tokens und Zugangsdaten werden nie geliefert.
+   * Integration status without sensitive values: only enabled/connected
+   * and sync-status counters. URLs, tokens and credentials are never
+   * delivered.
    *
-   * Portal-Connectoren (AP-18, seit dem Merge auf main real): Jedes
-   * registrierte Plugin wird mit Verfuegbarkeit/Health aufgefuehrt
-   * (getPluginHealth ist fail-soft). Die reason wird gekuerzt – sie ist
-   * Entwickler-/Plugin-Text, enthaelt aber nie Zugangsdaten.
+   * Portal connectors (AP-18, real since the merge to main): every
+   * registered plugin is listed with availability/health
+   * (getPluginHealth is fail-soft). The reason is truncated – it is
+   * developer/plugin text but never contains credentials.
    */
   async integrations(): Promise<{
     ai: { enabled: boolean; provider: string; connected: boolean };

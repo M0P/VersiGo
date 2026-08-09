@@ -3,7 +3,7 @@ import { PortalConnectorRegistry } from '../portal-connector-registry';
 import { experimentalMailboxSyncPlugin, MAILBOX_SYNC_PLUGIN_KEY } from '../experimental-mailbox.plugin';
 
 describe('PortalConnectorRegistry', () => {
-  it('registriert und listet Plugins', () => {
+  it('registers and lists plugins', () => {
     const registry = new PortalConnectorRegistry();
     registry.register(experimentalMailboxSyncPlugin);
 
@@ -12,7 +12,7 @@ describe('PortalConnectorRegistry', () => {
     expect(registry.get('unbekannt')).toBeUndefined();
   });
 
-  it('liefert das deaktivierte experimentelle Plugin nicht als verfuegbar', () => {
+  it('does not report the disabled experimental plugin as available', () => {
     const registry = new PortalConnectorRegistry();
     registry.register(experimentalMailboxSyncPlugin);
 
@@ -21,7 +21,7 @@ describe('PortalConnectorRegistry', () => {
     expect(registry.capabilitiesOf('unbekannt')).toEqual([]);
   });
 
-  it('experimentelles Plugin ist registriert, deaktiviert und wirft bei Aufruf', async () => {
+  it('experimental plugin is registered, disabled and throws when called', async () => {
     expect(experimentalMailboxSyncPlugin.experimental).toBe(true);
     expect(experimentalMailboxSyncPlugin.isAvailable()).toBe(false);
     expect(experimentalMailboxSyncPlugin.capabilities).toContain('mailboxSync');

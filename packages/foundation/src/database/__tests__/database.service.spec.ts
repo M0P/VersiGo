@@ -14,7 +14,7 @@ function buildConfig(): AppConfigService {
 }
 
 describe('DatabaseService', () => {
-  it('meldet isHealthy=false, wenn die Verbindung fehlschlaegt', async () => {
+  it('reports isHealthy=false when the connection fails', async () => {
     const service = new DatabaseService(buildConfig());
     vi.spyOn(service as any, '$queryRaw').mockImplementation(() => {
       throw new Error('connection refused');
@@ -24,7 +24,7 @@ describe('DatabaseService', () => {
     expect(healthy).toBe(false);
   });
 
-  it('meldet isHealthy=true bei erfolgreicher Query', async () => {
+  it('reports isHealthy=true on a successful query', async () => {
     const service = new DatabaseService(buildConfig());
     vi.spyOn(service as any, '$queryRaw').mockResolvedValue([{ result: 1 }] as any);
 

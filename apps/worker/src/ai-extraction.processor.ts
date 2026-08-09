@@ -14,8 +14,8 @@ interface AiExtractionJobData {
 }
 
 /**
- * Extrahiert JSON aus einer AI-Antwort und trennt Felder von Konfidenzwerten.
- * Gemeinsame Hilfsfunktion fuer Worker-Adapter.
+ * Extracts JSON from an AI response and separates fields from confidence values.
+ * Shared helper function for worker adapters.
  */
 function tryParseExtractionResponse(
   raw: string,
@@ -53,7 +53,7 @@ function tryParseExtractionResponse(
 }
 
 /**
- * Bereitet ein Objekt fuer Prisma-JSON-Felder vor (Deep-Clone via Serialisierung).
+ * Prepares an object for Prisma JSON fields (deep clone via serialization).
  */
 function toPrismaJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -85,6 +85,12 @@ class WorkerOllamaAdapter implements IAIAdapter {
   ): Promise<AiExtractResult | null> {
     if (documentContents.length === 0) return null;
 
+    // Intentionally German (BugFix-11 translation allowlist): these are
+    // functional LLM prompts, not log/error strings. The German phrasing
+    // steers the model towards German output, which is the product language
+    // for these documents; translating them would change user-visible
+    // behavior. They are transliterated (no umlauts) and therefore not
+    // caught by the umlaut-grep verification.
     const systemPrompt = `Du extrahierst Versicherungsvertragsdaten aus Dokumenten.
 Antworte NUR mit einem gueltigen JSON-Objekt.
 Jedes Feld muss einen confidence-Wert zwischen 0 und 1 haben.
@@ -103,6 +109,8 @@ Antworte NUR mit JSON, keinem anderen Text.`;
   ): Promise<AiSummarizeResult | null> {
     if (documentContents.length === 0) return null;
 
+    // Intentionally German (BugFix-11 translation allowlist): functional LLM
+    // prompt requesting a German summary – German output is a feature here.
     const systemPrompt = `Du fasst Versicherungsvertraege zusammen.
 Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format.`;
 
@@ -153,7 +161,7 @@ Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format
 
     const parsed = tryParseExtractionResponse(raw, this.model);
     if (!parsed) {
-      this.logger.warn(`Konnte JSON nicht parsen aus AI-Antwort: ${raw.substring(0, 200)}`);
+      this.logger.warn(`Could not parse JSON from AI response: ${raw.substring(0, 200)}`);
       return null;
     }
     return parsed;
@@ -171,12 +179,12 @@ Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format
   private logError(method: string, err: unknown): void {
     if (err instanceof AxiosError) {
       this.logger.warn(
-        `Ollama-API ${method} fehlgeschlagen: status=${err.response?.status ?? 'keine Antwort'}, message=${err.message}`,
+        `Ollama API ${method} failed: status=${err.response?.status ?? 'no response'}, message=${err.message}`,
       );
     } else if (err instanceof Error) {
-      this.logger.warn(`Ollama-API ${method} Fehler: ${err.message}`);
+      this.logger.warn(`Ollama API ${method} error: ${err.message}`);
     } else {
-      this.logger.warn(`Ollama-API ${method} unbekannter Fehler`);
+      this.logger.warn(`Ollama API ${method} unknown error`);
     }
   }
 }
@@ -203,8 +211,14 @@ class WorkerOpenAiCompatAdapter implements IAIAdapter {
   ): Promise<AiExtractResult | null> {
     if (!this.isConfigured() || documentContents.length === 0) return null;
 
+    // Intentionally German (BugFix-11 translation allowlist): these are
+    // functional LLM prompts, not log/error strings. The German phrasing
+    // steers the model towards German output, which is the product language
+    // for these documents; translating them would change user-visible
+    // behavior. They are transliterated (no umlauts) and therefore not
+    // caught by the umlaut-grep verification.
     const systemPrompt = `Du extrahierst Versicherungsvertragsdaten aus Dokumenten.
-Antworte NUR mit einem gueltigen JSON-Objekt.
+ Antworte NUR mit einem gueltigen JSON-Objekt.
 Jedes Feld muss einen confidence-Wert zwischen 0 und 1 haben.
 Antworte NUR mit JSON, keinem anderen Text.`;
 
@@ -221,6 +235,8 @@ Antworte NUR mit JSON, keinem anderen Text.`;
   ): Promise<AiSummarizeResult | null> {
     if (!this.isConfigured() || documentContents.length === 0) return null;
 
+    // Intentionally German (BugFix-11 translation allowlist): functional LLM
+    // prompt requesting a German summary – German output is a feature here.
     const systemPrompt = `Du fasst Versicherungsvertraege zusammen.
 Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format.`;
 
@@ -278,7 +294,7 @@ Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format
 
     const parsed = tryParseExtractionResponse(raw, this.model);
     if (!parsed) {
-      this.logger.warn(`Konnte JSON nicht parsen aus AI-Antwort: ${raw.substring(0, 200)}`);
+      this.logger.warn(`Could not parse JSON from AI response: ${raw.substring(0, 200)}`);
       return null;
     }
     return parsed;
@@ -303,12 +319,12 @@ Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format
   private logError(method: string, err: unknown): void {
     if (err instanceof AxiosError) {
       this.logger.warn(
-        `OpenAI-API ${method} fehlgeschlagen: status=${err.response?.status ?? 'keine Antwort'}, message=${err.message}`,
+        `OpenAI API ${method} failed: status=${err.response?.status ?? 'no response'}, message=${err.message}`,
       );
     } else if (err instanceof Error) {
-      this.logger.warn(`OpenAI-API ${method} Fehler: ${err.message}`);
+      this.logger.warn(`OpenAI API ${method} error: ${err.message}`);
     } else {
-      this.logger.warn(`OpenAI-API ${method} unbekannter Fehler`);
+      this.logger.warn(`OpenAI API ${method} unknown error`);
     }
   }
 }
@@ -329,10 +345,10 @@ export class AiExtractionProcessor extends WorkerHost {
   }
 
   /**
-   * Loest den aktiven Adapter pro Job ueber die zentrale Settings-Aufloesung
-   * auf (AP-17: UI > .env > Default). Admin-UI-Aenderungen an AI_ENABLED,
-   * AI_PROVIDER, Modellen, Endpunkten und Timeouts wirken damit auch im
-   * Worker ohne Neustart.
+   * Resolves the active adapter per job via the central settings resolution
+   * (AP-17: UI > .env > default). Admin-UI changes to AI_ENABLED, AI_PROVIDER,
+   * models, endpoints and timeouts therefore also take effect in the worker
+   * without a restart.
    */
   private async resolveAdapter(): Promise<IAIAdapter> {
     const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');
@@ -374,7 +390,7 @@ export class AiExtractionProcessor extends WorkerHost {
   async process(job: Job<AiExtractionJobData>): Promise<{ success: boolean; error?: string }> {
     const { jobId, policyId, documentIds } = job.data;
 
-    this.logger.log(`Verarbeite AI-Extraktions-Job ${jobId} fuer Policy ${policyId}`);
+    this.logger.log(`Processing AI extraction job ${jobId} for policy ${policyId}`);
 
     try {
       const adapter = await this.resolveAdapter();
@@ -397,7 +413,7 @@ export class AiExtractionProcessor extends WorkerHost {
           data: {
             status: 'SKIPPED',
             completedAt: new Date(),
-            errorMessage: 'Keine Dokumente fuer AI-Extraktion verfuegbar',
+            errorMessage: 'No documents available for AI extraction',
           },
         });
         return { success: true };
@@ -411,16 +427,16 @@ export class AiExtractionProcessor extends WorkerHost {
 
         if (retryCount <= (currentJob?.maxRetries ?? 3)) {
           this.logger.warn(
-            `AI-Extraktion fehlgeschlagen fuer Job ${jobId}, ` +
-              `versuche erneut (${retryCount}/${currentJob?.maxRetries ?? 3})`,
+            `AI extraction failed for job ${jobId}, ` +
+              `retrying (${retryCount}/${currentJob?.maxRetries ?? 3})`,
           );
 
           await this.db.aiExtractionJob.update({
             where: { id: jobId },
-            data: { status: 'PENDING', retryCount, errorMessage: 'Extraktion fehlgeschlagen, Wiederholung geplant' },
+            data: { status: 'PENDING', retryCount, errorMessage: 'Extraction failed, retry scheduled' },
           });
 
-          throw new Error('AI-Extraktion fehlgeschlagen, Retry erforderlich');
+          throw new Error('AI extraction failed, retry required');
         }
 
         await this.db.aiExtractionJob.update({
@@ -428,11 +444,11 @@ export class AiExtractionProcessor extends WorkerHost {
           data: {
             status: 'FAILED',
             completedAt: new Date(),
-            errorMessage: 'AI-Extraktion nach mehreren Versuchen fehlgeschlagen',
+            errorMessage: 'AI extraction failed after multiple attempts',
           },
         });
 
-        return { success: false, error: 'Maximale Anzahl an Wiederholungen erreicht' };
+        return { success: false, error: 'Maximum number of retries reached' };
       }
 
       await this.db.aiExtractionJob.update({
@@ -446,13 +462,13 @@ export class AiExtractionProcessor extends WorkerHost {
         },
       });
 
-      this.logger.log(`AI-Extraktions-Job ${jobId} erfolgreich abgeschlossen`);
+      this.logger.log(`AI extraction job ${jobId} completed successfully`);
       return { success: true };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      this.logger.error(`AI-Extraktions-Job ${jobId} fehlgeschlagen: ${message}`);
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.error(`AI extraction job ${jobId} failed: ${message}`);
 
-      // Nur auf FAILED setzen, wenn es kein Retry ist
+      // Only set FAILED when it is not a retry
       const currentJob = await this.db.aiExtractionJob.findUnique({ where: { id: jobId } });
       if (currentJob && currentJob.status !== 'PENDING') {
         await this.db.aiExtractionJob.update({

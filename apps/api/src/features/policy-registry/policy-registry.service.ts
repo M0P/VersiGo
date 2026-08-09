@@ -36,7 +36,7 @@ export class PolicyRegistryService {
       where: { householdId_userId: { householdId, userId } },
     });
     if (!membership) {
-      throw new ForbiddenException('Isolation: kein Zugriff auf fremdes Household');
+      throw new ForbiddenException('Isolation: no access to a foreign household');
     }
   }
 
@@ -92,7 +92,7 @@ export class PolicyRegistryService {
   async findAll(householdId: string, user: AuthenticatedUser) {
     await this.assertHouseholdAccess(householdId, user.id);
 
-    // READ_ONLY: nur explizit freigegebene Policies (ADR-007/AP-16)
+    // READ_ONLY: only policies explicitly shared with them (ADR-007/AP-16)
     const readableIds = await this.authService.getReadablePolicyIds(user, householdId);
     const where =
       user.role === GlobalRole.READ_ONLY && readableIds
@@ -108,9 +108,9 @@ export class PolicyRegistryService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // AP-18: Portal-Links anreichern (Deeplink-Aufloesung, Katalog-/Connector-
-    // Sicht, credentialsSet). Ein nicht verfuegbarer Connector faellt dabei
-    // kontrolliert weg, ohne den Portal-Link zu beeintraechtigen.
+    // AP-18: enrich portal links (deeplink resolution, catalog/connector
+    // view, credentialsSet). An unavailable connector then falls away
+    // in a controlled way without affecting the portal link.
     return policies.map((policy) => ({
       ...policy,
       portalLinks: policy.portalLinks.map((link) =>
@@ -120,7 +120,7 @@ export class PolicyRegistryService {
   }
 
   async findOne(householdId: string, user: AuthenticatedUser, policyId: string) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only via share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const policy = await this.db.insurancePolicy.findFirst({
@@ -134,10 +134,10 @@ export class PolicyRegistryService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
-    // AP-18: Portal-Links anreichern (analog findAll).
+    // AP-18: enrich portal links (same as findAll).
     return {
       ...policy,
       portalLinks: policy.portalLinks.map((link) =>
@@ -154,7 +154,7 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -195,8 +195,8 @@ export class PolicyRegistryService {
         },
       });
 
-      // AP-18: Portal-Links anreichern, damit `credentialsEncrypted` nie in
-      // der Antwort auftaucht (analog findAll/findOne).
+      // AP-18: enrich portal links so `credentialsEncrypted` never appears
+      // in the response (same as findAll/findOne).
       return {
         ...policy,
         portalLinks: policy.portalLinks.map((link) =>
@@ -217,7 +217,7 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -251,7 +251,7 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -312,7 +312,7 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     const pinnedAt = new Date();
@@ -344,7 +344,7 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -367,7 +367,7 @@ export class PolicyRegistryService {
     });
   }
 
-  /** AP-18: Portal-Links anreichern (Deeplink-Aufloesung, Katalog-/Connector-Sicht). */
+  /** AP-18: enrich portal links (deeplink resolution, catalog/connector view). */
   private withEnrichedPortalLinks(policy: { contractNumber: string | null; portalLinks: PortalAccountLink[] }) {
     return {
       ...policy,
@@ -387,7 +387,7 @@ export class PolicyRegistryService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -425,7 +425,7 @@ export class PolicyRegistryService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     const existing = await this.db.coveredPerson.findFirst({
@@ -433,7 +433,7 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Versicherte Person nicht gefunden');
+      throw new NotFoundException('Insured person not found');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -471,7 +471,7 @@ export class PolicyRegistryService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     const existing = await this.db.coveredPerson.findFirst({
@@ -479,7 +479,7 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Versicherte Person nicht gefunden');
+      throw new NotFoundException('Insured person not found');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -505,9 +505,9 @@ export class PolicyRegistryService {
   // Portal Account Links
 
   /**
-   * Verschluesselt optionale Portal-Zugangsdaten (AP-18).
-   * Liefert null, wenn keine Zugangsdaten angegeben sind. Credentials
-   * werden NIE im Klartext gespeichert, geloggt oder zurueckgegeben.
+   * Encrypts optional portal credentials (AP-18).
+   * Returns null if no credentials are provided. Credentials are NEVER
+   * stored, logged or returned in plaintext.
    */
   private async encryptCredentials(
     credentials: PortalCredentialsDto | null | undefined,
@@ -515,14 +515,14 @@ export class PolicyRegistryService {
     if (!credentials) return null;
     if (!credentials.portalUsername?.trim() && !credentials.portalPassword?.trim()) {
       throw new BadRequestException(
-        'Mindestens ein Zugangsdatenfeld (portalUsername oder portalPassword) muss gesetzt sein',
+        'At least one credential field (portalUsername or portalPassword) must be set',
       );
     }
-    // `!= null` statt `!== undefined`: null-Werte (leere Felder) werden
-    // ebenfalls verworfen, es wird nur echte Strings persistiert.
-    // Der Benutzername wird getrimmt; das Passwort wird BEWUSST ungetrimmt
-    // gespeichert (fuehrende/abschliessende Leerzeichen koennen signifikant
-    // sein). Nur rein-whitespace-Passwoerter entfallen.
+    // `!= null` instead of `!== undefined`: null values (empty fields) are
+    // discarded; only real strings are persisted.
+    // The username is trimmed; the password is deliberately NOT trimmed
+    // (leading/trailing whitespace can be significant). Only
+    // whitespace-only passwords are dropped.
     const payload = JSON.stringify({
       ...(credentials.portalUsername != null && credentials.portalUsername.trim() !== ''
         ? { portalUsername: credentials.portalUsername.trim() }
@@ -535,10 +535,10 @@ export class PolicyRegistryService {
   }
 
   /**
-   * Baut ein redigiertes Audit-Diff fuer Portal-Links. Credentials-Werte
-   * duerfen niemals in Audit-Events auftauchen; nur `credentialsSet`.
-   * Der Rueckgabetyp ist auf Prisma `InputJsonValue` beschraenkt, damit
-   * das Diff direkt als `diffJson` (Json-Feld) nutzbar ist.
+   * Builds a redacted audit diff for portal links. Credential values
+   * must never appear in audit events; only `credentialsSet`.
+   * The return type is restricted to Prisma `InputJsonValue` so the
+   * diff can be used directly as `diffJson` (JSON field).
    */
   private portalLinkAuditDiff(
     dto: CreatePortalAccountLinkDto | UpdatePortalAccountLinkDto,
@@ -570,7 +570,7 @@ export class PolicyRegistryService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     const credentialsEncrypted = await this.encryptCredentials(dto.credentials);
@@ -615,7 +615,7 @@ export class PolicyRegistryService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     const existing = await this.db.portalAccountLink.findFirst({
@@ -623,11 +623,11 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Portal-Link nicht gefunden');
+      throw new NotFoundException('Portal link not found');
     }
 
-    // Credentials: Objekt => setzen/ersetzen, null => loeschen,
-    // nicht angegeben => unveraendert lassen. Nie Klartext speichern.
+    // Credentials: object => set/replace, null => delete,
+    // not provided => leave unchanged. Never store plaintext.
     let credentialsEncrypted: string | null | undefined;
     if ('credentials' in dto && dto.credentials !== undefined) {
       credentialsEncrypted = await this.encryptCredentials(dto.credentials);
@@ -673,7 +673,7 @@ export class PolicyRegistryService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     const existing = await this.db.portalAccountLink.findFirst({
@@ -681,7 +681,7 @@ export class PolicyRegistryService {
     });
 
     if (!existing) {
-      throw new NotFoundException('Portal-Link nicht gefunden');
+      throw new NotFoundException('Portal link not found');
     }
 
     return this.db.$transaction(async (tx) => {

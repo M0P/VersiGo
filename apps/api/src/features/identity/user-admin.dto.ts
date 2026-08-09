@@ -27,7 +27,7 @@ export class SetUserRoleDto {
 }
 
 export class BindOidcIdentityDto {
-  @IsUrl({ require_tld: false }, { message: 'oidcIssuer muss eine gueltige URL sein' })
+  @IsUrl({ require_tld: false }, { message: 'oidcIssuer must be a valid URL' })
   @Length(1, 512)
   oidcIssuer!: string;
 

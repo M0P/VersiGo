@@ -18,7 +18,7 @@ describe('PortalConnectorsController', () => {
     controller = new PortalConnectorsController(service);
   });
 
-  it('delegiert Katalog und Plugins an den Service', () => {
+  it('delegates catalog and plugins to the service', () => {
     (service.listCatalog as ReturnType<typeof vi.fn>).mockReturnValue([{ providerKey: 'huk-coburg' }]);
     (service.getCatalogEntry as ReturnType<typeof vi.fn>).mockReturnValue({ providerKey: 'huk-coburg' });
     (service.listPlugins as ReturnType<typeof vi.fn>).mockReturnValue([]);
@@ -28,12 +28,12 @@ describe('PortalConnectorsController', () => {
     expect(controller.listPlugins()).toEqual([]);
   });
 
-  it('wirft NotFoundException fuer unbekannte Katalog-Eintraege', () => {
+  it('throws NotFoundException for unknown catalog entries', () => {
     (service.getCatalogEntry as ReturnType<typeof vi.fn>).mockReturnValue(null);
     expect(() => controller.getCatalogEntry('unbekannt')).toThrow(NotFoundException);
   });
 
-  it('degradiert kontrolliert bei unbekanntem Plugin statt 500', async () => {
+  it('degrades in a controlled way for an unknown plugin instead of 500', async () => {
     (service.getPluginHealth as ReturnType<typeof vi.fn>).mockResolvedValue({
       available: false,
       healthy: false,

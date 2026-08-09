@@ -35,36 +35,36 @@ describe('RolesGuard', () => {
     memberships: [],
   });
 
-  it('erlaubt Zugriff wenn die globale Rolle in der Anforderung enthalten ist', () => {
+  it('allows access when the global role is included in the requirement', () => {
     const reflector = { getAllAndOverride: () => [GlobalRole.USER, GlobalRole.ADMIN] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
     const ctx = buildContext(makeUser(GlobalRole.USER));
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
-  it('erlaubt ADMIN Zugriff auf USER-Routen', () => {
+  it('allows ADMIN access to USER routes', () => {
     const reflector = { getAllAndOverride: () => [GlobalRole.USER] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
     const ctx = buildContext(makeUser(GlobalRole.ADMIN));
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
-  it('verweigert Zugriff wenn die Rolle nicht ausreicht (USER vs ADMIN)', () => {
+  it('denies access when the role is not sufficient (USER vs ADMIN)', () => {
     const reflector = { getAllAndOverride: () => [GlobalRole.ADMIN] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
     const ctx = buildContext(makeUser(GlobalRole.USER));
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
-    expect(() => guard.canActivate(ctx)).toThrow('Rolle reicht');
+    expect(() => guard.canActivate(ctx)).toThrow('Role is not sufficient');
   });
 
-  it('verweigert READ_ONLY Zugriff auf Schreib-Routen (nur USER/ADMIN)', () => {
+  it('denies READ_ONLY access to write routes (only USER/ADMIN)', () => {
     const reflector = { getAllAndOverride: () => [GlobalRole.USER, GlobalRole.ADMIN] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
     const ctx = buildContext(makeUser(GlobalRole.READ_ONLY));
     expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
   });
 
-  it('erlaubt READ_ONLY Zugriff auf reine Leserouten', () => {
+  it('allows READ_ONLY access to read-only routes', () => {
     const reflector = {
       getAllAndOverride: () => [GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN],
     } as unknown as Reflector;
@@ -73,18 +73,18 @@ describe('RolesGuard', () => {
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
-  it('erlaubt Zugriff wenn keine Rollen gefordert sind', () => {
+  it('allows access when no roles are required', () => {
     const reflector = { getAllAndOverride: () => [] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
     const ctx = buildContext(makeUser(GlobalRole.READ_ONLY));
     expect(guard.canActivate(ctx)).toBe(true);
   });
 
-  it('wirft ForbiddenException wenn kein User am Request haengt', () => {
+  it('throws ForbiddenException when no user is attached to the request', () => {
     const reflector = { getAllAndOverride: () => [GlobalRole.ADMIN] } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
     const ctx = buildContext(undefined);
-    expect(() => guard.canActivate(ctx)).toThrow('Nicht authentifiziert');
+    expect(() => guard.canActivate(ctx)).toThrow('Not authenticated');
   });
 
   it.each([
@@ -92,7 +92,7 @@ describe('RolesGuard', () => {
     [GlobalRole.USER, [GlobalRole.USER, GlobalRole.ADMIN], true],
     [GlobalRole.ADMIN, [GlobalRole.ADMIN], true],
     [GlobalRole.ADMIN, [GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN], true],
-  ])('Rolle %s gegen Anforderung %j -> erlaubt=%s', (userRole, required, expected) => {
+  ])('role %s against requirement %j -> allowed=%s', (userRole, required, expected) => {
     const reflector = { getAllAndOverride: () => required } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
     const ctx = buildContext(makeUser(userRole));

@@ -19,7 +19,7 @@ export class RegisterLocalAccountDto {
   @IsString()
   @Matches(USERNAME_REGEX, {
     message:
-      'Benutzername: 3-32 Zeichen, Kleinbuchstaben, Ziffern und . _ - (Start mit Buchstabe oder Ziffer)',
+      'Username: 3-32 characters, lowercase letters, digits and . _ - (start with a letter or digit)',
   })
   username!: string;
 
@@ -29,7 +29,7 @@ export class RegisterLocalAccountDto {
 
   @IsString()
   @Length(PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, {
-    message: `Passwort muss zwischen ${PASSWORD_MIN_LENGTH} und ${PASSWORD_MAX_LENGTH} Zeichen lang sein`,
+    message: `password must be between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters long`,
   })
   password!: string;
 }

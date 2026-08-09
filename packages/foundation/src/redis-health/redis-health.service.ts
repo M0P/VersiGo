@@ -3,9 +3,8 @@ import Redis from 'ioredis';
 import { AppConfigService } from '../config';
 
 /**
- * Technischer Health-Check fuer Redis. Enthaelt keine fachliche Queue-
- * oder Job-Logik, ausschliesslich eine Ping-Pruefung fuer die
- * Readiness-Antwort.
+ * Technical health check for Redis. Contains no domain queue or job
+ * logic, only a ping check for the readiness response.
  */
 @Injectable()
 export class RedisHealthService implements OnModuleDestroy {

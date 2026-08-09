@@ -58,7 +58,7 @@ function createMockConfig(overrides: Record<string, unknown> = {}) {
 
 function createMockPasswordHashing() {
   return {
-    // Opaquer, bcrypt-artiger Hash, der den Klartext niemals enthaelt.
+    // Opaque, bcrypt-like hash that never contains the plain text.
     hash: vi.fn(async () => '$2b$12$mockhash0000000000000000000000000000000000000000000000000'),
     verify: vi.fn(),
   };
@@ -82,13 +82,13 @@ describe('LocalAdminBootstrapService', () => {
     );
   }
 
-  it('legt den initialen Admin an, wenn kein Benutzername existiert', async () => {
+  it('creates the initial admin when no username exists', async () => {
     mockDb.user.findUnique.mockResolvedValue(null);
     service = createService(createMockConfig());
 
     await service.bootstrap();
 
-    // Benutzername wird normalisiert (lowercase, getrimmt)
+    // The username is normalized (lowercase, trimmed)
     expect(mockDb.user.findUnique).toHaveBeenCalledWith({
       where: { username: 'localadmin' },
       select: { id: true, role: true, status: true },
@@ -108,7 +108,7 @@ describe('LocalAdminBootstrapService', () => {
         userId: expect.any(String) as string,
       }),
     });
-    // AP-16: credentials hat kein identifier-Feld mehr
+    // AP-16: credentials no longer has an identifier field
     expect(tx.credential.create.mock.calls[0][0].data).not.toHaveProperty('identifier');
     // AP-20: Beta-Referenz-Household "default" + Admin-Mitgliedschaft anlegen
     expect(tx.household.findUnique).toHaveBeenCalledWith({
@@ -125,7 +125,7 @@ describe('LocalAdminBootstrapService', () => {
       create: { householdId: 'default', userId: 'user-1' },
       update: {},
     });
-    // Audit-Eintrag fuer den Bootstrap
+    // Audit entry for the bootstrap
     expect(tx.auditEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         entityType: 'User',
@@ -139,7 +139,7 @@ describe('LocalAdminBootstrapService', () => {
         entityId: 'default',
       }),
     });
-    // Nur der Hash wird gespeichert, niemals der Klartext
+    // Only the hash is stored, never the plain text
     expect(mockPasswordHashing.hash).toHaveBeenCalledWith('local-dev-admin-pw-2026');
     const credentialData = tx.credential.create.mock.calls[0][0].data;
     expect(credentialData.passwordHash).toBe(
@@ -150,7 +150,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(tx.user.create.mock.calls[0][0].data).not.toHaveProperty('passwordHash');
   });
 
-  it('legt kein Duplikat an, wenn der Admin bereits existiert', async () => {
+  it('does not create a duplicate when the admin already exists', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       id: 'user-1',
       role: GlobalRole.ADMIN,
@@ -166,7 +166,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(mockPasswordHashing.hash).not.toHaveBeenCalled();
   });
 
-  it('stellt das Default-Household auch bei bereits existierendem Admin sicher (Upgrade-Reparatur)', async () => {
+  it('ensures the default household even when the admin already exists (upgrade repair)', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       id: 'user-1',
       role: GlobalRole.ADMIN,
@@ -177,10 +177,10 @@ describe('LocalAdminBootstrapService', () => {
     await service.bootstrap();
 
     const tx = mockDb._tx;
-    // Kein neuer Admin, keine Credential-Erstellung ...
+    // No new admin, no credential creation ...
     expect(tx.user.create).not.toHaveBeenCalled();
     expect(tx.credential.create).not.toHaveBeenCalled();
-    // ... aber das Household + die Mitgliedschaft werden idempotent repariert
+    // ... but the household + membership are repaired idempotently
     expect(tx.household.findUnique).toHaveBeenCalledWith({
       where: { id: 'default' },
       select: { id: true },
@@ -197,7 +197,7 @@ describe('LocalAdminBootstrapService', () => {
     });
   });
 
-  it('auditiert die Mitgliedschaft auch im Reparaturpfad, wenn das Household bereits existiert', async () => {
+  it('audits the membership in the repair path too when the household already exists', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       id: 'user-1',
       role: GlobalRole.ADMIN,
@@ -209,13 +209,13 @@ describe('LocalAdminBootstrapService', () => {
     await service.bootstrap();
 
     const tx = mockDb._tx;
-    // Bestehendes Household wird nicht neu angelegt ...
+    // An existing household is not recreated ...
     expect(tx.household.create).not.toHaveBeenCalled();
     const householdAudits = tx.auditEvent.create.mock.calls.filter(
       (call) => call[0].data.action === 'BOOTSTRAP_DEFAULT_HOUSEHOLD',
     );
     expect(householdAudits).toHaveLength(0);
-    // ... aber die neu angelegte Mitgliedschaft wird auditiert
+    // ... but the newly created membership is audited
     expect(tx.householdMembership.upsert).toHaveBeenCalled();
     const membershipAudits = tx.auditEvent.create.mock.calls.filter(
       (call) => call[0].data.action === 'BOOTSTRAP_DEFAULT_HOUSEHOLD_MEMBERSHIP',
@@ -225,7 +225,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(membershipAudits[0][0].data.actorUserId).toBe('user-1');
   });
 
-  it('vergibt keine Default-Household-Mitgliedschaft an einen bestehenden Nicht-ADMIN', async () => {
+  it('does not grant a default household membership to an existing non-ADMIN', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       id: 'user-1',
       role: GlobalRole.USER,
@@ -241,7 +241,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(tx.auditEvent.create).not.toHaveBeenCalled();
   });
 
-  it('ist idempotent: ein zweiter Bootstrap legt kein zweites Household an', async () => {
+  it('is idempotent: a second bootstrap does not create a second household', async () => {
     mockDb.user.findUnique
       .mockResolvedValueOnce(null)
       .mockResolvedValue({
@@ -270,18 +270,18 @@ describe('LocalAdminBootstrapService', () => {
     const membershipAudits = tx.auditEvent.create.mock.calls.filter(
       (call) => call[0].data.action === 'BOOTSTRAP_DEFAULT_HOUSEHOLD_MEMBERSHIP',
     );
-    // Mitgliedschaft wurde beim ersten Lauf angelegt, beim zweiten nicht erneut
+    // The membership was created on the first run, not again on the second
     expect(membershipAudits).toHaveLength(1);
   });
 
-  it('ueberschreibt ein bestehendes Passwort nicht, wenn sich die Konfiguration aendert', async () => {
+  it('does not overwrite an existing password when the configuration changes', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       id: 'user-1',
       role: GlobalRole.ADMIN,
       status: UserStatus.ACTIVE,
     });
     service = createService(
-      createMockConfig({ LOCAL_ADMIN_PASSWORD: 'neues-passwort-nach-erstem-start' }),
+      createMockConfig({ LOCAL_ADMIN_PASSWORD: 'new-password-after-first-start' }),
     );
 
     await service.bootstrap();
@@ -291,7 +291,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(mockPasswordHashing.hash).not.toHaveBeenCalled();
   });
 
-  it('fuehrt in Produktion keinen Bootstrap aus, wenn lokale Auth nicht explizit aktiviert ist', async () => {
+  it('does not run the bootstrap in production when local auth is not explicitly enabled', async () => {
     service = createService(
       createMockConfig({ isProduction: true, LOCAL_AUTH_ENABLED: false }),
     );
@@ -302,7 +302,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(mockDb._tx.user.create).not.toHaveBeenCalled();
   });
 
-  it('fuehrt in Produktion den Bootstrap aus, wenn lokale Auth und Admin-Variablen explizit gesetzt sind', async () => {
+  it('runs the bootstrap in production when local auth and admin variables are explicitly set', async () => {
     mockDb.user.findUnique.mockResolvedValue(null);
     service = createService(
       createMockConfig({
@@ -329,7 +329,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(tx.householdMembership.upsert).toHaveBeenCalled();
   });
 
-  it('verweigert in Produktion den Bootstrap mit dem .env.example-Platzhalter-Passwort', async () => {
+  it('refuses the bootstrap in production with the .env.example placeholder password', async () => {
     service = createService(
       createMockConfig({
         isProduction: true,
@@ -346,7 +346,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(mockDb._tx.household.create).not.toHaveBeenCalled();
   });
 
-  it('erlaubt in Entwicklung/Test weiterhin den Bootstrap mit dem Platzhalter-Passwort', async () => {
+  it('still allows the bootstrap in development/test with the placeholder password', async () => {
     mockDb.user.findUnique.mockResolvedValue(null);
     service = createService(
       createMockConfig({
@@ -365,7 +365,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(tx.householdMembership.upsert).toHaveBeenCalled();
   });
 
-  it('fuehrt keinen Bootstrap aus, wenn lokale Auth deaktiviert ist', async () => {
+  it('does not run the bootstrap when local auth is disabled', async () => {
     service = createService(createMockConfig({ LOCAL_AUTH_ENABLED: false }));
 
     await service.bootstrap();
@@ -374,7 +374,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(mockDb._tx.user.create).not.toHaveBeenCalled();
   });
 
-  it('ueberspringt den Bootstrap, wenn Admin-Variablen fehlen', async () => {
+  it('skips the bootstrap when admin variables are missing', async () => {
     service = createService(
       createMockConfig({ LOCAL_ADMIN_USERNAME: undefined, LOCAL_ADMIN_PASSWORD: undefined }),
     );
@@ -385,7 +385,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(mockDb._tx.user.create).not.toHaveBeenCalled();
   });
 
-  it('wirft nicht, wenn der Benutzername bereits vergeben ist (P2002, Race zwischen Replikas)', async () => {
+  it('does not throw when the username is already taken (P2002, race between replicas)', async () => {
     mockDb.user.findUnique.mockResolvedValue(null);
     const conflict = new Error('Unique constraint failed on the fields: (`username`)');
     (conflict as { code?: string }).code = 'P2002';
@@ -397,7 +397,7 @@ describe('LocalAdminBootstrapService', () => {
     expect(mockDb._tx.credential.create).not.toHaveBeenCalled();
   });
 
-  it('wirft bei Nicht-Duplikat-Fehlern (z. B. DB nicht erreichbar) nicht, loggt aber', async () => {
+  it('does not throw on non-duplicate errors (e.g. DB unreachable) but logs', async () => {
     const dbError = new Error('Can\'t reach database server');
     (dbError as { code?: string }).code = 'P1001';
     mockDb.user.findUnique.mockRejectedValueOnce(dbError);
@@ -406,7 +406,7 @@ describe('LocalAdminBootstrapService', () => {
     await expect(service.bootstrap()).resolves.toBeUndefined();
   });
 
-  it('normalisiert den Benutzernamen (lowercase, getrimmt)', async () => {
+  it('normalizes the username (lowercase, trimmed)', async () => {
     mockDb.user.findUnique.mockResolvedValue(null);
     service = createService(
       createMockConfig({ LOCAL_ADMIN_USERNAME: '  LocalAdmin  ' }),

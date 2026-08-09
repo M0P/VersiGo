@@ -21,13 +21,13 @@ type Document = {
   documentDate: string | null;
   category: string | null;
   uploadedAt: string;
-  // BugFix-07 (Q3): Storage-Art + Deep-Link fuer PAPERLESS_LINK-Dokumente
+  // BugFix-07 (Q3): storage type + deep link for PAPERLESS_LINK documents
   storageType?: string;
   storageRef?: string | null;
   deepLink?: string | null;
 };
 
-// BugFix-07 (Q3): Ergebnis der Paperless-Suche (GET /paperless/documents)
+// BugFix-07 (Q3): result of the Paperless search (GET /paperless/documents)
 type PaperlessHit = {
   paperlessId: number;
   title: string;
@@ -50,7 +50,7 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
   const [file, setFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // BugFix-07 (Q3): Paperless-Verknuepfung
+  // BugFix-07 (Q3): Paperless linking
   const [showPaperless, setShowPaperless] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [paperlessResults, setPaperlessResults] = useState<PaperlessHit[] | null>(null);
@@ -60,18 +60,18 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
   const searchSeq = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Gemeinsame Ladelogik fuer Mount-Effekt und Handler-Reloads. Ein
-  // Monoton-zaehler (`requestSeq`) invalidiert in-flight Requests bei jedem
-  // neuen Ladevorgang sowie bei Unmount/policyId-Wechsel: Nur die neueste
-  // Anfrage darf Zustand schreiben – auch nach Submits/Deletes, die nach
-  // einem policyId-Wechsel noch eintreffen (BugFix-05, Befund 8: kein
-  // Fremddaten-Leak von Versicherung A unter B).
+  // Shared loading logic for the mount effect and handler reloads. A
+  // monotonically increasing counter (`requestSeq`) invalidates in-flight
+  // requests on every new load as well as on unmount/policyId change: only
+  // the newest request may write state – also after submits/deletes that
+  // still arrive after a policyId change (BugFix-05, finding 8: no
+  // foreign-data leak from policy A under B).
   const requestSeq = useRef(0);
 
   const reloadDocuments = async () => {
     const seq = ++requestSeq.current;
-    // BugFix-05 (Befund 8): State zuruecksetzen, damit beim policyId-Wechsel
-    // keine Dokumente der vorherigen Versicherung angezeigt werden.
+    // BugFix-05 (finding 8): reset state so a policyId change does not
+    // display documents from the previous policy.
     setDocuments([]);
     setLoading(true);
     setError(null);
@@ -92,14 +92,14 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
     }
   };
 
-  // BugFix-05 (Befund 4): Beim Mount und bei jedem policyId-Wechsel neu laden –
-  // sonst bleibt der Spinner haengen (leere Liste) bzw. es erscheinen Dokumente
-  // der vorherigen Versicherung. Der Cleanup invalidiert in-flight Requests des
-  // vorherigen policyId bzw. nach Unmount (keine Zustands-Updates danach).
-  // BugFix-05 (Befund 8): Beim policyId-Wechsel wird auch das Formular
-  // zurueckgesetzt – ein offenes Formular mit Daten der Versicherung A darf
-  // nicht unter B stehen bleiben (ein spaeterer Upload-Fehler wuerde sonst
-  // unter B gerendert bzw. die Felder von A weiterhin anzeigen).
+  // BugFix-05 (finding 4): reload on mount and on every policyId change –
+  // otherwise the spinner stays stuck (empty list) or documents from the
+  // previous policy are shown. The cleanup invalidates in-flight requests
+  // of the previous policyId / after unmount (no state updates afterwards).
+  // BugFix-05 (finding 8): the form is also reset on a policyId change – an
+  // open form holding data of policy A must not remain under B (a later
+  // upload error would otherwise render under B or the fields of A would
+  // stay visible).
   useEffect(() => {
     setShowForm(false);
     setFile(null);
@@ -110,8 +110,8 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
     setPaperlessResults(null);
     setPaperlessError(null);
     void reloadDocuments();
-    // policyId steuert die Datenquelle; t ist bewusst nicht in den Dependencies
-    // (Sprachwechsel soll die Liste nicht neu laden).
+    // policyId controls the data source; `t` is deliberately not in the
+    // dependencies (a language switch must not reload the list).
     return () => {
       requestSeq.current += 1;
       searchSeq.current += 1;
@@ -119,9 +119,9 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
     };
   }, [policyId]);
 
-  // BugFix-07 (Q3): Debounced Live-Suche in Paperless. Leerer Suchbegriff
-  // (oder < 2 Zeichen) loest keine Anfrage aus; ein policyId-Wechsel
-  // invalidiert in-flight Suchen ueber searchSeq.
+  // BugFix-07 (Q3): debounced live search in Paperless. An empty search
+  // term (or < 2 characters) triggers no request; a policyId change
+  // invalidates in-flight searches via searchSeq.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const term = searchTerm.trim();
@@ -164,11 +164,10 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
       setFormError(t('policies.documentFile') + ' ' + t('common.required'));
       return;
     }
-    // BugFix-05 (Befund 8): Seq-Token wie beim Reload/Delete – ein Upload-
-    // Fehler einer aelteren Anfrage darf nach policyId-Wechsel keine
-    // Fehlermeldung im (bereits zurueckgesetzten) Formular der neuen
-    // Versicherung rendern. Der Erfolgspfad laeuft ueber reloadDocuments(),
-    // das selbst einen neuen Seq-Stand setzt.
+    // BugFix-05 (finding 8): seq token like on reload/delete – an upload
+    // error of an older request must not render an error message in the
+    // (already reset) form of the new policy after a policyId change. The
+    // success path runs through reloadDocuments(), which sets a new seq itself.
     const seq = requestSeq.current;
     setFormError(null);
     setUploading(true);
@@ -187,16 +186,16 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
         const data = await res.json().catch(() => null);
         throw new Error(data?.message ?? t('common.unknownError'));
       }
-      // BugFix-05 (Befund 8, Review-Runde 5): Auch die Formular-Reset-Writes
-      // sind seq-gesichert – ein spaeter Erfolg eines Uploads von A darf nach
-      // policyId-Wechsel nicht B's offenes Formular schliessen/leeren.
+      // BugFix-05 (finding 8, review round 5): the form-reset writes are
+      // also seq-guarded – a late success of an upload from A must not
+      // close/clear B's open form after a policyId change.
       if (seq === requestSeq.current) {
         setFile(null);
         setForm({ category: '', documentDate: '' });
         setShowForm(false);
-        // Erfolgs-Reload nur, wenn kein policyId-Wechsel zwischenzeitlich
-        // stattfand – sonst wuerde die veraltete Closure Dokumente von A unter
-        // B laden. Der neue policyId-Effekt laedt B bereits selbst.
+        // Success reload only if no policyId change happened in the meantime
+        // – otherwise the stale closure would load policy A's documents
+        // under B. The new policyId effect already loads B itself.
         reloadDocuments();
       }
     } catch (err) {
@@ -223,9 +222,9 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
         const data = await res.json().catch(() => null);
         throw new Error(data?.message ?? t('common.unknownError'));
       }
-      // Deduplizierung ist idempotent: Das bereits verbundene Dokument wird
-      // erneut zurueckgegeben – nach dem Reload erscheint es ggf. mit dem
-      // "Bereits verbunden"-Badge.
+      // Deduplication is idempotent: the already-linked document is
+      // returned again – after the reload it appears with the
+      // "already linked" badge where applicable.
       if (seq === requestSeq.current) {
         setPaperlessResults((prev) => prev?.filter((r) => r.paperlessId !== paperlessId) ?? null);
         reloadDocuments();
@@ -241,9 +240,8 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
 
   const handleDelete = async (id: string) => {
     if (!window.confirm(t('policies.confirmDeleteDocument'))) return;
-    // BugFix-05 (Befund 8): Seq-Token wie beim Reload – ein Fehler einer
-    // aelteren Anfrage darf nach policyId-Wechsel keine Fehlermeldung unter
-    // der neuen Versicherung rendern.
+    // BugFix-05 (finding 8): seq token like on reload – an error of an
+    // older request must not render an error message under the new policy.
     const seq = ++requestSeq.current;
     try {
       const res = await fetch(`${API_BASE}/households/default/policies/${policyId}/documents/${id}`, {
@@ -251,9 +249,9 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
         credentials: 'include',
       });
       if (!res.ok) throw new Error(t('common.unknownError'));
-      // BugFix-05 (Befund 8, Review-Runde 4): Auch der Erfolgs-Reload ist
-      // seq-gesichert – nach einem policyId-Wechsel darf die veraltete Closure
-      // keine Dokumente von A unter B laden.
+      // BugFix-05 (finding 8, review round 4): the success reload is also
+      // seq-guarded – after a policyId change the stale closure must not
+      // load policy A's documents under B.
       if (seq === requestSeq.current) reloadDocuments();
     } catch {
       if (seq === requestSeq.current) setError(t('common.unknownError'));
@@ -274,8 +272,8 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--versigo-space-4)' }}>
         <h2>{t('policies.tabs.documents')}</h2>
         <div style={{ display: 'flex', gap: 'var(--versigo-space-2)' }}>
-          {/* BugFix-07 (Q3): Paperless-Verknuepfung – eigenes Panel, damit
-              beliebig viele Dokumente nacheinander verbunden werden koennen. */}
+          {/* BugFix-07 (Q3): Paperless linking – separate panel so any
+              number of documents can be linked one after another. */}
           <Button variant="secondary" onClick={() => setShowPaperless((v) => !v)}>
             {t('policies.paperlessConnect')}
           </Button>
@@ -432,9 +430,9 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 'var(--versigo-space-2)' }}>
-                {/* BugFix-07 (Q3): PAPERLESS_LINK-Dokumente haben keinen
-                    lokalen Dateiinhalt – statt Vorschau/Download wird der
-                    Paperless-Deep-Link angeboten. */}
+                {/* BugFix-07 (Q3): PAPERLESS_LINK documents have no
+                    local file content – instead of preview/download the
+                    Paperless deep link is offered. */}
                 {isLinked(doc) ? (
                   doc.deepLink ? (
                     <a href={doc.deepLink} target="_blank" rel="noopener noreferrer">

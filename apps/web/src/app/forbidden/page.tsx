@@ -7,10 +7,10 @@ import { Alert } from '../../components/ui/alert';
 import { useI18n } from '../../i18n';
 
 /**
- * AP-16: Seite fuer verbotene Zugriffe (403). Wird angezeigt, wenn eine
- * Seite oder API-Aktion fuer die Rolle des Users nicht zulaessig ist
- * (z. B. READ_ONLY bei Admin-Seiten). Die eigentliche Durchsetzung
- * erfolgt serverseitig; diese Seite ist nur die UX-Ebene.
+ * AP-16: page for forbidden accesses (403). Displayed when a page or
+ * API action is not allowed for the user's role (e.g. READ_ONLY on admin
+ * pages). The actual enforcement happens server-side; this page is only
+ * the UX layer.
  */
 export default function ForbiddenPage(): ReactElement {
   const { t } = useI18n();

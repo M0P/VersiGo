@@ -1,6 +1,14 @@
 packages:
   - apps/*
   - packages/*
+# BugFix-11 (B5): override next 16.2.12's internally pinned postcss (8.4.31,
+# exact) and sharp (^0.34.5) to patched versions so `pnpm audit --prod`
+# reaches 0 critical / 0 high / 0 moderate. pnpm 11 reads overrides only from
+# pnpm-workspace.yaml (the package.json "pnpm" field is ignored).
+overrides:
+  postcss: ^8.5.23
+  sharp: ^0.35.3
+  vite: ^6.4.3
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true

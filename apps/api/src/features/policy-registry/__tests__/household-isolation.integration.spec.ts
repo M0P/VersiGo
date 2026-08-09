@@ -68,7 +68,7 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
     );
   });
 
-  it('User A erstellt Policy in Household A (erlaubt)', async () => {
+  it('user A creates a policy in household A (allowed)', async () => {
     setupMemberships([{ userId: userA.id, householdId: householdA, role: 'OWNER' }]);
     mockDb.insurancePolicy.create.mockResolvedValue({
       id: 'p1', householdId: householdA, ownerUserId: userA.id,
@@ -85,7 +85,7 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
     expect(result.householdId).toBe(householdA);
   });
 
-  it('User A kann keine Policy in Household B erstellen (Isolation)', async () => {
+  it('user A cannot create a policy in household B (isolation)', async () => {
     setupMemberships([
       { userId: userA.id, householdId: householdA, role: 'OWNER' },
     ]);
@@ -100,7 +100,7 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine Policy in Household A sehen (Isolation, symmetrisch)', async () => {
+  it('user B cannot see a policy in household A (isolation, symmetric)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -114,7 +114,7 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B sieht nur Policies aus Household B', async () => {
+  it('user B only sees policies from household B', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'MEMBER' },
     ]);
@@ -130,7 +130,7 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
     );
   });
 
-  it('User A kann Policy in Household B nicht aktualisieren (Isolation)', async () => {
+  it('user A cannot update a policy in household B (isolation)', async () => {
     setupMemberships([
       { userId: userA.id, householdId: householdA, role: 'OWNER' },
     ]);
@@ -143,7 +143,7 @@ describe('Policy-Registry Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User A kann Policy in Household B nicht archivieren (Isolation)', async () => {
+  it('user A cannot archive a policy in household B (isolation)', async () => {
     setupMemberships([
       { userId: userA.id, householdId: householdA, role: 'OWNER' },
     ]);

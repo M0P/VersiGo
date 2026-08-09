@@ -12,7 +12,7 @@ Please take a moment to read this guide and the
 If you find a security vulnerability, **do not open a public issue**. Report it
 privately via **GitHub Security Advisories** (Security -> Report a
 vulnerability, or
-`https://github.com/M0P/insura/security/advisories/new`). See
+`https://github.com/M0P/VersiGo/security/advisories/new`). See
 [SECURITY.md](SECURITY.md).
 
 ## Reporting bugs and requesting features
@@ -33,9 +33,9 @@ Please use the issue templates:
 2. **Clone** your fork and add the upstream remote:
 
    ```bash
-   git clone https://github.com/<your-user>/insura.git
-   cd insura
-   git remote add upstream https://github.com/M0P/insura.git
+   git clone https://github.com/<your-user>/VersiGo.git
+   cd VersiGo
+   git remote add upstream https://github.com/M0P/VersiGo.git
    ```
 
 3. Create a branch from an up-to-date `main`:

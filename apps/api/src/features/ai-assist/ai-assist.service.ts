@@ -24,7 +24,7 @@ export class AiAssistService {
   private async assertAiEnabled(): Promise<void> {
     const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');
     if (!enabled) {
-      throw new ForbiddenException('AI-Funktionen sind deaktiviert');
+      throw new ForbiddenException('AI features are disabled');
     }
   }
 
@@ -33,12 +33,12 @@ export class AiAssistService {
       where: { householdId_userId: { householdId, userId } },
     });
     if (!membership) {
-      throw new ForbiddenException('Isolation: kein Zugriff auf fremdes Household');
+      throw new ForbiddenException('Isolation: no access to a foreign household');
     }
   }
 
   /**
-   * Startet einen asynchronen AI-Extraktions-Job fuer eine Policy.
+   * Starts an asynchronous AI extraction job for a policy.
    */
   async startExtraction(
     householdId: string,
@@ -48,16 +48,16 @@ export class AiAssistService {
     await this.assertAiEnabled();
     await this.assertHouseholdAccess(householdId, userId);
 
-    // Pruefe, ob die Policy existiert
+    // Check whether the policy exists
     const policy = await this.db.insurancePolicy.findFirst({
       where: { id: policyId, householdId },
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
-    // Pruefe, ob bereits ein laufender Job existiert
+    // Check whether a running job already exists
     const existingJob = await this.db.aiExtractionJob.findFirst({
       where: { policyId, status: { in: ['PENDING', 'RUNNING'] } },
     });
@@ -66,13 +66,13 @@ export class AiAssistService {
       return { jobId: existingJob.id, status: existingJob.status };
     }
 
-    // Sammle Dokument-IDs, die nicht von AI-Verarbeitung ausgeschlossen sind
+    // Collect document IDs that are not excluded from AI processing
     const documents = await this.db.policyDocument.findMany({
       where: { policyId, archivedAt: null, aiProcessingExcluded: false },
       select: { id: true, storageRef: true },
     });
 
-    // Erstelle einen neuen Job-Eintrag in der Datenbank
+    // Create a new job entry in the database
     const adapter = await this.providerRegistry.getAdapter();
     const job = await this.db.aiExtractionJob.create({
       data: {
@@ -86,7 +86,7 @@ export class AiAssistService {
       },
     });
 
-    // Sende den Job an BullMQ
+    // Send the job to BullMQ
     await this.extractionQueue.add('extract', {
       jobId: job.id,
       policyId,
@@ -94,13 +94,13 @@ export class AiAssistService {
       providerKey: adapter.providerKey,
     });
 
-    this.logger.log(`AI-Extraktions-Job ${job.id} fuer Policy ${policyId} gestartet`);
+    this.logger.log(`AI extraction job ${job.id} started for policy ${policyId}`);
 
     return { jobId: job.id, status: 'PENDING' };
   }
 
   /**
-   * Ruft den Status eines Extraktions-Jobs ab.
+   * Retrieves the status of an extraction job.
    */
   async getJobStatus(
     householdId: string,
@@ -108,7 +108,7 @@ export class AiAssistService {
     policyId: string,
     jobId: string,
   ) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const job = await this.db.aiExtractionJob.findFirst({
@@ -116,21 +116,21 @@ export class AiAssistService {
     });
 
     if (!job) {
-      throw new NotFoundException('AI-Extraktions-Job nicht gefunden');
+      throw new NotFoundException('AI extraction job not found');
     }
 
     return job;
   }
 
   /**
-   * Listet alle Extraktions-Jobs einer Policy auf.
+   * Lists all extraction jobs of a policy.
    */
   async listJobs(
     householdId: string,
     user: AuthenticatedUser,
     policyId: string,
   ) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     return this.db.aiExtractionJob.findMany({
@@ -140,16 +140,16 @@ export class AiAssistService {
   }
 
   /**
-   * Ruft die letzte Zusammenfassung einer Policy mit aufgeloesten Quelldokument-Informationen ab.
-   * Gibt die Zusammenfassung mit Dokumentnamen, Provider und Modell zurueck.
-   * Wirft NotFoundException, wenn keine Zusammenfassung existiert.
+   * Returns the latest summary of a policy with resolved source document information
+   * (document names, provider and model).
+   * Throws NotFoundException when no summary exists.
    */
   async getLatestSummaryWithSources(
     householdId: string,
     user: AuthenticatedUser,
     policyId: string,
   ) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const summary = await this.db.aiCoverageSummary.findFirst({
@@ -158,10 +158,10 @@ export class AiAssistService {
     });
 
     if (!summary) {
-      throw new NotFoundException('Keine Zusammenfassung gefunden');
+      throw new NotFoundException('No summary found');
     }
 
-    // Lese sourceDocumentRefs (Array von Dokument-IDs) und loese Namen auf
+    // Read sourceDocumentRefs (array of document IDs) and resolve names
     const sourceDocIds: string[] = Array.isArray(summary.sourceDocumentRefsJson)
       ? (summary.sourceDocumentRefsJson as string[])
       : [];
@@ -190,8 +190,8 @@ export class AiAssistService {
   }
 
   /**
-   * Fuehrt eine synchrone Extraktion durch (fuer Tests / Debug).
-   * Im Normalbetrieb asynchron ueber Jobs.
+   * Runs a synchronous extraction (for tests / debugging).
+   * In normal operation it runs asynchronously via jobs.
    */
   async extractNow(
     householdId: string,
@@ -206,19 +206,19 @@ export class AiAssistService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     const adapter: IAIAdapter = await this.providerRegistry.getAdapter();
 
-    // Lade Dokument-Inhalte (aktuell nur Storage-Refs, da tatsaechlicher Inhalt
-    // ggf. aus einer Datei geladen werden muss - hier als Platzhalter)
+    // Load document contents (currently only storage refs; the actual content
+    // may need to be loaded from a file - placeholder here)
     const documents = await this.db.policyDocument.findMany({
       where: { policyId, archivedAt: null, aiProcessingExcluded: false },
     });
 
-    // Da wir aktuell keine Volltext-Extraktion aus Dateien haben,
-    // simulieren wir die Dokumentinhalte mit Metadaten
+    // Since we currently have no full-text extraction from files,
+    // we simulate the document contents with metadata
     const documentContents = documents.map(
       (doc) => `Datei: ${doc.fileName} (${doc.mimeType ?? 'unbekannt'})`,
     );
@@ -226,7 +226,7 @@ export class AiAssistService {
     const result = await adapter.extractContractFacts(documentContents, policyId);
     if (!result) return null;
 
-    // Speichere das Ergebnis im neuesten Job oder erstelle einen neuen
+    // Store the result in the latest job or create a new one
     await this.db.aiExtractionJob.create({
       data: {
         policyId,
@@ -247,7 +247,7 @@ export class AiAssistService {
   }
 
   /**
-   * Erstellt eine Zusammenfassung des Versicherungsschutzes.
+   * Creates a summary of the insurance coverage.
    */
   async summarize(
     householdId: string,
@@ -262,7 +262,7 @@ export class AiAssistService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     const adapter: IAIAdapter = await this.providerRegistry.getAdapter();
@@ -278,8 +278,8 @@ export class AiAssistService {
     const result = await adapter.summarizeCoverage(documentContents, policyId);
     if (!result) return null;
 
-    // Speichere die Zusammenfassung (append-only, aber alte Eintraege
-    // werden begrenzt: maximal 5 Zusammenfassungen pro Policy)
+    // Store the summary (append-only, but old entries
+    // are limited: at most 5 summaries per policy)
     await this.db.$transaction(async (tx) => {
       await tx.aiCoverageSummary.create({
         data: {
@@ -291,12 +291,12 @@ export class AiAssistService {
         },
       });
 
-      // Entferne ueberzaehlige alte Zusammenfassungen, behalte nur die 5 neuesten
+      // Remove surplus old summaries, keep only the 5 newest
       const summaries = await tx.aiCoverageSummary.findMany({
         where: { policyId },
         orderBy: { createdAt: 'desc' },
         select: { id: true },
-        skip: 5, // die 5 neuesten behalten
+        skip: 5, // keep the 5 newest
       });
       if (summaries.length > 0) {
         await tx.aiCoverageSummary.deleteMany({
@@ -312,7 +312,7 @@ export class AiAssistService {
   }
 
   /**
-   * Markiert ein Dokument als "von AI-Verarbeitung ausgeschlossen".
+   * Marks a document as "excluded from AI processing".
    */
   async setDocumentExclusion(
     householdId: string,
@@ -328,7 +328,7 @@ export class AiAssistService {
     });
 
     if (!document) {
-      throw new NotFoundException('Dokument nicht gefunden');
+      throw new NotFoundException('Document not found');
     }
 
     await this.db.policyDocument.update({
@@ -340,7 +340,7 @@ export class AiAssistService {
   }
 
   /**
-   * Prueft die Verbindung zum AI-Provider.
+   * Checks the connection to the AI provider.
    */
   async healthCheck(): Promise<{ connected: boolean; provider: string }> {
     const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');

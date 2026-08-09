@@ -6,16 +6,16 @@ import { PaperlessController } from './paperless-ngx.controller';
 import { PAPERLESS_ADAPTER } from './paperless-ngx.interface';
 
 /**
- * Provider fuer den PAPERLESS_ADAPTER-Injection-Token.
+ * Provider for the PAPERLESS_ADAPTER injection token.
  *
- * Seit AP-17 wird die Aktivierung von Paperless pro Aufruf ueber die
- * zentrale Settings-Aufloesung (PAPERLESS_ENABLED) entschieden. Der
- * Adapter degradiert selbst kontrolliert (null/leere Ergebnisse), wenn
- * Paperless deaktiviert oder unvollstaendig konfiguriert ist. Ein
- * separater NoOp-Adapter ist daher nicht mehr noetig.
+ * Since AP-17 the activation of Paperless is decided per call via the
+ * central settings resolution (PAPERLESS_ENABLED). The adapter degrades
+ * itself in a controlled way (null/empty results) when Paperless is
+ * disabled or incompletely configured. A separate NoOp adapter is
+ * therefore no longer needed.
  *
- * Konsumenten sollten per @Inject(PAPERLESS_ADAPTER) injizieren,
- * um unabhaengig von der konkreten Implementierung zu bleiben.
+ * Consumers should inject via @Inject(PAPERLESS_ADAPTER) to stay
+ * independent of the concrete implementation.
  */
 const adapterProvider = {
   provide: PAPERLESS_ADAPTER,

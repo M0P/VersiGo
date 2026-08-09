@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation';
 
 /**
- * BugFix-07 (Q1): Die Feature-Verwaltung ist seit dem Merge in die
- * Systemeinstellungen Teil der /admin/settings-Seite (Feature-Karten oben,
- * Katalog darunter ohne doppelte Schluessel). /admin/features wird daher
- * auf /admin/settings umgeleitet; alte Lesezeichen bleiben gueltig.
+ * BugFix-07 (Q1): since the merge into the system settings, feature
+ * management is part of the /admin/settings page (feature cards on top,
+ * catalog below without duplicate keys). /admin/features is therefore
+ * redirected to /admin/settings; old bookmarks stay valid.
  */
 export default function AdminFeaturesPage(): never {
   redirect('/admin/settings');

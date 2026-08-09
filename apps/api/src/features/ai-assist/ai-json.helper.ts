@@ -1,11 +1,11 @@
 /**
- * Gemeinsame JSON-Parsing-Logik fuer AI-Adapter-Antworten.
+ * Shared JSON parsing logic for AI adapter responses.
  *
- * Extrahiert JSON aus einem Rohtext (der zusaetzlichen Text enthalten kann),
- * trennt Felder von Konfidenzwerten und gibt ein strukturiertes Ergebnis
- * zurueck. Gibt null bei fehlgeschlagenem Parsing zurueck.
+ * Extracts JSON from raw text (which may contain additional text),
+ * separates fields from confidence values and returns a structured result
+ * back. Returns null if parsing fails.
  *
- * Verwendet von OllamaAdapter und OpenAiCompatAdapter.
+ * Used by OllamaAdapter and OpenAiCompatAdapter.
  */
 export function tryParseExtractionResponse(
   raw: string,
@@ -44,8 +44,8 @@ export function tryParseExtractionResponse(
 }
 
 /**
- * Bereitet ein Objekt fuer Prisma-JSON-Felder vor.
- * Stellt sicher, dass der Wert von Prisma akzeptiert wird.
+ * Prepares an object for Prisma JSON fields.
+ * Ensures the value is accepted by Prisma.
  */
 export function toPrismaJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;

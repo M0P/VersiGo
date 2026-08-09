@@ -16,20 +16,20 @@ import { getApiBaseUrl } from '@/lib/runtime-config';
 const API_BASE = getApiBaseUrl();
 
 /**
- * Laedt den aktuellen (authentifizierten) User ueber /auth/me.
+ * Loads the current (authenticated) user via /auth/me.
  *
- * - loading: true, solange der Request laeuft
- * - user: null bei fehlender/ungueltiger Session (leitet nach /login um)
- * - forbidden: true bei einer Session ohne gueltige Rolle (praktisch nie;
- *   der SessionAuthGuard weist nicht-ACTIVE-Konten bereits ab)
+ * - loading: true while the request is running
+ * - user: null on a missing/invalid session (redirects to /login)
+ * - forbidden: true for a session without a valid role (practically never;
+ *   the SessionAuthGuard already rejects non-ACTIVE accounts)
  *
- * Dient als zusaetzliche UX-Ebene (z. B. READ_ONLY keine editierbaren
- * Einstellungen anzeigen). Die eigentliche Durchsetzung erfolgt serverseitig.
+ * Acts as an additional UX layer (e.g. READ_ONLY sees no editable
+ * settings). The actual enforcement happens server-side.
  *
- * Option `enabled: false` unterbindet den Fetch vollstaendig (liefert
- * { user: null, loading: false }). Damit kann ein Aufrufer einen bereits
- * geladenen User (z. B. vom Page-Level) an eine Komponente durchreichen,
- * ohne einen zweiten /auth/me-Request auszuloesen (AP-16, keine Duplikate).
+ * Option `enabled: false` disables the fetch completely (returns
+ * { user: null, loading: false }). This lets a caller pass an already
+ * loaded user (e.g. from the page level) down to a component without
+ * triggering a second /auth/me request (AP-16, no duplicates).
  */
 export function useCurrentUser(opts?: { enabled?: boolean }): {
   user: CurrentUser | null;

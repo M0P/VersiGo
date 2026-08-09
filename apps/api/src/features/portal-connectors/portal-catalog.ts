@@ -1,50 +1,50 @@
 /**
- * Versicherungsportal-Katalog (AP-18).
+ * Insurance portal catalog (AP-18).
  *
- * Code-basierter, versionierter Katalog bekannter Versicherungsportale.
- * Der Katalog liefert die Kerninhalte des Arbeitspakets:
- * - Deep-Link-Vorlagen (deepLinkTemplate) fuer "Portal oeffnen" pro Anbieter,
- * - Zugangshinweise (accessHint) als Standardtext je Portal,
- * - Capability-Hinweise (mailboxSync/documentRetrieval nur als experimentell).
+ * Code-based, versioned catalog of known insurance portals.
+ * The catalog provides the core contents of the work package:
+ * - Deep-link templates (deepLinkTemplate) for "open portal" per provider,
+ * - Access hints (accessHint) as the standard text per portal,
+ * - Capability hints (mailboxSync/documentRetrieval only as experimental).
  *
- * Bewusste Design-Entscheidung (ADR-008): Der Katalog ist statisch im Code,
- * nicht datenbankgesteuert. Er ist damit immer verfuegbar und benoetigt keine
- * Runtime-Abhaengigkeit; die manuellen Deeplinks (Stufe 1) und Zugangshinweise
- * funktionieren unabhaengig von optionalen Connector-Plugins.
+ * Deliberate design decision (ADR-008): the catalog is static in code,
+ * not database-driven. It is therefore always available and needs no
+ * runtime dependency; the manual deep links (stage 1) and access hints
+ * work independently of optional connector plugins.
  *
- * Deep-Link-Vorlagen koennen den Platzhalter {contractNumber} enthalten.
- * Die Aufloesung ersetzt ihn durch die Vertragsnummer des Vertrags; ohne
- * Platzhalter wird die Vorlage direkt als Deep-Link verwendet. Ein
- * manuell gesetzter `portalUrl` auf dem Portal-Link hat immer Vorrang.
+ * Deep-link templates may contain the {contractNumber} placeholder.
+ * The resolution replaces it with the contract's contract number; without
+ * placeholder, the template is used directly as a deep link. A manually
+ * set `portalUrl` on the portal link always takes precedence.
  */
 
 export type PortalCapability = 'deepLink' | 'mailboxSync' | 'documentRetrieval';
 
 export interface PortalCatalogEntry {
-  /** Stabiler Anbieter-Schluessel (z. B. 'huk-coburg'). */
+  /** Stable provider key (e.g. 'huk-coburg'). */
   providerKey: string;
-  /** Anzeigename des Versicherungsportals. */
+  /** Display name of the insurance portal. */
   displayName: string;
   /**
-   * Deep-Link-Vorlage (https://...). Kann {contractNumber} enthalten.
-   * null, wenn fuer den Anbieter kein stabiler Deeplink bekannt ist
-   * (dann greifen ausschliesslich die Zugangshinweise).
+   * Deep-link template (https://...). May contain {contractNumber}.
+   * null when no stable deep link is known for the provider (then only
+   * the access hints apply).
    */
   deepLinkTemplate: string | null;
-  /** Standard-Zugangshinweise des Portals (Kernumfang). */
+  /** Standard access hints of the portal (core scope). */
   accessHint: string;
-  /** Fest unterstuetzte Kern-Capabilities (immer mindestens deepLink). */
+  /** Firmly supported core capabilities (always at least deepLink). */
   capabilities: PortalCapability[];
   /**
-   * Experimentelle Capabilities, die nur ueber ein (standardmaessig
-   * deaktiviertes) Connector-Plugin verfuegbar waeren.
+   * Experimental capabilities that would only be available via a (by
+   * default disabled) connector plugin.
    */
   experimentalCapabilities: PortalCapability[];
 }
 
 export const PORTAL_CATALOG_VERSION = 1;
 
-/** Vollstaendiger Katalog der bekannten Versicherungsportale. */
+/** Complete catalog of the known insurance portals. */
 export const PORTAL_CATALOG: readonly PortalCatalogEntry[] = [
   {
     providerKey: 'huk-coburg',
@@ -160,12 +160,12 @@ const CATALOG_BY_KEY: ReadonlyMap<string, PortalCatalogEntry> = new Map(
   PORTAL_CATALOG.map((entry) => [entry.providerKey, entry]),
 );
 
-/** Liefert den Katalog-Eintrag eines Anbieters oder undefined. */
+/** Returns the catalog entry of a provider or undefined. */
 export function getPortalCatalogEntry(providerKey: string): PortalCatalogEntry | undefined {
   return CATALOG_BY_KEY.get(providerKey);
 }
 
-/** Alle Katalog-Eintraege als flache Liste. */
+/** All catalog entries as a flat list. */
 export function listPortalCatalog(): readonly PortalCatalogEntry[] {
   return PORTAL_CATALOG;
 }
@@ -173,11 +173,11 @@ export function listPortalCatalog(): readonly PortalCatalogEntry[] {
 const CONTRACT_NUMBER_PLACEHOLDER = '{contractNumber}';
 
 /**
- * Loest eine Deep-Link-Vorlage auf:
- * - null/leer => null (kein Deeplink bestimmbar)
- * - ohne Platzhalter => Vorlage direkt
- * - mit {contractNumber}: Vertragsnummer URL-encodiert einsetzen;
- *   fehlt die Vertragsnummer, wird kein kaputter Link erzeugt (null).
+ * Resolves a deep-link template:
+ * - null/empty => null (no deep link determinable)
+ * - without placeholder => template directly
+ * - with {contractNumber}: insert the contract number URL-encoded; if the
+ *   contract number is missing, no broken link is created (null).
  */
 export function resolveDeepLinkTemplate(
   template: string | null,

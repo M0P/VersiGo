@@ -19,9 +19,9 @@ import { SetUserPreferenceDto, UserPreferenceResponseDto } from './dto/user-pref
  * Data is scoped to the authenticated user – one user cannot read or write
  * another user's preferences.
  *
- * AP-17 (Berechtigungsmatrix): Persoenliche Profileinstellungen stehen nur
- * USER und ADMIN zu. READ_ONLY erhaelt ueber direkte Anfragen keinerlei
- * Profil-/Praeferenzwerte (RolesGuard, Rollenhierarchie ADMIN > USER > READ_ONLY).
+ * AP-17 (permission matrix): personal profile/preference values are only
+ * for USER and ADMIN. READ_ONLY receives nothing via direct requests
+ * (RolesGuard, role hierarchy ADMIN > USER > READ_ONLY).
  *
  * Route prefix: /user/preferences
  */

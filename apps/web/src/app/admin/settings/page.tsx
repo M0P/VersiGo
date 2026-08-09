@@ -25,8 +25,8 @@ const SOURCE_BADGE: Record<Source, string> = {
 };
 
 /**
- * Lesbares Anzeigeformat eines effektiven Werts (Secrets immer maskiert).
- * Uebersetzte Werte stammen aus dem aufrufenden Hook (t).
+ * Readable display format of an effective value (secrets always masked).
+ * Translated values come from the calling hook (t).
  */
 function formatEffectiveValue(entry: SystemConfigEntry, t: (key: string, params?: Record<string, string>) => string): string {
   if (entry.secret) {
@@ -58,7 +58,7 @@ export default function AdminSettingsPage(): ReactElement {
   const [saving, setSaving] = useState(false);
   const [testState, setTestState] = useState<Record<string, { testing: boolean; result: ConnectivityResult | null }>>({});
 
-  // BugFix-06 (Teil 3.4): Dienste-Neustart ueber die UI.
+  // BugFix-06 (part 3.4): service restart via the UI.
   const [restarting, setRestarting] = useState(false);
   const [restartMessage, setRestartMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -78,20 +78,20 @@ export default function AdminSettingsPage(): ReactElement {
   };
 
   useEffect(() => {
-    // `t` ist bewusst NICHT in den Dependencies: ein Sprachwechsel erzeugt
-    // eine neue `t`-Referenz und wuerde sonst ein redundantes
-    // GET /admin/system-config ausloesen (Review-3, Minor #1).
+    // `t` is deliberately NOT in the dependencies: a language switch creates
+    // a new `t` reference and would otherwise trigger a redundant
+    // GET /admin/system-config (review 3, minor #1).
     loadEntries();
   }, []);
 
-  // BugFix-07 (Q1): Der Katalog unterhalb der Feature-Karten zeigt keine
-  // Schluessel, die bereits von den Karten verwaltet werden (keine Duplikate).
+  // BugFix-07 (Q1): the catalog below the feature cards shows no
+  // keys that are already managed by the cards (no duplicates).
   const catalogEntries = useMemo(
     () => entries.filter((entry) => !FEATURE_KEYS.includes(entry.key)),
     [entries],
   );
 
-  // --- Filterung (Suche + Quelle + Probleme + Neustartbedarf) ---
+  // --- Filtering (search + source + problems + restart needed) ---
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return catalogEntries.filter((entry) => {
@@ -106,7 +106,7 @@ export default function AdminSettingsPage(): ReactElement {
     });
   }, [catalogEntries, search, sourceFilter, onlyProblems, onlyRestart]);
 
-  // Gruppierung in Katalog-Reihenfolge (Reihenfolge der API-Antwort).
+  // Grouping in catalog order (order of the API response).
   const grouped = useMemo(() => {
     const groups = new Map<string, SystemConfigEntry[]>();
     for (const entry of filtered) {
@@ -140,7 +140,7 @@ export default function AdminSettingsPage(): ReactElement {
     setError(null);
     setEditingKey(entry.key);
     if (entry.secret) {
-      // Secrets werden niemals angezeigt – Feld bleibt leer (Ersetzen).
+      // Secrets are never displayed – the field stays empty (replacement).
       setEditValue('');
     } else if (entry.type === 'boolean') {
       setEditValue(entry.effectiveValue === true ? 'true' : 'false');
@@ -219,9 +219,9 @@ export default function AdminSettingsPage(): ReactElement {
     }
   };
 
-  // BugFix-06 (Teil 3.4): Neustart von API und Worker. Nach Bestaetigung
-  // wird der geschuetzte Admin-Endpunkt aufgerufen; die API beendet sich
-  // kurz danach kontrolliert selbst (Compose restart: unless-stopped).
+  // BugFix-06 (part 3.4): restart of API and worker. After confirmation
+  // the protected admin endpoint is called; the API shuts itself down
+  // controlled shortly after (compose restart: unless-stopped).
   const handleRestart = async () => {
     if (!window.confirm(t('admin.settings.confirmRestart'))) {
       return;
@@ -267,8 +267,8 @@ export default function AdminSettingsPage(): ReactElement {
 
       {error && <Alert variant="danger" title={t('common.error')}>{error}</Alert>}
 
-      {/* BugFix-07 (Q1): Feature-Karten (vorher /admin/features) – oben,
-          darunter der vollstaendige Katalog ohne doppelte Schluessel. */}
+      {/* BugFix-07 (Q1): feature cards (formerly /admin/features) – on top,
+          below them the complete catalog without duplicate keys. */}
       <SectionHeader title={t('admin.features.title')} />
       <AdminFeaturesSection
         entries={entries}
@@ -278,7 +278,7 @@ export default function AdminSettingsPage(): ReactElement {
         }}
       />
 
-      {/* BugFix-06 (Teil 3.4): Dienste-Neustart fuer Restart-Kategorie-Settings */}
+      {/* BugFix-06 (part 3.4): service restart for restart-category settings */}
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <div className="settings-restart-row">
           <div style={{ flex: 1, minWidth: 220 }}>
@@ -300,11 +300,11 @@ export default function AdminSettingsPage(): ReactElement {
         )}
       </Card>
 
-      {/* BugFix-07 (Q1): Katalog unterhalb der Feature-Karten. */}
+      {/* BugFix-07 (Q1): catalog below the feature cards. */}
       <SectionHeader title={t('admin.settings.catalogTitle')} />
       <p className="form-hint">{t('admin.settings.catalogDescription')}</p>
 
-      {/* Werkzeugleiste: Suche + Filter */}
+      {/* Toolbar: search + filter */}
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <div className="settings-toolbar">
           <div className="form-group" style={{ flex: 2, minWidth: 220 }}>
@@ -385,7 +385,7 @@ export default function AdminSettingsPage(): ReactElement {
         ))
       )}
 
-      {/* M5: Transparenz zur SSRF-Beschraenkung der Verbindungstests. */}
+      {/* M5: transparency about the SSRF restriction of connectivity tests. */}
       <p className="form-hint">
         {t('admin.settings.ssrfHint')}
       </p>

@@ -13,8 +13,8 @@ import {
 import { AiExtractionProcessor } from './ai-extraction.processor';
 
 /**
- * Worker-Wurzelmodul. Bindet ausschliesslich technische Foundations ein.
- * Fachliche Job-Module werden von den jeweiligen Feature-Slices ergaenzt.
+ * Worker root module. Binds exclusively technical foundations.
+ * Domain job modules are added by the respective feature slices.
  */
 @Module({
   imports: [
@@ -27,7 +27,7 @@ import { AiExtractionProcessor } from './ai-extraction.processor';
     SettingsFoundationModule,
     WorkerHealthFoundationModule,
 
-    // AI-Extraktions-Queue (muss mit API-Queue-Namen uebereinstimmen)
+    // AI extraction queue (must match the API queue name)
     BullModule.registerQueue({
       name: 'ai-extraction',
     }),

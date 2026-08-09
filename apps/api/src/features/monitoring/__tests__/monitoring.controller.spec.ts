@@ -25,12 +25,12 @@ function createMockService(): ServiceLike {
 }
 
 describe('MonitoringController', () => {
-  it('fordert auf Controller-Ebene die ADMIN-Rolle an', () => {
+  it('requires the ADMIN role at the controller level', () => {
     const roles = Reflect.getMetadata(ROLES_KEY, MonitoringController);
     expect(roles).toContain(GlobalRole.ADMIN);
   });
 
-  it('verweigert nicht-ADMIN-Rollen (USER/READ_ONLY) den Zugriff mit 403', () => {
+  it('denies non-ADMIN roles (USER/READ_ONLY) access with 403', () => {
     const required = Reflect.getMetadata(ROLES_KEY, MonitoringController);
     const reflector = { getAllAndOverride: () => required } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
@@ -57,7 +57,7 @@ describe('MonitoringController', () => {
     }
   });
 
-  it('queues delegiert an den Service', async () => {
+  it('queues delegates to the service', async () => {
     const service = createMockService();
     const controller = new MonitoringController(service as never);
     const expected = [{ queue: 'ai-extraction', waiting: 0 }];
@@ -69,7 +69,7 @@ describe('MonitoringController', () => {
     expect(service.queueOverview).toHaveBeenCalledOnce();
   });
 
-  it('failedJobs delegiert an den Service', async () => {
+  it('failedJobs delegates to the service', async () => {
     const service = createMockService();
     const controller = new MonitoringController(service as never);
     const expected = [{ id: '42', name: 'extract' }];
@@ -80,7 +80,7 @@ describe('MonitoringController', () => {
     expect(result).toEqual(expected);
   });
 
-  it('retryFailedJob delegiert mit der Job-ID', async () => {
+  it('retryFailedJob delegates with the job ID', async () => {
     const service = createMockService();
     const controller = new MonitoringController(service as never);
     service.retryFailedJob.mockResolvedValue({ retried: true });
@@ -90,7 +90,7 @@ describe('MonitoringController', () => {
     expect(service.retryFailedJob).toHaveBeenCalledWith('42');
   });
 
-  it('aiJobs delegiert an den Service', async () => {
+  it('aiJobs delegates to the service', async () => {
     const service = createMockService();
     const controller = new MonitoringController(service as never);
     const expected = { statusCounts: {}, recent: [] };
@@ -101,7 +101,7 @@ describe('MonitoringController', () => {
     expect(result).toEqual(expected);
   });
 
-  it('integrations delegiert an den Service', async () => {
+  it('integrations delegates to the service', async () => {
     const service = createMockService();
     const controller = new MonitoringController(service as never);
     const expected = { ai: { enabled: false }, paperless: { enabled: false } };

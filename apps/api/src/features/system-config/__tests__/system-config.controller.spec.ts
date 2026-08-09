@@ -32,12 +32,12 @@ const mockAdmin: AuthenticatedUser = {
 };
 
 describe('SystemConfigController', () => {
-  it('fordert auf Controller-Ebene die ADMIN-Rolle an', () => {
+  it('requires the ADMIN role at the controller level', () => {
     const roles = Reflect.getMetadata(ROLES_KEY, SystemConfigController);
     expect(roles).toContain(GlobalRole.ADMIN);
   });
 
-  it('list delegiert an den Service', async () => {
+  it('list delegates to the service', async () => {
     const service = createMockService();
     const controller = new SystemConfigController(service as never);
     service.list.mockResolvedValue([{ key: 'AI_ENABLED' }]);
@@ -48,7 +48,7 @@ describe('SystemConfigController', () => {
     expect(service.list).toHaveBeenCalledTimes(1);
   });
 
-  it('get delegiert an den Service', async () => {
+  it('get delegates to the service', async () => {
     const service = createMockService();
     const controller = new SystemConfigController(service as never);
     service.get.mockResolvedValue({ key: 'AI_ENABLED' });
@@ -59,7 +59,7 @@ describe('SystemConfigController', () => {
     expect(service.get).toHaveBeenCalledWith('AI_ENABLED');
   });
 
-  it('update delegiert mit User und DTO-Wert an den Service', async () => {
+  it('update delegates user and DTO value to the service', async () => {
     const service = createMockService();
     const controller = new SystemConfigController(service as never);
     service.update.mockResolvedValue({ key: 'AI_ENABLED', source: 'UI' });
@@ -70,7 +70,7 @@ describe('SystemConfigController', () => {
     expect(service.update).toHaveBeenCalledWith('AI_ENABLED', 'true', mockAdmin);
   });
 
-  it('reset delegiert mit User an den Service', async () => {
+  it('reset delegates the user to the service', async () => {
     const service = createMockService();
     const controller = new SystemConfigController(service as never);
     service.reset.mockResolvedValue({ key: 'AI_ENABLED', source: 'DEFAULT' });
@@ -81,7 +81,7 @@ describe('SystemConfigController', () => {
     expect(service.reset).toHaveBeenCalledWith('AI_ENABLED', mockAdmin);
   });
 
-  it('test delegiert mit User und Key an den Service', async () => {
+  it('test delegates user and key to the service', async () => {
     const service = createMockService();
     const controller = new SystemConfigController(service as never);
     service.testConnectivity.mockResolvedValue({ success: true, message: 'OK', timestamp: '' });

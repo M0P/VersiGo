@@ -29,21 +29,21 @@ import {
 } from './language-client';
 
 type I18nContextValue = {
-  /** Aktive Sprache der Oberflaeche (verbindlicher Default: en). */
+  /** Active UI language (binding default: en). */
   language: Language;
-  /** Dauerhaftigkeit der aktuellen Aufloesung (Konto vs. Sitzung). */
+  /** Persistence of the current resolution (account vs. session). */
   persistence: LanguagePersistence | null;
-  /** true, bis die serverseitige Sprachaufloesung abgeschlossen ist. */
+  /** true until the server-side language resolution has finished. */
   loading: boolean;
-  /** Aendert die Sprache (persistiert je nach Rolle Konto oder Sitzung). */
+  /** Changes the language (persisted per role as account or session). */
   setLanguage: (language: Language) => Promise<void>;
-  /** Uebersetzungsfunktion fuer die aktive Sprache. */
+  /** Translation function for the active language. */
   t: Translator;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-/** Schreibt bzw. entfernt den Sprach-Cookie. */
+/** Writes or removes the language cookie. */
 export function writeLanguageCookie(language: Language | null): void {
   if (typeof document === 'undefined') return;
   if (language) {
@@ -58,12 +58,12 @@ export function I18nProvider({
   initialLanguage = DEFAULT_LANGUAGE,
 }: {
   children: ReactNode;
-  /** Vom Root-Layout (Server) aufgeloeste Sprache aus dem Cookie. */
+  /** Language resolved by the root layout (server) from the cookie. */
   initialLanguage?: Language;
 }): ReactElement {
-  // Deterministische Initialisierung: Der Server uebergibt die Sprache aus
-  // dem Cookie, sodass Server-HTML und erste Client-Hydration uebereinstimmen.
-  // Ohne Cookie (READ_ONLY, Gast) gilt der globale Default Englisch.
+  // Deterministic initialization: the server passes the language from
+  // the cookie so that server HTML and the first client hydration agree.
+  // Without a cookie (READ_ONLY, guest) the global default English applies.
   const [language, setLanguageState] = useState<Language>(normalizeLanguage(initialLanguage));
   const [persistence, setPersistence] = useState<LanguagePersistence | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,15 +76,14 @@ export function I18nProvider({
     if (nextPersistence === 'persistent') {
       writeLanguageCookie(next);
     } else if (nextPersistence === 'session') {
-      // READ_ONLY: Sprache lebt ausschliesslich in der Sitzung – der Cookie
-      // darf NICHT persistiert werden (session-only).
+      // READ_ONLY: the language lives exclusively in the session – the cookie
+      // must NOT be persisted (session-only).
       writeLanguageCookie(null);
     }
   }, []);
 
-  // Serverseitige Sprachaufloesung (Konto-Einstellung bzw. READ_ONLY-
-  // Sitzungssprache) beim ersten Rendern abrufen und mit dem Cookie
-  // abgleichen.
+  // Fetch the server-side language resolution (account setting or READ_ONLY
+  // session language) on first render and reconcile it with the cookie.
   useEffect(() => {
     let cancelled = false;
 
@@ -106,8 +105,8 @@ export function I18nProvider({
   const setLanguage = useCallback(
     async (next: Language): Promise<void> => {
       const previous = language;
-      // Optimistische Aktualisierung; die Cookie-Entscheidung folgt der
-      // Serverantwort (persistent vs. session).
+      // Optimistic update; the cookie decision follows the server response
+      // (persistent vs. session).
       setLanguageState(next);
       if (typeof document !== 'undefined') {
         document.documentElement.lang = next;
@@ -122,8 +121,8 @@ export function I18nProvider({
           writeLanguageCookie(null);
         }
       } else {
-        // Fehlgeschlagen: auf den vorherigen Stand zurueckfallen, damit die
-        // UI nicht in einem Zustand bleibt, den der Server nicht kennt.
+        // Failed: fall back to the previous state so that the
+        // UI does not remain in a state the server does not know about.
         setLanguageState(previous);
         if (typeof document !== 'undefined') {
           document.documentElement.lang = previous;
@@ -144,8 +143,8 @@ export function I18nProvider({
 }
 
 /**
- * Hook fuer Uebersetzungen. Muss innerhalb des I18nProvider verwendet
- * werden (in der Root-Providers-Kette enthalten).
+ * Hook for translations. Must be used within the I18nProvider
+ * (included in the root provider chain).
  */
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
@@ -155,5 +154,5 @@ export function useI18n(): I18nContextValue {
   return ctx;
 }
 
-// Re-Export der Typen fuer bequeme Verwendung an den Aufrufstellen.
+// Re-export of the types for convenient use at the call sites.
 export type { Language, MessageParams, MessagePath, Messages };

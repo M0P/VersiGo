@@ -8,15 +8,14 @@ import { FamilySharingGuard } from './family-sharing.guard';
 import type { AuthenticatedUser } from '../identity/auth.service';
 
 /**
- * Listet die Mitglieder eines Households fuer die Freigabe-UI
- * (Ziel-Auswahl beim Anlegen einer Freigabe).
+ * Lists the members of a household for the share UI (target picker when
+ * creating a share).
  *
- * Zugriff: jedes authentifizierte Household-Mitglied
- * (HouseholdMembershipGuard) mit Rolle USER oder ADMIN (RolesGuard).
- * READ_ONLY-Mitglieder koennen die vollstaendige Mitgliederliste nicht
- * sehen; sie sehen ausschliesslich Freigaben, an denen sie beteiligt sind.
- * FamilySharingGuard sperrt die Liste, solange die Familien-Freigaben
- * deaktiviert sind (BugFix-05).
+ * Access: any authenticated household member (HouseholdMembershipGuard)
+ * with role USER or ADMIN (RolesGuard). READ_ONLY members cannot see the
+ * complete member list; they only see shares in which they are involved.
+ * FamilySharingGuard locks the list while family sharing is disabled
+ * (BugFix-05).
  */
 @Controller('households/:householdId/members')
 @UseGuards(HouseholdMembershipGuard, FamilySharingGuard)

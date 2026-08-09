@@ -4,19 +4,19 @@ import { DatabaseService } from '../database';
 import { RedisHealthService } from '../redis-health';
 import { CapabilityFlagsService } from '../capabilities';
 import { WorkerHeartbeatService } from '../worker-health';
+import { AppConfigService } from '../config';
 
 /**
- * Health-/Readiness-Endpunkte.
- * Gibt ausschliesslich boolesche Zustaende zurueck (up/down, enabled/disabled).
- * Es werden keine URLs, Secrets oder sonstigen Konfigurationswerte
- * offengelegt.
+ * Health/readiness endpoints.
+ * Returns only boolean states (up/down, enabled/disabled).
+ * No URLs, secrets or other configuration values are exposed.
  *
- * AP-19: /ready weist zusaetzlich den Worker-Zustand aus (up/down/unknown,
- * basierend auf dem Datenbank-Heartbeat des Workers). Der Worker-Zustand ist
- * bewusst NUR Status-Information und fliesst nicht in das Gesamt-`status`-
- * Feld ein: Ein ausgefallener Worker beeintraechtigt die API selbst nicht,
- * wuerde aber sonst /ready dauerhaft auf 'degraded' setzen (und damit
- * Healthcheck/Orchestrierung irre-fuehren).
+ * AP-19: /ready additionally reports the worker state (up/down/unknown,
+ * based on the worker's database heartbeat). The worker state is
+ * deliberately ONLY status information and does not feed into the overall
+ * `status` field: a failed worker does not affect the API itself, but
+ * would otherwise keep /ready at 'degraded' forever (and thus mislead
+ * healthchecks/orchestration).
  */
 @Controller()
 export class HealthController {
@@ -25,18 +25,29 @@ export class HealthController {
     private readonly redisHealth: RedisHealthService,
     private readonly capabilities: CapabilityFlagsService,
     private readonly workerHeartbeat: WorkerHeartbeatService,
+    private readonly config: AppConfigService,
   ) {}
+
+  /**
+   * BugFix-11 (R7): the runtime application version (APP_VERSION) is a
+   * public, harmless value and is exposed on both endpoints; when the
+   * variable is unset it reports 'unknown'. No secrets are ever exposed.
+   */
+  private get version(): string {
+    return this.config.appVersion ?? 'unknown';
+  }
 
   @Public()
   @Get('health')
-  health(): { status: 'ok' } {
-    return { status: 'ok' };
+  health(): { status: 'ok'; version: string } {
+    return { status: 'ok', version: this.version };
   }
 
   @Public()
   @Get('ready')
   async ready(): Promise<{
     status: 'ready' | 'degraded';
+    version: string;
     database: 'up' | 'down';
     redis: 'up' | 'down';
     worker: 'up' | 'down' | 'unknown';
@@ -48,26 +59,26 @@ export class HealthController {
       this.workerHeartbeat.getStatus(),
     ]);
 
-    // BugFix-05: snapshot ist seit der Resolver-Umstellung asynchron
-    // (SettingsResolverService, UI > ENV > DEFAULT) und greift dabei auf die
-    // Datenbank zu. Fail-soft wie die uebrigen Checks: Faellt die DB aus,
-    // duerfen die Capabilities den Readiness-Request nicht zu HTTP 500 machen –
-    // /ready soll in dem Fall weiterhin mit status 'degraded' antworten (die
-    // DB ist ohnehin bereits als 'down' ausgewiesen) und ein leeres
-    // Capabilities-Objekt liefern statt zu werfen.
+    // BugFix-05: snapshot is async since the resolver migration
+    // (SettingsResolverService, UI > ENV > DEFAULT) and accesses the
+    // database. Fail-soft like the other checks: if the DB is down, the
+    // capabilities must not turn the readiness request into HTTP 500 —
+    // /ready should still respond with status 'degraded' in that case (the
+    // DB is already reported as 'down' anyway) and return an empty
+    // capabilities object instead of throwing.
     let capabilities: Record<string, boolean> = {};
     try {
       capabilities = await this.capabilities.snapshot();
     } catch {
-      // DB-Ausfall: Capability-Flags nicht aufloesbar, leer melden.
-      // Der Gesamt-Status wird durch databaseHealthy unten bereits
-      // auf 'degraded' gesetzt.
+      // DB outage: capability flags not resolvable, report empty.
+      // The overall status is already set to 'degraded' by databaseHealthy below.
     }
 
     const allHealthy = databaseHealthy && redisHealthy;
 
     return {
       status: allHealthy ? 'ready' : 'degraded',
+      version: this.version,
       database: databaseHealthy ? 'up' : 'down',
       redis: redisHealthy ? 'up' : 'down',
       worker: workerStatus.worker,

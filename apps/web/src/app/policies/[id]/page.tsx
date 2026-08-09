@@ -73,11 +73,11 @@ export default function PolicyDetailPage(): ReactElement {
   const [activeTab, setActiveTab] = useState<TabKey>('masterData');
 
   useEffect(() => {
-    // BugFix-05 (Befund 8): Beim policyId-Wechsel zuruecksetzen und in-flight
-    // Requests der vorherigen Versicherung verwerfen – weder der Header noch
-    // die Masterdaten von A duerfen transient unter /policies/B erscheinen.
-    // Der cancelled-Flag (Cleanup) verhindert, dass eine langsame A-Antwort
-    // die bereits geladene B-Ansicht ueberschreibt.
+    // BugFix-05 (finding 8): reset on a policyId change and discard
+    // in-flight requests of the previous policy – neither the header nor
+    // the master data of A may transiently appear under /policies/B.
+    // The cancelled flag (cleanup) prevents a slow A response from
+    // overwriting the already loaded B view.
     let cancelled = false;
     setPolicy(null);
     setLoading(true);
@@ -219,7 +219,7 @@ export default function PolicyDetailPage(): ReactElement {
         return <CoverageSummarySection householdId="default" policyId={policyId} />;
 
       case 'costs':
-        // BugFix-05 (Befund 3): Eingebettete Kostenuebersicht statt Link-Card.
+        // BugFix-05 (finding 3): embedded costs overview instead of a link card.
         return <CostsOverviewCard policyId={policyId} />;
 
       default:

@@ -9,44 +9,44 @@ import type {
 import type { PortalConnectorHealth } from './portal-connector.interface';
 
 /**
- * Oeffentliche Portal-Connector-Endpunkte (AP-18).
+ * Public portal connector endpoints (AP-18).
  *
- * Der Katalog und die Plugin-Liste sind fuer alle authentifizierten Rollen
- * lesbar (READ_ONLY/USER/ADMIN); die globale Session-/Rollen-Guard erzwingt
- * die Authentifizierung. Es sind reine Lese-Endpunkte ohne Household-Bezug
- * (Katalog und Plugins sind keine fachlichen Vertragsdaten).
+ * The catalog and the plugin list are readable by all authenticated roles
+ * (READ_ONLY/USER/ADMIN); the global session/role guard enforces
+ * authentication. These are pure read endpoints without household
+ * context (catalog and plugins are not business contract data).
  *
- * Degradations-Regel: Ein unbekanntes/deaktiviertes Plugin liefert einen
- * kontrollierten Health-Status (HTTP 200, `available: false`) statt 500.
+ * Degradation rule: an unknown/disabled plugin returns a controlled
+ * health status (HTTP 200, `available: false`) instead of a 500.
  */
 @Controller('portal-connectors')
 @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
 export class PortalConnectorsController {
   constructor(private readonly service: PortalConnectorService) {}
 
-  /** Katalog aller bekannten Versicherungsportale (Deeplinks + Zugangshinweise). */
+  /** Catalog of all known insurance portals (deep links + access hints). */
   @Get('catalog')
   listCatalog(): PortalCatalogView[] {
     return this.service.listCatalog();
   }
 
-  /** Einzelner Katalog-Eintrag. */
+  /** Single catalog entry. */
   @Get('catalog/:providerKey')
   getCatalogEntry(@Param('providerKey') providerKey: string): PortalCatalogView {
     const entry = this.service.getCatalogEntry(providerKey);
     if (!entry) {
-      throw new NotFoundException('Versicherungsportal nicht im Katalog');
+      throw new NotFoundException('Insurance portal not in the catalog');
     }
     return entry;
   }
 
-  /** Alle registrierten Connector-Plugins inkl. Verfuegbarkeit. */
+  /** All registered connector plugins incl. availability. */
   @Get('plugins')
   listPlugins(): PortalConnectorView[] {
     return this.service.listPlugins();
   }
 
-  /** Health-Check eines Connector-Plugins (degradiert bei Deaktivierung). */
+  /** Health check of a connector plugin (degrades when disabled). */
   @Get('plugins/:key/health')
   async pluginHealth(@Param('key') key: string): Promise<PortalConnectorHealth> {
     return this.service.getPluginHealth(key);

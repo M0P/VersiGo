@@ -1,19 +1,19 @@
 import { IsIn, IsOptional, IsString, Length } from 'class-validator';
 
 /**
- * Von der Profilseite aenderbare Locales. Bewusste Allowlist statt
- * freiem String – die UI nutzt ausschliesslich diese Werte.
+ * Locales changeable from the profile page. Deliberate allowlist instead
+ * of a free string – the UI uses exclusively these values.
  *
- * AP-21: Nur noch die produktiv unterstuetzten Sprachcodes 'en' und 'de'
- * (die uebrigen Legacy-Locales sind entfernt). Die Web-UI zeigt die
- * Sprachwahl kuenftig ueber den zentralen /user/language-Endpunkt;
- * das Profil-Feld bleibt aus API-Kompatibilitaetsgruenden bestehen.
+ * AP-21: only the productively supported language codes 'en' and 'de'
+ * remain (the other legacy locales were removed). The web UI shows the
+ * language choice in the future via the central /user/language endpoint;
+ * the profile field remains for API-compatibility reasons.
  */
 export const SUPPORTED_PROFILE_LOCALES = ['en', 'de'] as const;
 
 /**
- * DTO fuer Profilaenderungen. NUR persoenliche Profilfelder; Rollen,
- * Freigaben, Zugangsdaten und Systemwerte sind hier niemals editierbar.
+ * DTO for profile changes. ONLY personal profile fields; roles, shares,
+ * credentials and system values are never editable here.
  */
 export class UpdateProfileDto {
   @IsOptional()
@@ -22,11 +22,11 @@ export class UpdateProfileDto {
   displayName?: string;
 
   @IsOptional()
-  @IsIn(SUPPORTED_PROFILE_LOCALES, { message: 'locale ist nicht erlaubt' })
+  @IsIn(SUPPORTED_PROFILE_LOCALES, { message: 'locale is not allowed' })
   locale?: string;
 }
 
-/** Oeffentliche Profilansicht (ohne sensitive Werte). */
+/** Public profile view (without sensitive values). */
 export class ProfileResponseDto {
   id!: string;
   username!: string;

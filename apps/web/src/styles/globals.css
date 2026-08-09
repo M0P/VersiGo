@@ -974,6 +974,15 @@
     max-width: none;
   }
 
+  /* BugFix-11 (R7): minimal footer line with the runtime app version. */
+  .app-footer {
+    margin-top: var(--versigo-space-6);
+    padding-top: var(--versigo-space-3);
+    border-top: var(--versigo-border-width) solid var(--versigo-border);
+    color: var(--versigo-text-muted);
+    font-size: var(--versigo-font-size-xs);
+  }
+
   /* --- Glass surface for decorative non-essential elements --- */
   .glass-panel {
     background: var(--versigo-glass-bg);
