@@ -67,7 +67,7 @@ describe('RestartCoordinatorService', () => {
     vi.useRealTimers();
   });
 
-  it('legt eine Neustart-Anforderung mit TTL in Redis ab', async () => {
+  it('stores a restart request with TTL in Redis', async () => {
     const service = new RestartCoordinatorService(buildConfig());
     const client = mockClient();
     injectMockClient(service, client);
@@ -82,7 +82,7 @@ describe('RestartCoordinatorService', () => {
     );
   });
 
-  it('holt die Anforderung atomar ab (get + del) und gibt das Payload zurueck', async () => {
+  it('fetches the request atomically (get + del) and returns the payload', async () => {
     const service = new RestartCoordinatorService(buildConfig());
     const client = mockClient();
     injectMockClient(service, client);
@@ -95,7 +95,7 @@ describe('RestartCoordinatorService', () => {
     expect(client.multi().del).toHaveBeenCalledWith(RESTART_REQUEST_KEY);
   });
 
-  it('liefert null, wenn keine Anforderung vorliegt', async () => {
+  it('returns null when no request is pending', async () => {
     const service = new RestartCoordinatorService(buildConfig());
     const client = mockClient();
     client.multi = () => mockMulti([[null, null]]);
@@ -106,7 +106,7 @@ describe('RestartCoordinatorService', () => {
     expect(drained).toBeNull();
   });
 
-  it('liefert null und warnt bei kaputtem JSON (fail-soft)', async () => {
+  it('returns null and warns on broken JSON (fail-soft)', async () => {
     const service = new RestartCoordinatorService(buildConfig());
     const client = mockClient();
     client.multi = () => mockMulti([[null, 'kein-json']]);
@@ -119,7 +119,7 @@ describe('RestartCoordinatorService', () => {
     expect(warnSpy).toHaveBeenCalled();
   });
 
-  it('Watcher ruft den Callback bei einer Anforderung auf und stoppt nach dem Shutdown', async () => {
+  it('the watcher invokes the callback on a request and stops after shutdown', async () => {
     vi.useFakeTimers();
     const service = new RestartCoordinatorService(buildConfig());
     const client = mockClient();
@@ -131,7 +131,7 @@ describe('RestartCoordinatorService', () => {
 
     expect(onRequest).toHaveBeenCalledWith(payload);
 
-    // Nach dem Shutdown wird der Timer gecleart – es duerfen keine
+    // After shutdown the timer is cleared – no
     // weiteren Abrufe mehr stattfinden.
     await service.onModuleDestroy();
     await vi.advanceTimersByTimeAsync(10_000);

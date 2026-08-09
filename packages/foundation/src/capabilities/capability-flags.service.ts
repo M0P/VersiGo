@@ -10,11 +10,11 @@ export type CapabilityKey =
   | 'familySharing';
 
 /**
- * Zuordnung jeder Capability zu ihrem Settings-Katalog-Schluessel. Der
- * Resolver (UI > ENV > DEFAULT) ist die alleinige Quelle fuer An/Aus-
- * Auskunft; `AppConfigService` dient ausschliesslich als Fallback fuer
- * Schluessel ohne statischen Katalog-Default (z. B. LOCAL_AUTH_ENABLED,
- * dessen Default von NODE_ENV abgeleitet ist).
+ * Maps each capability to its settings-catalog key. The
+ * resolver (UI > ENV > DEFAULT) is the sole source of truth for
+ * on/off state; `AppConfigService` is used only as a fallback for
+ * keys without a static catalog default (e.g. LOCAL_AUTH_ENABLED,
+ * whose default is derived from NODE_ENV).
  */
 const CAPABILITY_TO_SETTING: Record<CapabilityKey, string> = {
   oidc: 'OIDC_ENABLED',
@@ -26,17 +26,17 @@ const CAPABILITY_TO_SETTING: Record<CapabilityKey, string> = {
 };
 
 /**
- * Zentrale Auskunftstelle darueber, ob eine optionale Integration
- * aktiviert ist. Enthaelt keine Fachlogik der jeweiligen Integration,
- * nur die reine An/Aus-Auskunft.
+ * Central authority on whether an optional integration is enabled.
+ * Contains no domain logic of the individual integration, only the
+ * pure on/off state.
  *
- * BugFix-05: Die Aufloesung erfolgt ueber den SettingsResolverService
- * (deterministische Kette UI > ENV > DEFAULT, AP-17) statt ueber den
- * Env-Snapshot von AppConfigService. Damit spiegeln per Admin-UI
- * gesetzte Werte (z. B. AI_ENABLED) die Capability-Flags sofort wider
- * und sind ueberall konsistent (Auth-Config, Monitoring, OIDC-Strategie,
- * Health/Readiness). Alle Methoden sind asynchron, weil die Aufloesung
- * Datenbankzugriffe umfassen kann.
+ * BugFix-05: Resolution goes through the SettingsResolverService
+ * (deterministic chain UI > ENV > DEFAULT, AP-17) instead of the
+ * env snapshot from AppConfigService. Values set via the admin UI
+ * (e.g. AI_ENABLED) therefore immediately reflect in the capability
+ * flags and are consistent everywhere (auth config, monitoring,
+ * OIDC strategy, health/readiness). All methods are async because
+ * resolution may involve database access.
  */
 @Injectable()
 export class CapabilityFlagsService {
@@ -45,19 +45,19 @@ export class CapabilityFlagsService {
     private readonly config: AppConfigService,
   ) {}
 
-  /** Effektiver Zustand einer Capability (UI-Override > ENV > Default). */
+  /** Effective state of a capability (UI override > ENV > default). */
   async isEnabled(capability: CapabilityKey): Promise<boolean> {
     const settingKey = CAPABILITY_TO_SETTING[capability];
     const resolved = await this.settings.getEffectiveBoolean(settingKey);
     if (resolved !== undefined) return resolved;
-    // Fallback: NODE_ENV-abgeleitete Defaults (z. B. lokale Auth im
-    // Dev-/Test-Modus), fuer die der Katalog keinen statischen Default
-    // fuehrt. Ohne Fallback wuerde LOCAL_AUTH_ENABLED in Dev fälschlich
-    // als deaktiviert gemeldet und der Identity-Fail-Fast ausloesen.
+    // Fallback: NODE_ENV-derived defaults (e.g. local auth in dev/test
+    // mode) for which the catalog carries no static default. Without
+    // this fallback, LOCAL_AUTH_ENABLED would be reported as disabled
+    // in dev and would trigger the identity fail-fast.
     return Boolean(this.config.get(settingKey as keyof AppConfig));
   }
 
-  /** Gebuendelte An/Aus-Auskunft ueber alle Capabilities (ein DB-Zugriff). */
+  /** Bundled on/off state for all capabilities (single DB access). */
   async snapshot(): Promise<Record<CapabilityKey, boolean>> {
     const settingKeys = [...new Set(Object.values(CAPABILITY_TO_SETTING))];
     const resolutions = await this.settings.resolveMany(settingKeys);

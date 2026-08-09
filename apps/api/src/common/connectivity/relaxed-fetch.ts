@@ -1,20 +1,20 @@
-// Hinweis: Namespace-Import (kein Default-Import) – die API-tsconfig
-// hat esModuleInterop nicht aktiviert (Konvention siehe apps/api/src/main.ts).
+// Note: namespace import (no default import) — the API tsconfig does not
+// enable esModuleInterop (convention, see apps/api/src/main.ts).
 import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
 import type { CustomFetchOptions } from 'openid-client';
 
 /**
- * BugFix-06 (Teil 2): Minimaler, TLS-relaxierender `fetch`-Ersatz.
+ * BugFix-06 (part 2): minimal TLS-relaxing `fetch` replacement.
  *
- * Wird ausschliesslich fuer OIDC-Aufrufe (Discovery, Token, Userinfo)
- * verwendet, wenn die Admin-Einstellung `CONNECTIVITY_ALLOW_SELF_SIGNED`
- * aktiv ist (selbst signierte Provider-Zertifikate). Der Request laeuft
- * ueber `node:https` mit `rejectUnauthorized: false` und liefert ein
- * natives `Response`-Objekt, damit `openid-client` uneingeschraenkt
- * weiterarbeiten kann. Bewusst KEIN globaler Effekt: Alle anderen
- * Requests der Anwendung behalten die strikte TLS-Validierung.
+ * Used exclusively for OIDC calls (discovery, token, userinfo) when the
+ * admin setting `CONNECTIVITY_ALLOW_SELF_SIGNED` is active
+ * (self-signed provider certificates). The request runs via `node:https`
+ * with `rejectUnauthorized: false` and returns a native `Response`
+ * object so `openid-client` can continue unrestricted. Deliberately NO
+ * global effect: all other requests of the application keep the strict
+ * TLS validation.
  */
 export async function relaxedFetch(
   input: RequestInfo | URL,
@@ -33,16 +33,16 @@ export async function relaxedFetch(
   const httpModule = url.protocol === 'https:' ? https : http;
 
   return new Promise<Response>((resolve, reject) => {
-    // https.RequestOptions erbt von http.RequestOptions und ergaenzt
-    // `rejectUnauthorized` (bei http-URLs wird der ueberzaehlige Wert
-    // zur Laufzeit schlicht ignoriert).
+    // https.RequestOptions extends http.RequestOptions and adds
+    // `rejectUnauthorized` (for http URLs the extra value is simply
+    // ignored at runtime).
     const options: https.RequestOptions = {
       method,
       hostname: url.hostname,
       port: url.port ? Number(url.port) : undefined,
       path: `${url.pathname}${url.search}`,
       headers: Object.fromEntries(headers.entries()),
-      // Die Lockerung dieser einen Request-Klasse: Zertifikatsvalidierung aus.
+      // The relaxation of this single request class: certificate validation off.
       rejectUnauthorized: false,
     };
 

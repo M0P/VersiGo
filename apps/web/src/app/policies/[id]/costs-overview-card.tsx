@@ -12,12 +12,12 @@ import { getApiBaseUrl } from '@/lib/runtime-config';
 
 const API_BASE = getApiBaseUrl();
 
-// BugFix-08 (Q4): Neue Eintraege werden auf MONTHLY / QUARTERLY / ANNUAL
-// beschraenkt; SEMI_ANNUAL bleibt nur fuer Bestandsdaten in der Bearbeitung.
+// BugFix-08 (Q4): new entries are restricted to MONTHLY / QUARTERLY / ANNUAL;
+// SEMI_ANNUAL remains available only for existing data in edit mode.
 const NEW_FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'ANNUAL'];
 const ALL_FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL'];
 
-// BugFix-08 (Q4): Perioden-Tabelle (incurred/expected) aus GET .../costs/schedule.
+// BugFix-08 (Q4): period table (incurred/expected) from GET .../costs/schedule.
 type SchedulePeriod = {
   periodIndex: number;
   periodLabel: string;
@@ -79,11 +79,11 @@ function toEditForm(entry: CostEntry): EditForm {
 }
 
 /**
- * BugFix-08 (Q4): Kosten-Tab im Versicherungs-Detail – die EINE zentrale
- * Stelle zum Verwalten der Kosten einer Police (Perioden-Tabelle, "bisher
- * gezahlt", Anlegen einer Kosten-Erhoehung ab einem Datum sowie Bearbeiten/
- * Loeschen – auch historischer Eintraege). Die fruehere separate Seite
- * /policies/[id]/costs entfaellt.
+ * BugFix-08 (Q4): costs card in the policy detail view – the ONE central
+ * place for managing a policy's costs (period table, "paid so far",
+ * creating a cost increase from a date as well as editing/deleting – also
+ * historical entries). The former separate page
+ * /policies/[id]/costs no longer exists.
  */
 export default function CostsOverviewCard({ policyId }: { policyId: string }): ReactElement {
   const { t, language } = useI18n();
@@ -92,9 +92,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  // Original-Eintrag waehrend der Bearbeitung – dient dem Vergleich, welche
-  // Felder wirklich geaendert wurden (nur diese werden gesendet), damit
-  // exakte Zeitstempel (z. B. validTo 23:59:59.999) erhalten bleiben.
+  // Original entry during editing – used to compare which fields were
+  // really changed (only those are sent), so that
+  // exact timestamps (e.g. validTo 23:59:59.999) are preserved.
   const [editingOriginal, setEditingOriginal] = useState<CostEntry | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
     validFrom: '', validTo: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '',
@@ -104,9 +104,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
   });
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // BugFix-05 (Befund 8): Seq-Token – kein setState nach await auf veraltete
-  // Requests (z. B. nach policyId-Wechsel). Jeder Request inkrementiert das
-  // Token; ein spaeter eintreffender Response verwirft seine Updates.
+  // BugFix-05 (finding 8): seq token – no setState after await on stale
+  // requests (e.g. after a policyId change). Every request increments the
+  // token; a late response discards its updates.
   const requestSeq = useRef(0);
 
   const reload = () => {
@@ -127,9 +127,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ([scheduleData, entriesData]: [any, any]) => {
             if (seq !== requestSeq.current) return;
-            // Immer setzen (auch null): Ein fehlgeschlagener Request darf
-            // nicht den Schedule der vorherigen Policy weiter anzeigen
-            // (BugFix-05, Befund 8 – Stale Data nach policyId-Wechsel).
+            // Always set (even null): a failed request must not keep
+            // displaying the schedule of the previous policy
+            // (BugFix-05, finding 8 – stale data after a policyId change).
             setSchedule(scheduleData);
             setEntries(entriesData ?? []);
           },
@@ -206,9 +206,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
     const seq = ++requestSeq.current;
     setSubmitting(true);
     setActionError(null);
-    // Nur tatsaechlich geaenderte Felder senden (BugFix-08 Review 1):
-    //  - validTo / netAmount / note koennen dadurch wieder geleert werden (null),
-    //  - unveraenderte Zeitstempel bleiben exakt erhalten (kein Midnight-Shift).
+    // Only send fields that actually changed (BugFix-08 review 1):
+    //  - validTo / netAmount / note can thereby be cleared again (null),
+    //  - unchanged timestamps stay exactly preserved (no midnight shift).
     const body: Record<string, unknown> = {};
     if (editForm.validFrom !== editingOriginal.validFrom.slice(0, 10)) body.validFrom = editForm.validFrom;
     const originalValidTo = editingOriginal.validTo ? editingOriginal.validTo.slice(0, 10) : '';
@@ -219,9 +219,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
     const originalNetAmount = editingOriginal.netAmount != null ? String(Number(editingOriginal.netAmount)) : '';
     if (editForm.netAmount !== originalNetAmount) body.netAmount = editForm.netAmount === '' ? null : parseFloat(editForm.netAmount);
     if (editForm.note !== (editingOriginal.note ?? '')) body.note = editForm.note === '' ? null : editForm.note;
-    // BugFix-08: Frequenz nur senden, wenn sie sich geaendert hat – so
-    // bleiben Legacy-Eintraege (SEMI_ANNUAL) ohne Frequenz-Aenderung
-    // bearbeitbar (DTO erlaubt SEMI_ANNUAL nicht fuer neue Werte).
+    // BugFix-08: only send the frequency when it changed – thus
+    // legacy entries (SEMI_ANNUAL) stay editable without a frequency
+    // change (the DTO does not allow SEMI_ANNUAL for new values).
     if (editForm.frequency !== editingOriginal.frequency) body.frequency = editForm.frequency;
 
     fetch(`${API_BASE}/households/default/policies/${policyId}/costs/${editingId}`, {
@@ -293,7 +293,7 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
 
       {!schedule && <Alert variant="warning">{t('costs.unavailable')}</Alert>}
 
-      {/* Bisher gezahlt + aktueller Eintrag. */}
+      {/* Paid to date + current entry. */}
       {schedule && (
         <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 'var(--versigo-space-2)' }}>
@@ -368,7 +368,7 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
         </Card>
       )}
 
-      {/* Kostenpositionen (inkl. Bearbeiten/Loeschen historischer Eintraege). */}
+      {/* Cost entries (incl. editing/deleting historical entries). */}
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <h2>{t('costs.entriesTitle')}</h2>
         {entries.length === 0 && <p className="text-muted">{t('costs.noEntries')}</p>}
@@ -404,8 +404,8 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
                       </td>
                       <td data-label={t('costs.frequency')}>
                         <Select value={editForm.frequency} onChange={(ev) => setEditForm({ ...editForm, frequency: ev.target.value })}>
-                          {/* SEMI_ANNUAL nur fuer Legacy-Eintraege anbieten:
-                              das DTO lehnt SEMI_ANNUAL fuer neue Werte ab. */}
+                          {/* Offer SEMI_ANNUAL only for legacy entries:
+                              the DTO rejects SEMI_ANNUAL for new values. */}
                           {(editingOriginal?.frequency === 'SEMI_ANNUAL' ? ALL_FREQUENCIES : NEW_FREQUENCIES).map((frequency) => (
                             <option key={frequency} value={frequency}>{t(`costs.frequencies.${frequency}`)}</option>
                           ))}
@@ -448,8 +448,8 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
         )}
       </Card>
 
-      {/* BugFix-08 (Q4): Kosten-Erhoehung ab einem Datum – der bisherige
-          Eintrag wird automatisch beendet. */}
+      {/* BugFix-08 (Q4): cost increase from a date – the previous
+          entry is ended automatically. */}
       <Card>
         <h2>{t('costs.increaseTitle')}</h2>
         <p className="form-hint">{t('costs.increaseHint')}</p>

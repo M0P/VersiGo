@@ -81,7 +81,7 @@ describe('WorkerHeartbeatService', () => {
     await expect(service.writeHeartbeat()).resolves.toBeUndefined();
   });
 
-  it('meldet up bei frischem Heartbeat', async () => {
+  it('reports up for a fresh heartbeat', async () => {
     const db = buildDb({
       workerHeartbeat: {
         findFirst: vi.fn().mockResolvedValue({
@@ -97,7 +97,7 @@ describe('WorkerHeartbeatService', () => {
     expect(status.workerId).toBe('worker-1');
   });
 
-  it('meldet down bei veraltetem Heartbeat (aelter als Timeout)', async () => {
+  it('reports down for a stale heartbeat (older than timeout)', async () => {
     const db = buildDb({
       workerHeartbeat: {
         findFirst: vi.fn().mockResolvedValue({
@@ -112,7 +112,7 @@ describe('WorkerHeartbeatService', () => {
     expect(status.worker).toBe('down');
   });
 
-  it('meldet unknown, wenn noch nie ein Heartbeat existierte', async () => {
+  it('reports unknown when no heartbeat ever existed', async () => {
     const db = buildDb({
       workerHeartbeat: {
         findFirst: vi.fn().mockResolvedValue(null),
@@ -125,7 +125,7 @@ describe('WorkerHeartbeatService', () => {
     expect(status.lastSeenAt).toBeNull();
   });
 
-  it('meldet unknown fail-soft bei DB-Fehler beim Lesen', async () => {
+  it('reports unknown fail-soft on DB error while reading', async () => {
     const db = buildDb({
       workerHeartbeat: {
         findFirst: vi.fn().mockRejectedValue(new Error('DB down')),
@@ -137,7 +137,7 @@ describe('WorkerHeartbeatService', () => {
     expect(status.worker).toBe('unknown');
   });
 
-  it('start() ist idempotent und stop() beendet das Intervall', async () => {
+  it('start() is idempotent and stop() ends the interval', async () => {
     const db = buildDb();
     const service = new WorkerHeartbeatService(db, buildConfig());
 
@@ -154,7 +154,7 @@ describe('WorkerHeartbeatService', () => {
     );
   });
 
-  it('raeumt beim start() verwaiste Heartbeat-Rows aelter als die Retention auf', async () => {
+  it('prunes orphaned heartbeat rows older than the retention on start()', async () => {
     const db = buildDb();
     const service = new WorkerHeartbeatService(db, buildConfig());
 
@@ -174,7 +174,7 @@ describe('WorkerHeartbeatService', () => {
     service.stop();
   });
 
-  it('raeumt fail-soft auf, wenn die Aufraeumung fehlschlaegt', async () => {
+  it('prunes fail-soft when the cleanup fails', async () => {
     const db = buildDb({
       workerHeartbeat: {
         upsert: vi.fn(),
@@ -186,7 +186,7 @@ describe('WorkerHeartbeatService', () => {
 
     vi.useFakeTimers();
     service.start();
-    // Mikrotasks der fire-and-forget-Aufraeumung abarbeiten: Es darf weder
+    // Drain the microtasks of the fire-and-forget cleanup: it must neither
     // eine Ablehnung nach aussen dringen noch der Heartbeat ausfallen.
     await vi.advanceTimersByTimeAsync(0);
     expect(service.writeHeartbeat).toBeDefined();

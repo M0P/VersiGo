@@ -41,7 +41,7 @@ describe('CostTrackingController', () => {
   const policyId = 'policy-1';
   const entryId = 'entry-1';
 
-  it('create delegiert an Service und gibt Ergebnis zurueck', async () => {
+  it('create delegates to the service and returns the result', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
     const expected = { id: entryId, grossAmount: 1200 };
@@ -61,7 +61,7 @@ describe('CostTrackingController', () => {
     });
   });
 
-  it('findAll delegiert an Service', async () => {
+  it('findAll delegates to the service', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
     service.findAll.mockResolvedValue([{ id: entryId }]);
@@ -72,7 +72,7 @@ describe('CostTrackingController', () => {
     expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
-  it('getSchedule delegiert an Service (BugFix-08: Perioden-Tabelle)', async () => {
+  it('getSchedule delegates to the service (BugFix-08: period table)', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
     service.getSchedule.mockResolvedValue({ policyId, paidToDate: 1200, periods: [] });
@@ -83,7 +83,7 @@ describe('CostTrackingController', () => {
     expect(service.getSchedule).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
-  it('findOne delegiert an Service', async () => {
+  it('findOne delegates to the service', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
     service.findOne.mockResolvedValue({ id: entryId });
@@ -94,7 +94,7 @@ describe('CostTrackingController', () => {
     expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser, policyId, entryId);
   });
 
-  it('update delegiert an Service', async () => {
+  it('update delegates to the service', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
     service.update.mockResolvedValue({ id: entryId, grossAmount: 1500 });
@@ -109,7 +109,7 @@ describe('CostTrackingController', () => {
     });
   });
 
-  it('remove delegiert an Service', async () => {
+  it('remove delegates to the service', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
     service.remove.mockResolvedValue({ success: true });
@@ -122,19 +122,19 @@ describe('CostTrackingController', () => {
 });
 
 describe('CostTrackingController Rollen-Guards', () => {
-  it('Schreib-Endpunkte erlauben nur USER/ADMIN (READ_ONLY ausgeschlossen)', () => {
+  it('write endpoints only allow USER/ADMIN (READ_ONLY excluded)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.create)).toEqual([GlobalRole.USER, GlobalRole.ADMIN]);
     expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.update)).toEqual([GlobalRole.USER, GlobalRole.ADMIN]);
     expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.remove)).toEqual([GlobalRole.USER, GlobalRole.ADMIN]);
   });
 
-  it('Lese-Endpunkte erlauben auch READ_ONLY (Freigabe wird im Service erzwungen, AP-16)', () => {
+  it('read endpoints also allow READ_ONLY (the share is enforced in the service, AP-16)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.findAll)).toContain(GlobalRole.READ_ONLY);
     expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.getSchedule)).toContain(GlobalRole.READ_ONLY);
     expect(Reflect.getMetadata(ROLES_KEY, CostTrackingController.prototype.findOne)).toContain(GlobalRole.READ_ONLY);
   });
 
-  it('Household-Summary erlaubt auch READ_ONLY (Filterung im Service)', () => {
+  it('household summary also allows READ_ONLY (filtering in the service)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, CostTrackingHouseholdController.prototype.getSummary)).toContain(GlobalRole.READ_ONLY);
   });
 });
@@ -142,7 +142,7 @@ describe('CostTrackingController Rollen-Guards', () => {
 describe('CostTrackingHouseholdController', () => {
   const householdId = 'household-1';
 
-  it('getSummary delegiert an Service', async () => {
+  it('getSummary delegates to the service', async () => {
     const service = createMockService();
     const controller = new CostTrackingHouseholdController(service as never);
     service.getHouseholdSummary.mockResolvedValue({

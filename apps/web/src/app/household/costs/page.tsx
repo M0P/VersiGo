@@ -14,7 +14,7 @@ import { getApiBaseUrl } from '@/lib/runtime-config';
 
 const API_BASE = getApiBaseUrl();
 
-// BugFix-08 (Q5): Neue Haushalts-Kostenuebersicht aus GET .../costs/summary.
+// BugFix-08 (Q5): new household costs overview from GET .../costs/summary.
 type SummaryPolicy = {
   id: string;
   name: string;
@@ -35,9 +35,9 @@ type Summary = {
 };
 
 /**
- * BugFix-08 (Q5): Historischer Graph – Kosten je Kalenderjahr als einfache
- * SVG-Balken (bewusst dependency-light, kein Chart-Framework noetig).
- * Basis: Summe der vollen Periodenbetraege aller begonnenen Perioden je Jahr.
+ * BugFix-08 (Q5): historical chart – costs per calendar year as simple
+ * SVG bars (deliberately dependency-light, no chart framework needed).
+ * Basis: sum of the full period amounts of all started periods per year.
  */
 function PerYearChart({ data, language }: { data: { year: number; amount: number }[]; language: Language }): ReactElement {
   const { t } = useI18n();
@@ -47,8 +47,8 @@ function PerYearChart({ data, language }: { data: { year: number; amount: number
 
   const max = Math.max(...data.map((d) => d.amount), 0);
   const chartHeight = 180;
-  const paddingTop = 18; // Platz fuer den Betrags-Wert ueber dem Balken
-  const labelHeight = 22; // Platz fuer die Jahreszahl unter dem Balken
+  const paddingTop = 18; // space for the amount value above the bar
+  const labelHeight = 22; // space for the year label below the bar
   const usableHeight = chartHeight - paddingTop - labelHeight;
   const slotWidth = 56;
   const barWidth = 28;
@@ -152,8 +152,8 @@ export default function HouseholdCostsPage(): ReactElement {
         }
       />
 
-      {/* BugFix-08 (Q5): Gesamtbetraege – was wurde ausgegeben (paidToDate),
-          pro Monat und pro Jahr ueber alle Versicherungen. */}
+      {/* BugFix-08 (Q5): total amounts – what was spent (paidToDate),
+          per month and per year across all policies. */}
       <div className="split-layout" style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <Card>
           <h3>{t('costs.paidToDate')}</h3>
@@ -184,16 +184,16 @@ export default function HouseholdCostsPage(): ReactElement {
         </Card>
       </div>
 
-      {/* BugFix-08 (Q5): Historischer Graph – Kosten pro Jahr. */}
+      {/* BugFix-08 (Q5): historical chart – costs per year. */}
       <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <SectionHeader title={t('costs.historicTitle')} />
         <p className="form-hint">{t('costs.historicDescription')}</p>
         <PerYearChart data={summary.perYear} language={language} />
       </Card>
 
-      {/* BugFix-08 (Q5): Tiefste Ebene – je Versicherung die Kosten.
-          paidToDate = "wie viel hat der Nutzer ausgegeben", dazu die
-          projizierten Monats-/Jahresbetraege aus dem aktiven Eintrag. */}
+      {/* BugFix-08 (Q5): lowest level – the costs per policy.
+          paidToDate = "how much the user has spent", plus the
+          projected monthly/annual amounts from the active entry. */}
       <Card>
         <SectionHeader title={t('costs.perPolicy')} />
         {summary.policies.length === 0 ? (

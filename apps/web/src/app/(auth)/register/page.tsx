@@ -12,9 +12,9 @@ import { localizeAuthError, useI18n } from '../../../i18n';
 import { getApiBaseUrl } from '@/lib/runtime-config';
 
 /**
- * AP-16: Lokale Registrierung. Legt ein Konto mit Status PENDING_APPROVAL an;
- * erst ein Administrator schaltet es frei (POST /admin/users/:id/approve).
- * Die Antwort enthaelt keine Account-Details, nur den Freischaltungsstatus.
+ * AP-16: local registration. Creates an account with status PENDING_APPROVAL;
+ * only an administrator approves it (POST /admin/users/:id/approve).
+ * The response contains no account details, only the approval status.
  */
 export default function RegisterPage(): ReactElement {
   const apiBaseUrl = getApiBaseUrl();
@@ -83,9 +83,8 @@ export default function RegisterPage(): ReactElement {
         setFieldErrors(newFieldErrors);
         setError(data.message || t('auth.validationError'));
       } else {
-        // AP-21: Die rohe (deutsche) API-Fehlermeldung wird NICHT angezeigt;
-        // der HTTP-Status wird auf einen lokalisierten Katalog-Schluessel
-        // abgebildet (en/de).
+        // AP-21: the raw (German) API error message is NOT displayed; the
+        // HTTP status is mapped to a localized catalog key (en/de).
         setError(localizeAuthError(t, res.status, 'register'));
       }
     } catch {

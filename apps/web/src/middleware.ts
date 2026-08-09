@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/register', '/pending', '/forbidden', '/callback', '/_next', '/favicon.ico', '/runtime-config.js'];
 
-// Edge-Middleware: verweigert nicht authentifizierte UI-Aufrufe (Session-Schutz
-// gemaess docs/07-security-privacy.md). Prueft nur auf Vorhandensein des
-// HttpOnly-Session-Cookies; die eigentliche Validierung erfolgt serverseitig
-// in der API bei jedem Datenzugriff.
+// Edge middleware: denies unauthenticated UI calls (session protection per
+// docs/07-security-privacy.md). Only checks for the presence of the
+// HttpOnly session cookie; the actual validation happens server-side in
+// the API on every data access.
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 

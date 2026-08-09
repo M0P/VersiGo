@@ -3,5 +3,6 @@
 // Do not commit the generated version - only this template
 
 window.__VERSIGO_RUNTIME_CONFIG__ = {
-  apiBaseUrl: "__API_BASE_URL__"
+  apiBaseUrl: "__API_BASE_URL__",
+  appVersion: "__APP_VERSION__"
 };

@@ -16,7 +16,7 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
     vi.clearAllMocks();
   });
 
-  it('blockiert nicht-http(s)-Protokolle', async () => {
+  it('blocks non-http(s) protocols', async () => {
     await expect(assertSafeTestEndpoint('ftp://example.com/file')).rejects.toThrow(
       UnsafeEndpointError,
     );
@@ -25,11 +25,11 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
     );
   });
 
-  it('blockiert ungueltige URLs', async () => {
-    await expect(assertSafeTestEndpoint('keine url')).rejects.toThrow(UnsafeEndpointError);
+  it('blocks invalid URLs', async () => {
+    await expect(assertSafeTestEndpoint('not a url')).rejects.toThrow(UnsafeEndpointError);
   });
 
-  it('blockiert private/loopback/link-local/metadata IPv4-Literale', async () => {
+  it('blocks private/loopback/link-local/metadata IPv4 literals', async () => {
     const blocked = [
       '127.0.0.1',
       '10.0.0.5',
@@ -48,12 +48,12 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
     expect(lookup).not.toHaveBeenCalled();
   });
 
-  it('erlaubt oeffentliche IPv4-Literale', async () => {
+  it('allows public IPv4 literals', async () => {
     await expect(assertSafeTestEndpoint('http://8.8.8.8/')).resolves.toBeUndefined();
     await expect(assertSafeTestEndpoint('https://93.184.216.34/')).resolves.toBeUndefined();
   });
 
-  it('blockiert lokale/private IPv6-Literale', async () => {
+  it('blocks local/private IPv6 literals', async () => {
     const blocked = ['::1', 'fc00::1', 'fe80::1', 'ff02::1', '::ffff:127.0.0.1'];
     for (const ip of blocked) {
       await expect(assertSafeTestEndpoint(`http://[${ip}]/`)).rejects.toThrow(
@@ -62,7 +62,7 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
     }
   });
 
-  it('blockiert localhost und interne Hostnamen', async () => {
+  it('blocks localhost and internal hostnames', async () => {
     await expect(assertSafeTestEndpoint('http://localhost:11434/')).rejects.toThrow(
       UnsafeEndpointError,
     );
@@ -74,7 +74,7 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
     );
   });
 
-  it('weist DNS-Namen ab, die auf gesperrte Adressen aufloesen', async () => {
+  it('rejects DNS names that resolve to blocked addresses', async () => {
     lookup.mockResolvedValue([{ address: '10.0.0.7', family: 4 }]);
     await expect(assertSafeTestEndpoint('http://example.com/')).rejects.toThrow(
       UnsafeEndpointError,
@@ -82,12 +82,12 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
     expect(lookup).toHaveBeenCalledWith('example.com', expect.objectContaining({ all: true }));
   });
 
-  it('erlaubt DNS-Namen, die auf oeffentliche Adressen aufloesen', async () => {
+  it('allows DNS names that resolve to public addresses', async () => {
     lookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     await expect(assertSafeTestEndpoint('https://example.com/')).resolves.toBeUndefined();
   });
 
-  it('laeuft durch, wenn die DNS-Aufloesung fehlschlaegt (Fehler liefert der fetch)', async () => {
+  it('proceeds when DNS resolution fails (the fetch reports the error)', async () => {
     lookup.mockRejectedValue(new Error('ENOTFOUND'));
     await expect(assertSafeTestEndpoint('https://unbekannt.example.com/')).resolves.toBeUndefined();
   });
@@ -102,8 +102,8 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
     expect(isBlockedIpv6('fc00::1')).toBe(true);
     expect(isBlockedIpv6('fe80::1')).toBe(true);
     expect(isBlockedIpv6('2001:4860:4860::8888')).toBe(false);
-    // IPv4-mapped: Dotted-Quad UND kanonische Hex-Form (wie sie URL.hostname
-    // aus ::ffff:127.0.0.1 erzeugt).
+    // IPv4-mapped: dotted-quad AND canonical hex form (as URL.hostname
+    // produces from ::ffff:127.0.0.1).
     expect(isBlockedIpv6('::ffff:127.0.0.1')).toBe(true);
     expect(isBlockedIpv6('::ffff:7f00:1')).toBe(true);
     expect(isBlockedIpv6('::ffff:8.8.8.8')).toBe(false);
@@ -111,24 +111,24 @@ describe('connectivity-guard (SSRF-Schutz)', () => {
   });
 });
 
-describe('connectivity-guard (BugFix-06: opt-in Lockerung)', () => {
+describe('connectivity-guard (BugFix-06: opt-in relaxation)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('isCloudMetadataAddress erkennt die Metadata-Literale beider Familien', () => {
+  it('isCloudMetadataAddress recognizes the metadata literals of both families', () => {
     expect(isCloudMetadataAddress('169.254.169.254')).toBe(true);
     expect(isCloudMetadataAddress('fd00:ec2::254')).toBe(true);
     expect(isCloudMetadataAddress('192.168.1.1')).toBe(false);
     expect(isCloudMetadataAddress('127.0.0.1')).toBe(false);
-    // IPv4-mapped IPv6-Formen der Metadata-Adresse (BugFix-06 High-Fix)
+    // IPv4-mapped IPv6 forms of the metadata address (BugFix-06 high fix)
     expect(isCloudMetadataAddress('::ffff:169.254.169.254')).toBe(true);
     expect(isCloudMetadataAddress('::ffff:a9fe:a9fe')).toBe(true);
   });
 
-  it('allowPrivate=true erlaubt private/lokale IPv4-Literale', async () => {
+  it('allowPrivate=true allows private/local IPv4 literals', async () => {
     const allowed = [
-      'http://192.168.24.8:8010/api', // Paperless im LAN (Fehlerbild des Nutzers)
+      'http://192.168.24.8:8010/api', // Paperless in the LAN (user-reported issue)
       'http://10.0.0.5/',
       'http://172.16.0.1/',
       'http://127.0.0.1:11434/', // Ollama localhost
@@ -142,7 +142,7 @@ describe('connectivity-guard (BugFix-06: opt-in Lockerung)', () => {
     expect(lookup).not.toHaveBeenCalled();
   });
 
-  it('allowPrivate=true erlaubt lokale Hostnamen (DNS-Aufloesung egal)', async () => {
+  it('allowPrivate=true allows local hostnames (regardless of DNS resolution)', async () => {
     lookup.mockResolvedValue([{ address: '192.168.1.50', family: 4 }]);
     await expect(
       assertSafeTestEndpoint('http://papierkram.home:8010/api', { allowPrivate: true }),
@@ -155,7 +155,7 @@ describe('connectivity-guard (BugFix-06: opt-in Lockerung)', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('allowPrivate=true blockiert die Cloud-Metadata-Adresse weiterhin', async () => {
+  it('allowPrivate=true still blocks the cloud metadata address', async () => {
     await expect(
       assertSafeTestEndpoint('http://169.254.169.254/latest/meta-data/', {
         allowPrivate: true,
@@ -164,8 +164,8 @@ describe('connectivity-guard (BugFix-06: opt-in Lockerung)', () => {
     await expect(
       assertSafeTestEndpoint('http://[fd00:ec2::254]/', { allowPrivate: true }),
     ).rejects.toThrow(UnsafeEndpointError);
-    // IPv4-mapped IPv6-Formen der Metadata-Adresse muessen auch im
-    // Lockerungsmodus gesperrt bleiben (BugFix-06 High-Fix).
+    // IPv4-mapped IPv6 forms of the metadata address must also
+    // remain blocked in relaxed mode (BugFix-06 high fix).
     await expect(
       assertSafeTestEndpoint('http://[::ffff:169.254.169.254]/latest/meta-data/', {
         allowPrivate: true,
@@ -176,7 +176,7 @@ describe('connectivity-guard (BugFix-06: opt-in Lockerung)', () => {
     ).rejects.toThrow(UnsafeEndpointError);
   });
 
-  it('allowPrivate=true blockiert DNS-Namen, die auf Metadata aufloesen', async () => {
+  it('allowPrivate=true blocks DNS names that resolve to metadata', async () => {
     lookup.mockResolvedValue([{ address: '169.254.169.254', family: 4 }]);
     await expect(
       assertSafeTestEndpoint('https://metadata.example.com/', { allowPrivate: true }),
@@ -184,7 +184,7 @@ describe('connectivity-guard (BugFix-06: opt-in Lockerung)', () => {
     expect(lookup).toHaveBeenCalled();
   });
 
-  it('allowPrivate=true blockiert DNS-Namen, die auf IPv4-mapped Metadata aufloesen', async () => {
+  it('allowPrivate=true blocks DNS names that resolve to IPv4-mapped metadata', async () => {
     lookup.mockResolvedValue([{ address: '::ffff:a9fe:a9fe', family: 6 }]);
     await expect(
       assertSafeTestEndpoint('https://metadata-v6.example.com/', { allowPrivate: true }),
@@ -192,7 +192,7 @@ describe('connectivity-guard (BugFix-06: opt-in Lockerung)', () => {
     expect(lookup).toHaveBeenCalled();
   });
 
-  it('ohne allowPrivate bleibt das strikte Standardverhalten unveraendert', async () => {
+  it('without allowPrivate the strict default behavior stays unchanged', async () => {
     await expect(assertSafeTestEndpoint('http://192.168.24.8:8010/')).rejects.toThrow(
       UnsafeEndpointError,
     );

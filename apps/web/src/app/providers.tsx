@@ -11,10 +11,10 @@ import { ThemeProvider } from '../contexts/theme-context';
  * client-side contexts for the design system theme and the
  * UI language (AP-21).
  *
- * `initialLanguage` kommt aus dem Root-Layout (Server), das den
- * `versigo:locale`-Cookie liest – dadurch stimmen Server-HTML und erste
- * Client-Hydration ueberein (kein Hydration-Mismatch, kein Sprach-Flash
- * fuer persistente Konten).
+ * `initialLanguage` comes from the root layout (server), which reads the
+ * `versigo:locale` cookie – thus server HTML and the first
+ * client hydration agree (no hydration mismatch, no language flash
+ * for persistent accounts).
  */
 export function Providers({
   children,

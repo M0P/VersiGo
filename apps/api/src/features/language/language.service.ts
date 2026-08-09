@@ -11,9 +11,9 @@ import {
 import type { LanguagePreferenceDto } from './dto/language.dto';
 
 /**
- * Form der express-session, die der LanguageController nutzt.
- * READ_ONLY-Nutzer hinterlegen ihre Sprache ausschliesslich hier
- * (sitzungsbezogen, keine Datenbank, kein Verlauf).
+ * Shape of the express session used by the LanguageController.
+ * READ_ONLY users store their language exclusively here (session-bound,
+ * no database, no history).
  */
 export interface LanguageSessionData {
   language?: string;
@@ -25,16 +25,15 @@ export class LanguageService {
   constructor(private readonly db: DatabaseService) {}
 
   /**
-   * Ermittelt die aktive Sprache eines authentifizierten Nutzers.
+   * Determines the active language of an authenticated user.
    *
-   * Prioritaet (verbindlich laut AP-21):
-   * 1. READ_ONLY:  explizit in dieser Sitzung gewaehlte Sprache,
-   *    sonst Browserpräferenz (Accept-Language), sonst Englisch.
-   * 2. USER/ADMIN: gespeicherte Kontoeinstellung (users.locale),
-   *    sonst Browserpräferenz, sonst Englisch.
+   * Priority (binding per AP-21):
+   * 1. READ_ONLY: language explicitly chosen in this session, otherwise
+   *    browser preference (Accept-Language), otherwise English.
+   * 2. USER/ADMIN: stored account setting (users.locale), otherwise
+   *    browser preference, otherwise English.
    *
-   * Nicht unterstuetzte oder ungueltige Werte fallen immer sicher auf
-   * Englisch zurueck.
+   * Unsupported or invalid values always fall back safely to English.
    */
   async resolveLanguage(
     user: AuthenticatedUser,
@@ -65,13 +64,13 @@ export class LanguageService {
   }
 
   /**
-   * Setzt die Sprache eines authentifizierten Nutzers.
+   * Sets the language of an authenticated user.
    *
-   * - READ_ONLY:  nur in der Sitzung (nie in der Datenbank),
-   *   kein Audit-Eintrag, kein Verlauf.
-   * - USER/ADMIN: dauerhaft in users.locale gespeichert.
+   * - READ_ONLY: only in the session (never in the database), no audit
+   *   entry, no history.
+   * - USER/ADMIN: stored persistently in users.locale.
    *
-   * Ungueltige Werte werden abgelehnt (BadRequest) und nie gespeichert.
+   * Invalid values are rejected (BadRequest) and never stored.
    */
   async setLanguage(
     user: AuthenticatedUser,
@@ -103,8 +102,8 @@ export class LanguageService {
       where: { id: userId },
       select: { locale: true },
     });
-    // Legacy-/Regionalwerte (z. B. fr-FR) aus Altbeständen gelten nicht als
-    // unterstützt; der Aufrufer fällt dann auf die Browserpräferenz bzw. en.
+    // Legacy/regional values (e.g. fr-FR) from old data are not considered
+    // supported; the caller then falls back to the browser preference or en.
     return isSupportedLanguage(profile?.locale) ? profile.locale : null;
   }
 }

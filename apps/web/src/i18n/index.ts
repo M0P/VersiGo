@@ -1,14 +1,14 @@
 /**
- * AP-21: Oeffentliche i18n-API der Web-App.
+ * AP-21: public i18n API of the web app.
  *
- * Nutzung in Client-Komponenten:
+ * Usage in client components:
  *   import { useI18n } from '../../i18n';
  *   const { t } = useI18n();
  *   <h1>{t('policies.title')}</h1>
  *
- * Der Schluesselpfad ist typsicher: unbekannte Schluessel sind ein
- * Compile-Fehler. Die Kataloge liegen in ./locales (en = Quelle der
- * Wahrheit, de = strukturgleich erzwungen).
+ * The key path is type-safe: unknown keys are a
+ * compile error. The catalogs live in ./locales (en = source of
+ * truth, de = structurally enforced).
  */
 export {
   I18nProvider,

@@ -5,12 +5,12 @@ import { PortalConnectorsController } from './portal-connectors.controller';
 import { experimentalMailboxSyncPlugin } from './experimental-mailbox.plugin';
 
 /**
- * Portal-Connectoren (AP-18): Katalog, Deeplinks und Plugin-Rahmen.
+ * Portal connectors (AP-18): catalog, deep links and plugin framework.
  *
- * Registriert beim Start das experimentelle, deaktivierte Mailbox-Plugin.
- * `PortalConnectorService` wird exportiert, damit das Policy-Registry-
- * Feature Portal-Links anreichern kann (Deeplink-Aufloesung, Katalog- und
- * Connector-Sicht, `credentialsSet` – nie Zugangsdaten).
+ * Registers the experimental, disabled mailbox plugin on startup.
+ * `PortalConnectorService` is exported so the policy-registry feature
+ * can enrich portal links (deep-link resolution, catalog and connector
+ * view, `credentialsSet` - never access credentials).
  */
 @Module({
   controllers: [PortalConnectorsController],
@@ -26,8 +26,8 @@ export class PortalConnectorsModule implements OnModuleInit {
     this.registry.register(experimentalMailboxSyncPlugin);
     const plugins = this.registry.list();
     this.logger.log(
-      `Portal-Connector-Plugins registriert: ${plugins.length} ` +
-        `(verfuegbar: ${plugins.filter((p) => p.isAvailable()).length})`,
+      `Portal connector plugins registered: ${plugins.length} ` +
+        `(available: ${plugins.filter((p) => p.isAvailable()).length})`,
     );
   }
 }

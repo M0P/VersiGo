@@ -56,19 +56,19 @@ describe('Household-Isolation (Integration)', () => {
     } as const;
   }
 
-  it('User A erhaelt Zugriff auf eigenes Household A', async () => {
+  it('user A gets access to their own household A', async () => {
     await expect(guard.canActivate(contextFor(userA.id, householdA) as never)).resolves.toBe(true);
   });
 
-  it('User A wird von Household B abgewiesen (Isolation)', async () => {
+  it('user A is rejected by household B (isolation)', async () => {
     await expect(guard.canActivate(contextFor(userA.id, householdB) as never)).rejects.toThrow('Isolation');
   });
 
-  it('User B wird von Household A abgewiesen (Isolation, symmetrisch)', async () => {
+  it('user B is rejected by household A (isolation, symmetric)', async () => {
     await expect(guard.canActivate(contextFor(userB.id, householdA) as never)).rejects.toThrow('Isolation');
   });
 
-  it('User B erhaelt Zugriff auf eigenes Household B', async () => {
+  it('user B gets access to their own household B', async () => {
     await expect(guard.canActivate(contextFor(userB.id, householdB) as never)).resolves.toBe(true);
   });
 });

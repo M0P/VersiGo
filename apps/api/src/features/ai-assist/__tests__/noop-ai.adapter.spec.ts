@@ -4,21 +4,21 @@ import { NoOpAIAdapter } from '../noop-ai.adapter';
 describe('NoOpAIAdapter', () => {
   const adapter = new NoOpAIAdapter();
 
-  it('hat providerKey "none"', () => {
+  it('has providerKey "none"', () => {
     expect(adapter.providerKey).toBe('none');
   });
 
-  it('extractContractFacts gibt null zurueck', async () => {
+  it('extractContractFacts returns null', async () => {
     const result = await adapter.extractContractFacts(['test content'], 'policy-1');
     expect(result).toBeNull();
   });
 
-  it('summarizeCoverage gibt null zurueck', async () => {
+  it('summarizeCoverage returns null', async () => {
     const result = await adapter.summarizeCoverage(['test content'], 'policy-1');
     expect(result).toBeNull();
   });
 
-  it('healthCheck gibt false zurueck', async () => {
+  it('healthCheck returns false', async () => {
     const result = await adapter.healthCheck();
     expect(result).toBe(false);
   });

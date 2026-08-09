@@ -3,5 +3,5 @@ import { GlobalRole } from '@prisma/client';
 
 export const ROLES_KEY = 'requiredRoles';
 
-// @Roles(GlobalRole.ADMIN) auf Controller-Methode/-Klasse
+// @Roles(GlobalRole.ADMIN) on a controller method/class
 export const Roles = (...roles: GlobalRole[]) => SetMetadata(ROLES_KEY, roles);

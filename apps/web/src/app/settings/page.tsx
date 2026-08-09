@@ -26,7 +26,7 @@ type Profile = {
   createdAt: string;
 };
 
-// BugFix-07 (Q2): Zustand der Self-Service-OIDC-Verknuepfung (GET /auth/oidc/link)
+// BugFix-07 (Q2): state of the self-service OIDC link (GET /auth/oidc/link)
 type OidcLinkStatus = {
   linked: boolean;
   oidcIssuer: string | null;
@@ -49,7 +49,7 @@ export default function SettingsPage(): ReactElement {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
 
-  // BugFix-07 (Q2): OIDC-Verknuepfung
+  // BugFix-07 (Q2): OIDC linking
   const [oidcStatus, setOidcStatus] = useState<OidcLinkStatus | null>(null);
   const [linking, setLinking] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
@@ -88,8 +88,8 @@ export default function SettingsPage(): ReactElement {
       .finally(() => setLoadingProfile(false));
   };
 
-  // BugFix-07: Nach dem Link-Callback (Redirect von /auth/callback) stehen
-  // Ergebnis und Fehler als Query-Parameter auf /settings bereit.
+  // BugFix-07: after the link callback (redirect from /auth/callback) the
+  // result and the error are available as query parameters on /settings.
   const readOidcCallbackResult = (): string | null => {
     if (typeof window === 'undefined') return null;
     const params = new URLSearchParams(window.location.search);
@@ -107,10 +107,10 @@ export default function SettingsPage(): ReactElement {
     setOidcMessage(readOidcCallbackResult());
   }, [userLoading, user]);
 
-  // AP-16/AP-17/AP-21: READ_ONLY darf KEINE Profil-/Anzeige-Einstellungen
-  // veraendern; einzig die Sprachwahl ist erlaubt (session-only). Server-
-  // seitig werden alle Profil-/Praeferenz-Endpunkte blockiert; hier wird
-  // die editierbare Oberflaeche als UX-Ebene ausgeblendet.
+  // AP-16/AP-17/AP-21: READ_ONLY may NOT change profile/display settings;
+  // only the language choice is allowed (session-only). All profile/
+  // preference endpoints are blocked server-side; here the
+  // editable UI is hidden as a UX layer.
   if (userLoading) {
     return (
       <AppShell navSections={NAV_SECTIONS} user={user}>
@@ -165,10 +165,10 @@ export default function SettingsPage(): ReactElement {
 
   const profileLoading = loadingProfile || userLoading;
 
-  // BugFix-07 (Q2): Self-Service-OIDC-Verknuepfung. POST startet den
-  // Link-Flow (Session merkt sich den Link-Modus) und liefert die
-  // Provider-URL; der User wird dorthin geleitet und kommt nach der
-  // Bestaetigung ueber /auth/callback (Link-Modus) zurueck.
+  // BugFix-07 (Q2): self-service OIDC linking. POST starts the
+  // link flow (the session remembers the link mode) and returns the
+  // provider URL; the user is redirected there and comes back after
+  // confirmation via /auth/callback (link mode).
   const handleLinkOidc = async () => {
     setLinking(true);
     setOidcMessage(null);
@@ -214,10 +214,10 @@ export default function SettingsPage(): ReactElement {
     }
   };
 
-  // AP-20 (UI-Completeness): DSGVO-Export der eigenen personenbezogenen
-  // Daten (GET /privacy/export, AP-19 API). Das JSON wird als Datei
-  // heruntergeladen – der Server liefert bewusst kein File-Stream, sondern
-  // strukturierte Daten (PrivacyExport).
+  // AP-20 (UI completeness): GDPR export of one's own personal data
+  // (GET /privacy/export, AP-19 API). The JSON is downloaded as a file –
+  // the server deliberately delivers no file stream, but
+  // structured data (PrivacyExport).
   const handleExport = async () => {
     setExporting(true);
     setExported(false);
@@ -245,10 +245,10 @@ export default function SettingsPage(): ReactElement {
     }
   };
 
-  // AP-20 (UI-Completeness): Konto-Loeschen ist ueber die Einstellungsseite
-  // erreichbar (DELETE /privacy/account). Nur USER/ADMIN duerfen es – die
-  // READ_ONLY-Ansicht oben hat diesen Abschnitt nicht. Der Server schuetzt
-  // den letzten aktiven Administrator (409).
+  // AP-20 (UI completeness): account deletion is reachable via the settings
+  // page (DELETE /privacy/account). Only USER/ADMIN may do it – the
+  // READ_ONLY view above does not have this section. The server protects
+  // the last active administrator (409).
   const handleDeleteAccount = async () => {
     if (!window.confirm(t('settings.deleteAccountConfirm'))) return;
     setDeleting(true);
@@ -263,8 +263,8 @@ export default function SettingsPage(): ReactElement {
         throw new Error(data?.message ?? t('settings.deleteAccountLastAdmin'));
       }
       if (!res.ok) throw new Error(t('settings.deleteAccountError'));
-      // Konto ist geloescht; zurueck zur Anmeldung (Session existiert nicht
-      // mehr – ein Folgerequest wuerde ohnehin 401 liefern).
+      // Account deleted; back to the login (the session no longer exists –
+      // a follow-up request would return 401 anyway).
       window.location.href = '/login';
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('common.unknownError'));
@@ -327,16 +327,16 @@ export default function SettingsPage(): ReactElement {
             </form>
           </Card>
 
-          {/* AP-21: Die Sprachwahl ist der zentrale LanguageSelector
-              (Konto-persistent bzw. session-only); es gibt KEIN weiteres
-              Locale-Feld im Profil-Formular (Review-2, Minor #2). */}
+          {/* AP-21: the language choice is the central LanguageSelector
+              (account-persistent or session-only); there is NO further
+              locale field in the profile form (review 2, minor #2). */}
           <LanguageSelector />
 
           <AppearanceSettings />
 
-          {/* BugFix-07 (Q2): Self-Service-OIDC-Verknuepfung. Zustand kommt
-              von GET /auth/oidc/link; das Ergebnis des Link-Callbacks wird
-              ueber die Query-Parameter von /settings angezeigt. */}
+          {/* BugFix-07 (Q2): self-service OIDC linking. The state comes
+              from GET /auth/oidc/link; the link callback's result is shown
+              via the query parameters of /settings. */}
           <Card style={{ marginTop: 'var(--versigo-space-6)' }}>
             <CardHeader>
               <SectionHeader title={t('settings.oidcLinkTitle')} />
@@ -382,10 +382,10 @@ export default function SettingsPage(): ReactElement {
             )}
           </Card>
 
-          {/* AP-20 (UI-Completeness): DSGVO-Export (GET /privacy/export).
-              Nur USER/ADMIN – die READ_ONLY-Ansicht oben hat diesen
-              Abschnitt nicht. Der Server liefert ausschliesslich Daten des
-              eigenen Kontos. */}
+          {/* AP-20 (UI completeness): GDPR export (GET /privacy/export).
+              USER/ADMIN only – the READ_ONLY view above does not have this
+              section. The server exclusively delivers data of the
+              account itself. */}
           <Card style={{ marginTop: 'var(--versigo-space-6)' }}>
             <CardHeader>
               <SectionHeader title={t('settings.exportTitle')} />
@@ -403,9 +403,9 @@ export default function SettingsPage(): ReactElement {
             </Button>
           </Card>
 
-          {/* AP-20 (UI-Completeness): Gefahrenzone – Konto dauerhaft loeschen.
-              Bewusst getrennte Karte am Seitenende, damit ein versehentlicher
-              Klick unwahrscheinlich bleibt (zusaeztlich window.confirm). */}
+          {/* AP-20 (UI completeness): danger zone – permanently delete account.
+              Deliberately a separate card at the bottom so an accidental
+              click stays unlikely (plus window.confirm). */}
           <Card
             style={{
               marginTop: 'var(--versigo-space-6)',

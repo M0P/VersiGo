@@ -1,7 +1,7 @@
 /**
- * Technischer Port fuer Verschluesselung sensitiver Settings-Werte.
- * Feature-Slices (z. B. Admin-Settings) haengen ausschliesslich von
- * diesem Interface ab, niemals von einer konkreten Implementierung.
+ * Technical port for encrypting sensitive settings values.
+ * Feature slices (e.g. admin settings) depend only on this interface,
+ * never on a concrete implementation.
  */
 export interface EncryptionPort {
   encrypt(plainText: string): Promise<string>;

@@ -36,7 +36,7 @@ describe('SettingsResolverService', () => {
   }
 
   describe('Prioritaet UI > ENV > DEFAULT', () => {
-    it('gewinnt ein gueltiger UI-Wert gegen .env', async () => {
+    it('a valid UI value wins against .env', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue({
         key: 'AI_ENABLED',
         valuePlain: 'false',
@@ -55,7 +55,7 @@ describe('SettingsResolverService', () => {
       expect(resolution.uiUpdatedAt).not.toBeNull();
     });
 
-    it('faellt auf .env zurueck, wenn kein UI-Wert existiert', async () => {
+    it('falls back to .env when no UI value exists', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
       const service = createService({ ...envWithAiEnabled, AI_ENABLED: 'true' });
 
@@ -67,7 +67,7 @@ describe('SettingsResolverService', () => {
       expect(resolution.uiValuePresent).toBe(false);
     });
 
-    it('faellt auf Default zurueck, wenn weder UI noch .env existieren', async () => {
+    it('falls back to the default when neither UI nor .env exist', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
       const service = createService({ ...envWithAiEnabled, AI_ENABLED: undefined });
 
@@ -78,7 +78,7 @@ describe('SettingsResolverService', () => {
       expect(resolution.reason).toContain('Default');
     });
 
-    it('ignoriert einen ungueltigen UI-Wert und meldet ihn als ungueltig', async () => {
+    it('ignores an invalid UI value and reports it as invalid', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue({
         key: 'AI_ENABLED',
         valuePlain: 'not-a-boolean',
@@ -96,7 +96,7 @@ describe('SettingsResolverService', () => {
       expect(resolution.uiValuePresent).toBe(true);
     });
 
-    it('ignoriert einen ungueltigen .env-Wert zugunsten des Defaults', async () => {
+    it('ignores an invalid .env value in favor of the default', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
       const service = createService({ ...envWithAiEnabled, AI_ENABLED: 'garbage' });
 
@@ -107,7 +107,7 @@ describe('SettingsResolverService', () => {
       expect(resolution.reason).toContain('ungueltig');
     });
 
-    it('wertet leere .env-Werte wie "nicht gesetzt" (Compose-Verhalten)', async () => {
+    it('treats empty .env values like "unset" (Compose behavior)', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
       const service = createService({ ...envWithAiEnabled, AI_ENABLED: '' });
 
@@ -119,7 +119,7 @@ describe('SettingsResolverService', () => {
   });
 
   describe('Typvalidierung', () => {
-    it('validiert Zahlen gegen Min/Max aus dem Katalog', async () => {
+    it('validates numbers against min/max from the catalog', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue({
         key: 'AI_EXTRACTION_TIMEOUT_MS',
         valuePlain: '5', // unterhalb des Minimums von 1000
@@ -155,7 +155,7 @@ describe('SettingsResolverService', () => {
   });
 
   describe('Secrets', () => {
-    it('entschluesselt verschluesselte Secret-Werte fuer Feature-Konsumenten', async () => {
+    it('decrypts encrypted secret values for feature consumers', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue({
         key: 'PAPERLESS_API_TOKEN',
         valuePlain: null,
@@ -175,21 +175,21 @@ describe('SettingsResolverService', () => {
   });
 
   describe('Typisierte Accessoren', () => {
-    it('getEffectiveBoolean liefert nur boolesche Werte', async () => {
+    it('getEffectiveBoolean returns only boolean values', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
       const service = createService({ ...envWithAiEnabled, AI_ENABLED: 'true' });
 
       await expect(service.getEffectiveBoolean('AI_ENABLED')).resolves.toBe(true);
     });
 
-    it('getEffectiveString liefert nur Strings', async () => {
+    it('getEffectiveString returns only strings', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
       const service = createService({ ...envWithAiEnabled, AI_PROVIDER: 'openai-compat' });
 
       await expect(service.getEffectiveString('AI_PROVIDER')).resolves.toBe('openai-compat');
     });
 
-    it('getEffectiveNumber liefert nur Zahlen', async () => {
+    it('getEffectiveNumber returns only numbers', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue(null);
       const service = createService({ ...envWithAiEnabled, AI_MAX_RETRIES: '7' });
 
@@ -198,15 +198,15 @@ describe('SettingsResolverService', () => {
   });
 
   describe('Allowlist', () => {
-    it('wirft fuer unbekannte Schluessel', async () => {
+    it('throws for unknown keys', async () => {
       const service = createService();
 
-      await expect(service.resolve('UNKNOWN_KEY')).rejects.toThrow(/Katalog|Allowlist/);
+      await expect(service.resolve('UNKNOWN_KEY')).rejects.toThrow(/catalog|allowlist/);
     });
   });
 
-  describe('Restart-Kategorie (aktiv erst nach Neustart)', () => {
-    it('liefert den aktiven ENV/Default-Wert und den pending Neustart-Wert', async () => {
+  describe('restart category (active only after restart)', () => {
+    it('returns the active ENV/default value and the pending restart value', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue({
         key: 'STORAGE_ENABLED',
         valuePlain: 'true',
@@ -218,7 +218,7 @@ describe('SettingsResolverService', () => {
 
       const resolution = await service.resolve('STORAGE_ENABLED');
 
-      // Default bleibt bis zum Neustart aktiv – der DB-Wert wird NICHT als
+      // The default stays active until the restart – the DB value is NOT
       // bereits wirksam dargestellt.
       expect(resolution.value).toBe(false);
       expect(resolution.source).toBe('DEFAULT');
@@ -228,7 +228,7 @@ describe('SettingsResolverService', () => {
       expect(resolution.reason).toContain('nach Neustart');
     });
 
-    it('nutzt den ENV-Wert als aktiv, wenn ein restart-UI-Wert pendent ist', async () => {
+    it('uses the ENV value as active when a restart UI value is pending', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue({
         key: 'LOCAL_AUTH_MAX_ATTEMPTS',
         valuePlain: '10',
@@ -245,10 +245,10 @@ describe('SettingsResolverService', () => {
       expect(resolution.pendingRestartValue).toBe(10);
     });
 
-    it('markiert einen ungueltigen restart-UI-Wert, ohne ihn zu uebernehmen', async () => {
+    it('marks an invalid restart UI value without applying it', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue({
         key: 'STORAGE_ENABLED',
-        valuePlain: 'yes', // kein Boolean
+        valuePlain: 'yes', // not a boolean
         valueEncrypted: null,
         isSecret: false,
         updatedAt: new Date(),
@@ -263,10 +263,10 @@ describe('SettingsResolverService', () => {
       expect(resolution.pendingRestartValue).toBeUndefined();
     });
 
-    it('unterdrueckt pendingRestartValue, wenn der DB-Wert bereits aktiv ist (nach Neustart)', async () => {
+    it('suppresses pendingRestartValue when the DB value is already active (after restart)', async () => {
       db.globalIntegrationSetting.findUnique.mockResolvedValue({
         key: 'LOCAL_AUTH_MAX_ATTEMPTS',
-        valuePlain: '3', // identisch zum aktiven ENV-Wert
+        valuePlain: '3', // identical to the active ENV value
         valueEncrypted: null,
         isSecret: false,
         updatedAt: new Date('2026-01-05T00:00:00Z'),
@@ -275,9 +275,9 @@ describe('SettingsResolverService', () => {
 
       const resolution = await service.resolve('LOCAL_AUTH_MAX_ATTEMPTS');
 
-      expect(resolution.value).toBe(3); // ENV-Wert ist aktiv
+      expect(resolution.value).toBe(3); // ENV value is active
       expect(resolution.source).toBe('ENV');
-      // m8: nichts Pendentes – der Wert ist bereits wirksam.
+      // m8: nothing pending – the value is already effective.
       expect(resolution.pendingRestartValue).toBeUndefined();
       expect(resolution.reason).toContain('bereits aktiv');
       expect(resolution.reason).not.toContain('nach Neustart');
@@ -285,7 +285,7 @@ describe('SettingsResolverService', () => {
   });
 
   describe('resolveMany (gebundelte Aufloesung)', () => {
-    it('loest mehrere Schluessel mit einem DB-Zugriff auf', async () => {
+    it('resolves multiple keys with a single DB access', async () => {
       const batchedDb = {
         globalIntegrationSetting: {
           findUnique: vi.fn(),
@@ -323,7 +323,7 @@ describe('SettingsResolverService', () => {
       expect(result.get('AI_PROVIDER')?.source).toBe('DEFAULT');
     });
 
-    it('wirft fuer unbekannte Schluessel (Allowlist)', async () => {
+    it('throws for unknown keys (allowlist)', async () => {
       const batchedDb = {
         globalIntegrationSetting: {
           findUnique: vi.fn(),
@@ -337,7 +337,7 @@ describe('SettingsResolverService', () => {
       );
 
       await expect(service.resolveMany(['AI_ENABLED', 'NOPE'])).rejects.toThrow(
-        /Katalog|Allowlist/,
+        /catalog|allowlist/,
       );
     });
   });

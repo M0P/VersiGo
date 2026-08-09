@@ -3,9 +3,9 @@ import { ConfigFoundationModule, SettingsFoundationModule } from '../config';
 import { CapabilityFlagsService } from './capability-flags.service';
 
 /**
- * Globale Capability-Auskunft (AP-17/BugFix-05). Importiert die
- * SettingsFoundation, damit `isEnabled`/`snapshot` ueber den zentralen
- * Resolver (UI > ENV > DEFAULT) aufloesen und Admin-UI-Werte wirksam werden.
+ * Global capability lookup (AP-17/BugFix-05). Imports the
+ * SettingsFoundation so that `isEnabled`/`snapshot` resolve through the
+ * central resolver (UI > ENV > DEFAULT) and admin-UI values take effect.
  */
 @Global()
 @Module({

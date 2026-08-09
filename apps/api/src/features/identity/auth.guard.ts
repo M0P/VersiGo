@@ -9,11 +9,11 @@ import { UserStatus } from '@prisma/client';
 import { PUBLIC_ROUTE_KEY } from '@versigo/foundation';
 import { AuthService } from './auth.service';
 
-// Global-Guard: verweigert jeden Request ohne gueltige Session, ausser die
-// Route ist explizit mit @Public() markiert (z. B. /auth/login, /health).
-// Nur aktive Konten (ACTIVE) duerfen geschuetzte Ressourcen nutzen –
-// gesperrte (DISABLED) und noch nicht freigeschaltete (PENDING_APPROVAL)
-// Konten werden abgewiesen.
+// Global guard: rejects every request without a valid session, unless the
+// route is explicitly marked with @Public() (e.g. /auth/login, /health).
+// Only active accounts (ACTIVE) may use protected resources - disabled
+// (DISABLED) and not yet approved (PENDING_APPROVAL) accounts are
+// rejected.
 @Injectable()
 export class SessionAuthGuard implements CanActivate {
   constructor(
@@ -32,12 +32,12 @@ export class SessionAuthGuard implements CanActivate {
     const userId: string | undefined = request.session?.userId;
 
     if (!userId) {
-      throw new UnauthorizedException('Keine gueltige Session');
+      throw new UnauthorizedException('No valid session');
     }
 
     const user = await this.authService.findById(userId);
     if (!user || user.status !== UserStatus.ACTIVE) {
-      throw new UnauthorizedException('Benutzer nicht aktiv');
+      throw new UnauthorizedException('User is not active');
     }
 
     request.user = user;

@@ -5,27 +5,26 @@ import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { CreateCostEntryDto, UpdateCostEntryDto } from './dto/cost-tracking.dto';
 
 /**
- * BugFix-08 (Q4): Kosten-Overhaul.
+ * BugFix-08 (Q4): cost overhaul.
  *
- * - Abrechnungsperioden: MONTHLY / QUARTERLY / ANNUAL fuer neue Eintraege.
- *   SEMI_ANNUAL bleibt als Legacy-Wert fuer Bestandsdaten im Enum erhalten
- *   und wird in allen Berechnungen korrekt unterstuetzt (6-Monats-Periode).
- *   Dokumentierte, verlustfreie Entscheidung: KEINE Datenmigration noetig.
- * - Kosten-Erhoehung ab einem Datum = neuer Eintrag mit spaeterem validFrom;
- *   der bisher gueltige Eintrag wird beim Anlegen automatisch beendet
- *   (validTo = letzter Millisekunde vor dem neuen validFrom). Zu jedem
- *   Zeitpunkt gilt genau ein Eintrag: der mit dem groessten validFrom
- *   <= Periodenbeginn (und ohne explizites Ende davor).
- * - "Bisher gezahlt" (paidToDate) = Summe der vollen Betraege aller
- *   begonnenen Abrechnungsperioden (Periodenbeginn <= heute, Faelligkeit zu
- *   Periodenbeginn). KEINE Tagesanteile – BugFix-06 (Teil 3) Semantik bleibt
- *   erhalten.
- * - Geldbetraege: Intern in Cent (Ganzzahl) summieren; alle ausgegebenen
- *   Betraege auf 2 Dezimalen gerundet. Es werden niemals Gleitkomma-Summen
- *   gebildet.
+ * - Billing periods: MONTHLY / QUARTERLY / ANNUAL for new entries.
+ *   SEMI_ANNUAL stays as a legacy value for existing data in the enum
+ *   and is correctly supported in all calculations (6-month period).
+ *   Documented loss-free decision: NO data migration needed.
+ * - A cost increase from a date = a new entry with a later validFrom;
+ *   the previously valid entry is automatically ended when a new one
+ *   is created
+ *   (validTo = last millisecond before the new validFrom). At any point in
+ *   time exactly one entry applies: the one with the largest validFrom
+ *   <= period start (and without an explicit end before that).
+ * - "Paid to date" (paidToDate) = sum of the full amounts of all started
+ *   billing periods (period start <= today, due at period start).
+ *   NO day shares - BugFix-06 (part 3) semantics remain unchanged.
+ * - Monetary amounts: sum internally in cents (integer); all returned
+ *   amounts rounded to 2 decimals. Floating-point sums are never formed.
  */
 
-/** Periodenlaenge je Zahlungsfrequenz in Monaten (Basis aller Berechnungen). */
+/** Period length per payment frequency in months (basis of all calculations). */
 const FREQUENCY_MONTHS: Record<PaymentFrequency, number> = {
   MONTHLY: 1,
   QUARTERLY: 3,
@@ -33,7 +32,7 @@ const FREQUENCY_MONTHS: Record<PaymentFrequency, number> = {
   ANNUAL: 12,
 };
 
-/** Perioden pro Jahr je Frequenz (z. B. MONTHLY = 12 -> Jahresbetrag). */
+/** Periods per year per frequency (e.g. MONTHLY = 12 -> annual amount). */
 const FREQUENCY_PER_YEAR: Record<PaymentFrequency, number> = {
   MONTHLY: 12,
   QUARTERLY: 4,
@@ -42,11 +41,11 @@ const FREQUENCY_PER_YEAR: Record<PaymentFrequency, number> = {
 };
 
 /**
- * Kalender-Addition von Monaten mit Tageswert-Clamping. WICHTIG: Jeder Aufruf
- * geht IMMER vom uebergebenen Anker-Datum aus (nie von einem bereits
- * geclemmten Zwischenergebnis) – so realignen sich Perioden nach kurzen
- * Monaten automatisch wieder am Anker: Aus Anker 31.01. + 1 Monat wird
- * 28./29.02., + 2 Monate wieder 31.03., + 3 Monate 30.04. usw. (kein Drift).
+ * Calendar addition of months with day-value clamping. IMPORTANT: every call
+ * always starts from the passed anchor date (never from an already
+ * clamped intermediate result) - so periods realign automatically back at
+ * the anchor: from anchor 31.01. + 1 month = 28./29.02., + 2 months again
+ * 31.03., + 3 months 30.04. etc. (no drift).
  */
 function addMonthsClamped(date: Date, months: number): Date {
   const result = new Date(date.getTime());
@@ -58,22 +57,22 @@ function addMonthsClamped(date: Date, months: number): Date {
   return result;
 }
 
-/** Rundet auf 2 Dezimalen (Anzeige-/Einzelbetraege). */
+/** Rounds to 2 decimals (display/single amounts). */
 function roundMoney(amount: number): number {
   return Math.round(amount * 100) / 100;
 }
 
-/** Betrag -> Ganzzahl-Cent (Basis fuer verlustfreie Summen). */
+/** Amount -> integer cents (basis for loss-free sums). */
 function toCents(amount: number): number {
   return Math.round(amount * 100);
 }
 
-/** Ganzzahl-Cent -> Betrag mit 2 Dezimalen. */
+/** Integer cents -> amount with 2 decimals. */
 function fromCents(cents: number): number {
   return Math.round(cents) / 100;
 }
 
-/** Ein Kosten-Eintrag, wie ihn die Berechnungslogik benoetigt. */
+/** A cost entry as required by the calculation logic. */
 type CostEntryLike = {
   id?: string;
   createdAt?: Date | string | null;
@@ -84,14 +83,14 @@ type CostEntryLike = {
   validTo: Date | null;
 };
 
-/** Billing-Daten einer Versicherung (Anker + Abrechnungsfrequenz). */
+/** Billing data of a policy (anchor + billing frequency). */
 type BillingPlan = {
   anchor: Date;
   frequency: PaymentFrequency;
   stepMonths: number;
 };
 
-/** Eine Abrechnungsperiode in der Kosten-Tabelle (incurred/expected). */
+/** One billing period in the cost table (incurred/expected). */
 type BillingPeriod = {
   periodIndex: number;
   periodLabel: string;
@@ -116,7 +115,7 @@ export class CostTrackingService {
       where: { householdId_userId: { householdId, userId } },
     });
     if (!membership) {
-      throw new ForbiddenException('Isolation: kein Zugriff auf fremdes Household');
+      throw new ForbiddenException('Isolation: no access to a foreign household');
     }
   }
 
@@ -128,17 +127,17 @@ export class CostTrackingService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
   }
 
   /**
-   * Relevanter Kosten-Eintrag fuer eine Periode: der Eintrag mit dem
-   * groessten validFrom <= Periodenbeginn, sofern er nicht vor dem
-   * Periodenbeginn explizit beendet wurde (validTo < Periodenbeginn).
-   * Liefert null, wenn vor periodStart noch gar kein Eintrag existiert oder
-   * der letzte Eintrag bereits beendet ist (Kostenrueckgang/Luecke).
-   * Bei identischem validFrom entscheidet der juengere Eintrag (createdAt).
+   * Relevant cost entry for a period: the entry with the largest
+   * validFrom <= period start, unless it was explicitly ended before
+   * the period start (validTo < period start).
+   * Returns null if no entry exists before periodStart or the last entry
+   * has already ended (cost regression/gap). For an identical validFrom
+   * the newer entry wins (createdAt).
    */
   private entryForPeriod<T extends CostEntryLike>(entries: T[], periodStart: Date): T | null {
     const startMs = periodStart.getTime();
@@ -159,7 +158,7 @@ export class CostTrackingService {
     );
   }
 
-  /** Aktiven (sonst letzten) Kosten-Eintrag ermitteln – gemeinsame Basis der Uebersichten. */
+  /** Determines the active (otherwise latest) cost entry – shared basis of the overviews. */
   private selectActiveOrLatestEntry<T extends CostEntryLike>(entries: T[], now: Date): T | null {
     if (entries.length === 0) return null;
     return (
@@ -176,9 +175,9 @@ export class CostTrackingService {
   }
 
   /**
-   * Ermittelt Anker (Versicherungsbeginn, Fallback: fruehester Eintrag) und
-   * Abrechnungsfrequenz (paymentFrequency der Versicherung, Fallback:
-   * Frequenz des aktiven/letzten Eintrags, sonst MONTHLY).
+   * Determines the anchor (policy start, fallback: earliest entry) and
+   * billing frequency (policy paymentFrequency, fallback: frequency of
+   * the active/latest entry, otherwise MONTHLY).
    */
   private resolveBilling<T extends CostEntryLike>(
     policy: { startDate?: Date | null; paymentFrequency?: PaymentFrequency | null },
@@ -192,12 +191,11 @@ export class CostTrackingService {
   }
 
   /**
-   * Faelliger Betrag eines Kosten-Eintrags in einer Abrechnungsperiode der
-   * Schritt-Frequenz `stepFrequency`. Weicht die eigene Frequenz des
-   * Eintrags von der Schritt-Frequenz ab (z. B. Versicherung MONTHLY,
-   * Eintrag QUARTERLY), wird der Betrag proportional auf die Periode
-   * umgerechnet, damit die Jahres-Summe konsistent bleibt
-   * (300 QUARTERLY = 100/Monat).
+   * Due amount of a cost entry in a billing period of the step frequency
+   * `stepFrequency`. If the entry's own frequency differs from the step
+   * frequency (e.g. policy MONTHLY, entry QUARTERLY), the amount is prorated
+   * to the period so that the annual total stays consistent
+   * (300 QUARTERLY = 100/month).
    */
   private periodAmount(entry: CostEntryLike, stepFrequency: PaymentFrequency): number {
     const stepMonths = FREQUENCY_MONTHS[stepFrequency];
@@ -209,11 +207,11 @@ export class CostTrackingService {
   }
 
   /**
-   * Erzeugt alle Abrechnungsperioden vom Anker bis `horizonEnd` (inklusiv).
-   * Past-Perioden (Periodenbeginn <= now) sind 'incurred' (Beitrag faellig zu
-   * Periodenbeginn), Zukunft 'expected' (projiziert aus dem aktuell gueltigen
-   * Eintrag). Je Periode zaehlt der relevante Kosten-Eintrag (aktiv zu
-   * Periodenbeginn, sonst letzter davor – siehe entryForPeriod).
+   * Generates all billing periods from the anchor to `horizonEnd` (inclusive).
+   * Past periods (period start <= now) are 'incurred' (contribution due at
+   * period start), future 'expected' (projected from the currently valid
+   * entry). Each period counts the relevant cost entry (active at period
+   * start, otherwise the last one before - see entryForPeriod).
    */
   private iteratePeriods<T extends CostEntryLike>(
     policy: { startDate?: Date | null; paymentFrequency?: PaymentFrequency | null },
@@ -231,7 +229,7 @@ export class CostTrackingService {
       const periodStart = addMonthsClamped(anchor, index * stepMonths);
       if (periodStart.getTime() > horizonMs) break;
       const periodEndExclusive = addMonthsClamped(anchor, (index + 1) * stepMonths);
-      // Inklusives Periodenende = letzter Moment vor der naechsten Periode.
+      // Inclusive period end = last moment before the next period.
       const periodEnd = new Date(periodEndExclusive.getTime() - 1);
 
       const entry = this.entryForPeriod(entries, periodStart);
@@ -252,10 +250,10 @@ export class CostTrackingService {
   }
 
   /**
-   * "Bisher gezahlt": Summe der vollen Periodenbetraege aller begonnenen
-   * Abrechnungsperioden (Periodenbeginn <= now). Jede begonnene Periode
-   * zaehlt komplett – es gibt KEINE Tagesanteile (BugFix-06 Teil 3).
-   * Summation in Cent (Ganzzahl), Ergebnis auf 2 Dezimalen.
+   * "Paid to date": sum of the full period amounts of all started billing
+   * periods (period start <= now). Every started period counts in full -
+   * there are NO day shares (BugFix-06 part 3). Summation in cents
+   * (integer), result rounded to 2 decimals.
    */
   private calculatePaidToDate<T extends CostEntryLike>(
     policy: { startDate?: Date | null; paymentFrequency?: PaymentFrequency | null },
@@ -277,12 +275,12 @@ export class CostTrackingService {
     return fromCents(totalCents);
   }
 
-  /** Jahresbetrag eines Eintrags (Periodenbetrag * Perioden/Jahr). */
+  /** Annual amount of an entry (period amount * periods/year). */
   private annualize(entry: CostEntryLike): number {
     return roundMoney(Number(entry.grossAmount) * FREQUENCY_PER_YEAR[entry.frequency]);
   }
 
-  /** Monats-/Quartals-/Jahresbetrag abgeleitet aus dem Jahresbetrag. */
+  /** Monthly/quarterly/annual amount derived from the annual amount. */
   private derivePerFrequency(annualGross: number) {
     return {
       MONTHLY: roundMoney(annualGross / 12),
@@ -292,10 +290,10 @@ export class CostTrackingService {
   }
 
   /**
-   * Beendet den zum Zeitpunkt `validFrom` gueltigen VORGAENGER-Eintrag
-   * automatisch (validTo = letzte Millisekunde vor `validFrom`). Liefert
-   * true, wenn ein Eintrag beendet wurde. `excludeEntryId` wird bei Updates
-   * auf den bearbeiteten Eintrag selbst gesetzt.
+   * Automatically ends the PREDECESSOR entry that is valid at `validFrom`
+   * (validTo = last millisecond before `validFrom`). Returns true when an
+   * entry has been ended. `excludeEntryId` is set to the edited entry
+   * itself on updates.
    */
   private async endPredecessor(
     tx: {
@@ -328,7 +326,7 @@ export class CostTrackingService {
     return true;
   }
 
-  /** Stellt sicher, dass kein ANDERER Eintrag dasselbe validFrom besitzt. */
+  /** Ensures that no OTHER entry has the same validFrom. */
   private async assertNoValidFromCollision(
     db: { policyCostEntry: { findFirst: (args: unknown) => Promise<{ id: string } | null> } },
     policyId: string,
@@ -344,19 +342,19 @@ export class CostTrackingService {
       select: { id: true },
     });
     if (collision) {
-      throw new BadRequestException('Zu diesem Zeitpunkt existiert bereits ein anderer Kosten-Eintrag');
+      throw new BadRequestException('Another cost entry already exists at this point in time');
     }
   }
 
   /**
-   * Oeffnet den Vorgaenger-Eintrag wieder, der beim Anlegen des Eintrags mit
-   * `validFrom` automatisch beendet wurde (validTo == validFrom - 1ms).
+   * Reopens the predecessor entry that was automatically ended when the
+   * entry with `validFrom` was created (validTo == validFrom - 1ms).
    *
-   * Nötig, wenn ein Erhoehungs-Eintrag nach hinten verschoben oder geloescht
-   * wird: Sonst entstaende zwischen dem alten und dem neuen validFrom ein
-   * Zeitraum OHNE gueltigen Eintrag ("zu jedem Zeitpunkt gilt genau ein
-   * Eintrag" – BugFix-08, Review 2). Die anschliessende endPredecessor-Sync
-   * beendet den Vorgaenger bei Bedarf am NEUEN validFrom korrekt neu.
+   * Needed when an increase entry is postponed or deleted: otherwise a
+   * period WITHOUT a valid entry would arise ("at every point in time
+   * exactly one entry applies" - BugFix-08, review 2). The subsequent
+   * endPredecessor sync re-ends the predecessor correctly at the NEW
+   * validFrom when needed.
    */
   private async restorePredecessor(
     tx: {
@@ -388,7 +386,7 @@ export class CostTrackingService {
     const validFrom = new Date(dto.validFrom);
     const validTo = dto.validTo ? new Date(dto.validTo) : null;
     if (validTo && validTo.getTime() <= validFrom.getTime()) {
-      throw new BadRequestException('validTo muss nach validFrom liegen');
+      throw new BadRequestException('validTo must be after validFrom');
     }
 
     return this.db.$transaction(async (tx) => {
@@ -407,12 +405,12 @@ export class CostTrackingService {
         },
       });
 
-      // BugFix-08: Kosten-Erhoehung ab validFrom – der bisher gueltige
-      // Eintrag wird automatisch beendet (validTo = letzte Millisekunde vor
-      // dem neuen validFrom). Zu jedem Zeitpunkt gilt genau ein Eintrag.
-      // WICHTIG: entry.id wird ausgeschlossen, da in der interaktiven
-      // Transaktion findMany sonst auch den eben erzeugten Eintrag sieht und
-      // dieser faelschlich als sein eigener Vorgaenger beendet wuerde.
+      // BugFix-08: cost increase from validFrom - the previously valid
+      // entry is automatically ended (validTo = last millisecond before
+      // the new validFrom). At every point in time exactly one entry
+      // applies. IMPORTANT: entry.id is excluded because in the
+      // interactive transaction findMany would otherwise also see the
+      // just-created entry and wrongly end it as its own predecessor.
       const predecessorEnded = await this.endPredecessor(tx, policyId, validFrom, entry.id);
 
       await tx.auditEvent.create({
@@ -444,7 +442,7 @@ export class CostTrackingService {
   }
 
   async findAll(householdId: string, user: AuthenticatedUser, policyId: string) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     return this.db.policyCostEntry.findMany({
@@ -454,7 +452,7 @@ export class CostTrackingService {
   }
 
   async findOne(householdId: string, user: AuthenticatedUser, policyId: string, entryId: string) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const entry = await this.db.policyCostEntry.findFirst({
@@ -462,7 +460,7 @@ export class CostTrackingService {
     });
 
     if (!entry) {
-      throw new NotFoundException('Kostenposition nicht gefunden');
+      throw new NotFoundException('Cost entry not found');
     }
 
     return entry;
@@ -477,7 +475,7 @@ export class CostTrackingService {
       });
 
       if (!existing) {
-        throw new NotFoundException('Kostenposition nicht gefunden');
+        throw new NotFoundException('Cost entry not found');
       }
 
       const finalValidFrom = dto.validFrom ? new Date(dto.validFrom) : existing.validFrom;
@@ -487,22 +485,22 @@ export class CostTrackingService {
 
       if (finalValidTo && finalValidTo.getTime() <= finalValidFrom.getTime()) {
         if (dto.validTo !== undefined) {
-          // Explizit uebermittelte widerspruechliche Werte weiterhin ablehnen.
-          throw new BadRequestException('validTo muss nach validFrom liegen');
+          // Still reject explicitly submitted contradictory values.
+          throw new BadRequestException('validTo must be after validFrom');
         }
-        // BugFix-08 (Review 3+4): validFrom wird hinter ein NICHT explizit
-        // gesetztes validTo verschoben. Ein solches validTo stammt entweder
-        // vom automatischen Beenden durch eine spaetere Erhoehung (Signatur:
-        // ein Nachfolger beginnt exakt eine Millisekunde spaeter) oder von
-        // einer manuellen Eingabe. Nur im Auto-End-Fall wird es entfernt,
-        // damit die verschobene Erhoehung ab dem neuen Datum gilt; manuell
-        // gesetzte Enddaten werden nicht stillschweigend verworfen.
+        // BugFix-08 (reviews 3+4): validFrom is moved behind a validTo that
+        // was NOT explicitly set. Such a validTo originates either from
+        // automatic ending by a later increase (signature: a successor starts
+        // exactly one millisecond later) or from a manual input. Only in the
+        // auto-end case is it removed so the
+        // postponed increase takes effect from the new date; manually set
+        // end dates are not silently discarded.
         const successor = await tx.policyCostEntry.findFirst({
           where: { policyId, validFrom: new Date(finalValidTo.getTime() + 1) },
           select: { id: true },
         });
         if (!successor) {
-          throw new BadRequestException('validTo muss nach validFrom liegen');
+          throw new BadRequestException('validTo must be after validFrom');
         }
         finalValidTo = null;
       }
@@ -526,20 +524,19 @@ export class CostTrackingService {
         },
       });
 
-      // BugFix-08: Nach einer validFrom-Aenderung den Vorgaenger neu
-      // synchronisieren (automatisches Beenden wie beim Anlegen).
+      // BugFix-08: after a validFrom change, re-synchronize the predecessor
+      // (automatic ending as when creating).
       if (finalValidFrom.getTime() !== existing.validFrom.getTime()) {
-        // Review 2: Wird validFrom NACH hinten verschoben, zunaechst den am
-        // ALTEN validFrom automatisch beendeten Vorgaenger wieder oeffnen –
-        // sonst entsteht eine Luecke ohne gueltigen Eintrag. endPredecessor
-        // beendet ihn anschliessend am NEUEN validFrom korrekt neu.
+        // Review 2: if validFrom is moved BACKWARDS, first reopen the
+        // predecessor that was automatically ended at the OLD validFrom -
+        // otherwise a gap without a valid entry arises. endPredecessor then
+        // correctly ends it again at the NEW validFrom.
         //
-        // Review 4 (bekannte Grenze): Wird der ERSTE Eintrag nach hinten
-        // verschoben, existiert kein wieder zu oeffnender Vorgaenger; die
-        // Perioden vor dem naechsten Eintrag bleiben dann ohne zugeordneten
-        // Betrag. Das ist beabsichtigt (Kostenrueckgang/Luecke ist im Modell
-        // erlaubt – vgl. entryForPeriod) und wird hier nicht durch Erfinden
-        // oder Verschieben fremder Eintraege "repariert".
+        // Review 4 (known limitation): if the FIRST entry is moved backwards,
+        // there is no predecessor to reopen; the periods before the next
+        // entry then remain without an assigned amount. This is intentional
+        // (cost reduction/gap is allowed in the model - cf. entryForPeriod)
+        // and is not bypassed here by inventing or moving foreign entries.
         if (finalValidFrom.getTime() > existing.validFrom.getTime()) {
           await this.restorePredecessor(tx, policyId, existing.validFrom);
         }
@@ -573,14 +570,14 @@ export class CostTrackingService {
       });
 
       if (!existing) {
-        throw new NotFoundException('Kostenposition nicht gefunden');
+        throw new NotFoundException('Cost entry not found');
       }
 
       await tx.policyCostEntry.delete({ where: { id: entryId } });
 
-      // BugFix-08 (Review 2): Wird eine Erhoehung (validFrom) geloescht,
-      // den damals automatisch beendeten Vorgaenger wieder oeffnen – sonst
-      // entsteht ab dem alten validFrom ein Zeitraum ohne gueltigen Eintrag.
+      // BugFix-08 (Review 2): if an increase (validFrom) is deleted, reopen
+      // the predecessor that was automatically ended at that time - otherwise
+      // a period without a valid entry arises from the old validFrom on.
       await this.restorePredecessor(tx, policyId, existing.validFrom);
 
       await tx.auditEvent.create({
@@ -607,21 +604,21 @@ export class CostTrackingService {
   }
 
   /**
-   * BugFix-08: Vollstaendige Kosten-Tabelle einer Versicherung.
-   * - `periods`: eine Zeile je Abrechnungsperiode vom Versicherungsbeginn bis
-   *   zum Ende des Folgejahres (Vergangenheit 'incurred', Zukunft 'expected',
-   *   projiziert aus dem aktuell gueltigen Eintrag).
-   * - `paidToDate`: Summe der vollen Betraege aller begonnenen Perioden.
-   * - `current`: Jahres-/Monats-/Quartalsbetrag aus dem aktiven Eintrag.
+   * BugFix-08: complete cost table of a policy.
+   * - `periods`: one row per billing period from policy start until the end
+   *   of the following year (past 'incurred', future 'expected', projected
+   *   from the currently valid entry).
+   * - `paidToDate`: sum of the full amounts of all started periods.
+   * - `current`: annual/monthly/quarterly amount from the active entry.
    */
   async getSchedule(
     householdId: string,
     user: AuthenticatedUser,
     policyId: string,
-    // Testbarkeits-Hook: "heute" ist standardmaessig die aktuelle Zeit.
+    // Testability hook: "today" is the current time by default.
     now: Date = new Date(),
   ) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const [policy, entries] = await Promise.all([
@@ -636,7 +633,7 @@ export class CostTrackingService {
     ]);
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     if (entries.length === 0) {
@@ -649,12 +646,12 @@ export class CostTrackingService {
       };
     }
 
-    // Horizont: Ende des auf das aktuelle Jahr folgenden Kalenderjahres.
+    // Horizon: end of the calendar year following the current year.
     const horizonEnd = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999);
     const periods = this.iteratePeriods(policy, entries, now, horizonEnd);
     const paidToDate = this.calculatePaidToDate(policy, entries, now);
 
-    // Nicht-null, da oben fuer entries.length === 0 bereits zurueckgekehrt wurde.
+    // Non-null because we already returned above for entries.length === 0.
     const active = this.selectActiveOrLatestEntry(entries, now)!;
     const annualGross = this.annualize(active);
     const annualNet = active?.netAmount != null
@@ -680,23 +677,23 @@ export class CostTrackingService {
   }
 
   /**
-   * BugFix-08 (Q5): Haushalts-Kostenuebersicht.
-   * - Tiefste Ebene: je Versicherung der bezahlte Betrag (paidToDate) sowie
-   *   die projizierten Monats-/Jahresbetraege (aktiver Eintrag).
-   * - Gesamtbetraege: paidToDate, Monat, Jahr ueber alle Versicherungen.
-   * - `perYear`: historische Kosten je Kalenderjahr (Summe der vollen
-   *   Periodenbetraege aller begonnenen Perioden je Jahr – keine
-   *   Tagesanteile) – Datenbasis fuer den historischen Graphen.
+   * BugFix-08 (Q5): household cost overview.
+   * - Lowest level: per policy the paid amount (paidToDate) and the
+   *   projected monthly/annual amounts (active entry).
+   * - Totals: paidToDate, month, year across all policies.
+   * - `perYear`: historical costs per calendar year (sum of the full period
+   *   amounts of all started periods per year - no day shares) - data
+   *   basis for the historical graph.
    */
   async getHouseholdSummary(
     householdId: string,
     user: AuthenticatedUser,
-    // Testbarkeits-Hook: "heute" ist standardmaessig die aktuelle Zeit.
+    // Testability hook: "today" is the current time by default.
     now: Date = new Date(),
   ) {
     await this.assertHouseholdAccess(householdId, user.id);
 
-    // READ_ONLY: Summe nur ueber explizit freigegebene Policies (ADR-007/AP-16)
+    // READ_ONLY: totals only over explicitly shared policies (ADR-007/AP-16)
     const readableIds = await this.authService.getReadablePolicyIds(user, householdId);
     const where =
       user.role === GlobalRole.READ_ONLY && readableIds
@@ -746,7 +743,7 @@ export class CostTrackingService {
       }
 
       const paidToDate = this.calculatePaidToDate(policy, entries, now);
-      // Nicht-null, da oben fuer entries.length === 0 bereits fortgefahren wurde.
+      // Non-null because we already continued above for entries.length === 0.
       const active = this.selectActiveOrLatestEntry(entries, now)!;
       const annual = this.annualize(active);
 
@@ -754,8 +751,8 @@ export class CostTrackingService {
       totalPerYearCents += toCents(annual);
       totalPerMonthCents += toCents(roundMoney(annual / 12));
 
-      // Historische Kalenderjahr-Buckets: jede begonnene Periode traegt
-      // ihren vollen Betrag zum Jahr ihres Periodenbeginns bei.
+      // Historical calendar-year buckets: every started period contributes
+      // its full amount to the year of its period start.
       const { anchor, frequency, stepMonths } = this.resolveBilling(policy, entries, now);
       let index = 0;
       for (;;) {

@@ -1,36 +1,36 @@
 /**
- * Gemeinsames Interface fuer optionale AI-Provider-Adapter.
+ * Shared interface for optional AI provider adapters.
  *
- * Alle Methoden geben bei Fehlern null oder leere Ergebnisse zurueck,
- * niemals werfen sie Exceptions. Das stellt sicher, dass ein AI-Ausfall
- * nie die Vertrags- oder Dokumentenverwaltung blockiert.
+ * All methods return null or empty results on errors and never throw
+ * exceptions. This ensures that an AI failure never blocks the policy or
+ * document management flows.
  *
- * Dieses Interface wird sowohl vom API-Feature-Slice (AiAssistService)
- * als auch vom Worker-Prozessor verwendet.
+ * This interface is used by both the API feature slice (AiAssistService)
+ * and the worker processor.
  */
 
 export interface AiExtractResult {
-  /** Rohdaten der extrahierten Felder als JSON-kompatibles Objekt */
+  /** Raw extracted field data as a JSON-compatible object */
   fields: Record<string, unknown>;
-  /** Konfidenz-Werte (0-1) fuer jedes extrahierte Feld */
+  /** Confidence values (0-1) for each extracted field */
   confidence: Record<string, number>;
-  /** Name des verwendeten Modells */
+  /** Name of the model used */
   model: string;
 }
 
 export interface AiSummarizeResult {
-  /** Zusammenfassung in Markdown-Format */
+  /** Summary in Markdown format */
   summaryMarkdown: string;
-  /** Liste der Dokumenten-Referenzen, die in die Zusammenfassung eingeflossen sind */
+  /** List of document references included in the summary */
   sourceDocumentRefs: string[];
-  /** Name des verwendeten Modells */
+  /** Name of the model used */
   model: string;
 }
 
 export interface IAIAdapter {
   /**
-   * Extrahiert Vertragsfakten aus Dokumenten.
-   * Gibt null bei Fehler oder fehlender Konfiguration zurueck.
+   * Extracts contract facts from documents.
+   * Returns null on error or when the configuration is missing.
    */
   extractContractFacts(
     documentContents: string[],
@@ -38,8 +38,8 @@ export interface IAIAdapter {
   ): Promise<AiExtractResult | null>;
 
   /**
-   * Erstellt eine Zusammenfassung des Versicherungsschutzes.
-   * Gibt null bei Fehler oder fehlender Konfiguration zurueck.
+   * Creates a summary of the insurance coverage.
+   * Returns null on error or when the configuration is missing.
    */
   summarizeCoverage(
     documentContents: string[],
@@ -47,11 +47,11 @@ export interface IAIAdapter {
   ): Promise<AiSummarizeResult | null>;
 
   /**
-   * Prueft die Verbindung zum AI-Provider.
+   * Checks the connection to the AI provider.
    */
   healthCheck(): Promise<boolean>;
 
-  /** Gibt den Provider-Schluessel zurueck (z. B. 'ollama', 'openai-compat') */
+  /** Returns the provider key (e.g. 'ollama', 'openai-compat') */
   readonly providerKey: string;
 }
 

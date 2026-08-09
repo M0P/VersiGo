@@ -75,10 +75,10 @@ export default function AdminMonitoringPage(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
 
-  // m1: Konsistent zu den anderen Admin-Seiten (audit/page.tsx, users):
-  // 401 -> Login-Redirect, 403 -> /forbidden, sonst Fehler werfen statt
-  // still ein "keine Daten"-Leerbild zu rendern. Damit sieht ein
-  // Nicht-ADMIN nie eine scheinbar gesunde Monitoring-Ansicht.
+  // m1: consistent with the other admin pages (audit/page.tsx, users):
+  // 401 -> login redirect, 403 -> /forbidden, otherwise throw instead of
+  // silently rendering an "no data" empty image. This way a non-ADMIN
+  // never sees a seemingly healthy monitoring view.
   const handleResponse = (res: Response): Promise<unknown> => {
     if (res.status === 401) { window.location.href = '/login'; return Promise.resolve(null); }
     if (res.status === 403) { window.location.href = '/forbidden'; return Promise.resolve(null); }
@@ -101,9 +101,9 @@ export default function AdminMonitoringPage(): ReactElement {
     ] as const;
     Promise.all([queuesP, failedP, aiP, integrationsP])
       .then(([q, f, a, i]) => {
-        // m1: Bei 401/403 liefert handleResponse null und leitet um – dann
-        // keine Zustands-Commits, damit bereits geladene Daten nicht durch
-        // Leerbilder ersetzt werden, bevor die Navigation greift.
+        // m1: on 401/403 handleResponse returns null and redirects – then
+        // no state commits, so already loaded data is not replaced by
+        // empty images before navigation takes effect.
         if (q === null || f === null || a === null || i === null) return;
         setQueues(q);
         setFailedJobs(f);

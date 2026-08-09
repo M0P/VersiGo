@@ -64,7 +64,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     );
   });
 
-  it('User A erstellt CostEntry in Household A (erlaubt)', async () => {
+  it('user A creates a CostEntry in household A (allowed)', async () => {
     setupMemberships([{ userId: userA.id, householdId: householdA, role: 'OWNER' }]);
     mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyInA, householdId: householdA });
     mockDb.policyCostEntry.create.mockResolvedValue({
@@ -80,7 +80,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     expect(result.id).toBe('ce-1');
   });
 
-  it('User A kann keinen CostEntry in Household B erstellen (Isolation)', async () => {
+  it('user A cannot create a CostEntry in household B (isolation)', async () => {
     setupMemberships([
       { userId: userA.id, householdId: householdA, role: 'OWNER' },
     ]);
@@ -94,7 +94,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine CostEntries in Household A sehen (Isolation)', async () => {
+  it('user B cannot see CostEntries in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -107,7 +107,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keinen einzelnen CostEntry in Household A sehen (Isolation)', async () => {
+  it('user B cannot see a single CostEntry in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -120,7 +120,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keinen CostEntry in Household A aktualisieren (Isolation)', async () => {
+  it('user B cannot update a CostEntry in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -133,7 +133,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keinen CostEntry in Household A loeschen (Isolation)', async () => {
+  it('user B cannot delete a CostEntry in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -146,7 +146,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine schedule in Household A abrufen (Isolation)', async () => {
+  it('user B cannot fetch a schedule in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -159,7 +159,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine household summary in Household A abrufen (Isolation)', async () => {
+  it('user B cannot fetch a household summary in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -169,7 +169,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine Policy-Eintraege in Household A lesen (Isolation, findAll)', async () => {
+  it('user B cannot read policy entries in household A (isolation, findAll)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);

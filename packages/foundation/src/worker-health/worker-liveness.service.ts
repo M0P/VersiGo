@@ -3,19 +3,18 @@ import * as http from 'http';
 import { AppConfigService } from '../config';
 
 /**
- * AP-19: Worker-Liveness-Server.
+ * AP-19: worker liveness server.
  *
- * Der Worker besitzt keinen HTTP-Stack; fuer einen Compose-Healthcheck und
- * einen minimalen Liveness-Endpunkt pro Komponente startet dieser Service
- * einen winzigen HTTP-Server auf WORKER_HEALTH_PORT (Standard 3100).
- * Er antwortet ausschliesslich auf GET /health und GET / mit
- * {"status":"ok"} – es werden keine Konfigurations- oder Sensiblen Werte
- * offengelegt. Der Port wird NICHT nach aussen publiziert (nur internes
- * Compose-Netzwerk / Container-Healthcheck).
+ * The worker has no HTTP stack; for a Compose healthcheck and a minimal
+ * per-component liveness endpoint this service starts a tiny HTTP server
+ * on WORKER_HEALTH_PORT (default 3100). It only answers GET /health and
+ * GET / with {"status":"ok"} — no configuration or sensitive values are
+ * exposed. The port is NOT published externally (only internal
+ * Compose network / container healthcheck).
  *
- * Wichtig: `start()` wird nur im Worker-Prozess aufgerufen. Die API nutzt
- * den Service nicht; das Modul wird dort lediglich fuer den Heartbeat-
- * Leser importiert.
+ * Important: `start()` is only called in the worker process. The API does
+ * not use the service; the module is only imported there for the
+ * heartbeat reader.
  */
 @Injectable()
 export class WorkerLivenessService implements OnModuleDestroy {
@@ -24,7 +23,7 @@ export class WorkerLivenessService implements OnModuleDestroy {
 
   constructor(private readonly config: AppConfigService) {}
 
-  /** Startet den Liveness-Server. Nur im Worker-Prozess aufrufen. */
+  /** Starts the liveness server. Only call in the worker process. */
   start(): void {
     if (this.server) return;
     const port = this.config.get('WORKER_HEALTH_PORT');
@@ -40,22 +39,22 @@ export class WorkerLivenessService implements OnModuleDestroy {
     });
 
     this.server.on('error', (err) => {
-      this.logger.error(`Worker-Liveness-Server Fehler: ${err.message}`);
+      this.logger.error(`Worker liveness server error: ${err.message}`);
     });
 
     this.server.listen(port, '0.0.0.0', () => {
-      this.logger.log(`Worker-Liveness-Server lauscht auf Port ${port}`);
+      this.logger.log(`Worker liveness server listening on port ${port}`);
     });
   }
 
-  /** Stoppt den Liveness-Server (z. B. beim Herunterfahren). */
+  /** Stops the liveness server (e.g. on shutdown). */
   async stop(): Promise<void> {
     if (!this.server) return;
     const server = this.server;
     this.server = undefined;
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
-      // Offene Verbindungen nicht blockieren lassen (Healthcheck-Keepalive).
+      // Do not let open connections block the shutdown (healthcheck keepalive).
       server.closeAllConnections?.();
     });
   }

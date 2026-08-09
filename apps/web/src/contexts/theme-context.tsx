@@ -17,8 +17,8 @@ const API_BASE = getApiBaseUrl();
 
 /**
  * Preset accent colours a user can pick from.
- * `name` ist ein i18n-Schluessel (accents.*) und wird an der
- * Aufrufstelle uebersetzt.
+ * `name` is an i18n key (accents.*) and is translated at the
+ * call site.
  */
 const ACCENT_PRESETS = [
   { name: 'accents.blue', h: 210, s: 50 },
@@ -101,11 +101,11 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactEleme
         });
 
         if (res.status === 403) {
-          // AP-17: READ_ONLY darf keinerlei Profileinstellungen lesen oder
-          // aendern. Der Server erzwingt das; hier wird lediglich der
-          // Background-Fetch unterlassen, damit die UI keine unerlaubte
-          // Abfrage ausloest (keine Fehlermeldung – die Seite blendet die
-          // Editier-Oberflaeche bereits aus).
+          // AP-17: READ_ONLY may not read or change any profile settings.
+          // The server enforces that; here the background fetch is only
+          // omitted so the UI does not trigger an unauthorized
+          // request (no error message – the page already hides the
+          // editing UI).
           if (!cancelled) setLoaded(true);
           return;
         }

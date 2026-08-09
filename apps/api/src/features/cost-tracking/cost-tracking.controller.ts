@@ -17,15 +17,14 @@ import { CreateCostEntryDto, UpdateCostEntryDto } from './dto/cost-tracking.dto'
 import type { AuthenticatedUser } from '../identity/auth.service';
 
 /**
- * BugFix-08 (Q4/Q5): Kosten-API nach dem Overhaul.
+ * BugFix-08 (Q4/Q5): cost API after the overhaul.
  *
- * Ueberlebende Endpunkte (die UI ruft ausschliesslich diese auf):
- * - POST/GET (Liste) + GET/PATCH/DELETE :entryId  -> vollstaendige CRUD
- *   inkl. Bearbeitung historischer Eintraege.
- * - GET schedule -> periodenbasierte Tabelle (incurred/expected) mit
- *   paidToDate und aktuellem Eintrag (ersetzt overview/annual/compare/
- *   paid-history).
- * - GET households/:householdId/costs/summary -> Haushaltsuebersicht (Q5).
+ * Surviving endpoints (the UI exclusively calls these):
+ * - POST/GET (list) + GET/PATCH/DELETE :entryId  -> complete CRUD incl.
+ *   editing of historical entries.
+ * - GET schedule -> period-based table (incurred/expected) with paidToDate
+ *   and the current entry (replaces overview/annual/compare/paid-history).
+ * - GET households/:householdId/costs/summary -> household overview (Q5).
  */
 @Controller('households/:householdId/policies/:policyId/costs')
 @UseGuards(HouseholdMembershipGuard)
@@ -53,9 +52,9 @@ export class CostTrackingController {
     return this.service.findAll(householdId, user, policyId);
   }
 
-  // BugFix-08: Periodenbasierte Kosten-Tabelle (incurred/expected) mit
-  // paidToDate. Achtung: VOR der :entryId-Route, damit 'schedule' nicht als
-  // entryId interpretiert wird.
+  // BugFix-08: period-based cost table (incurred/expected) with
+  // paidToDate. Note: BEFORE the :entryId route, so 'schedule' is not
+  // interpreted as an entryId.
   @Get('schedule')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async getSchedule(

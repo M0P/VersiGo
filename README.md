@@ -33,8 +33,8 @@ images are pulled as-is; **no image build is needed**.
 ### First start
 
 ```bash
-git clone https://github.com/M0P/insura.git
-cd insura
+git clone https://github.com/M0P/VersiGo.git
+cd VersiGo
 
 # Configure the environment
 cp .env.example .env
@@ -133,8 +133,8 @@ If you develop VersiGo or want to build the images yourself, the repository's
 `docker-compose.yml` builds all images from source:
 
 ```bash
-git clone https://github.com/M0P/insura.git
-cd insura
+git clone https://github.com/M0P/VersiGo.git
+cd VersiGo
 
 cp .env.example .env
 # adjust .env as described above
@@ -273,7 +273,7 @@ example values and security relevance:
 
 | Category | Variables | Required | Service | Example value | Security relevance |
 |----------|-----------|----------|---------|---------------|--------------------|
-| **Infrastructure** | `DATABASE_URL`, `REDIS_URL`, `POSTGRES_*`, `APP_PORT`, `WEB_PORT` | Yes | All | `postgresql://versigo:change-me@db:5432/versigo` | DB password has no default; internal network only |
+| **Infrastructure** | `DATABASE_URL`, `REDIS_URL`, `POSTGRES_*`, `APP_PORT`, `WEB_PORT`, `APP_VERSION`, `NEXT_PUBLIC_APP_VERSION` | Yes | All | `postgresql://versigo:change-me@db:5432/versigo` | DB password has no default; internal network only |
 | **Secrets** | `SESSION_SECRET`, `SETTINGS_ENCRYPTION_KEY` | Yes | API, Worker | `openssl rand -hex 32` | Min. 32 random characters; leak = session impersonation / decryption |
 | **Auth** | `LOCAL_AUTH_ENABLED`, `LOCAL_ADMIN_*`, `OIDC_*`, `CORS_ORIGINS`, `TRUST_PROXY`, `COOKIE_SECURE` | Yes (at least one auth method) | API, Worker | `LOCAL_ADMIN_PASSWORD=<strong>`; `TRUST_PROXY=false`; `COOKIE_SECURE` empty | Placeholder password is rejected in production; `TRUST_PROXY` only behind a proxy; `COOKIE_SECURE` only set explicitly for HTTP operation (default: true in production) |
 | **Storage** | `STORAGE_ENABLED`, `DOCUMENTS_STORAGE_PATH`, `S3_*`, `MINIO_*` | No | API, Worker | `change-me` placeholders | Credentials never default; path in volume |

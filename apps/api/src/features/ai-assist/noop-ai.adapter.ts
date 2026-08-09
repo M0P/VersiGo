@@ -3,9 +3,9 @@ import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/fo
 
 /**
  * NoOp-Implementierung des AI-Adapters.
- * Wird injiziert, wenn AI deaktiviert ist (Standardfall).
- * Alle Methoden geben null oder leere Ergebnisse zurueck und
- * blockieren keine Kernfunktionen.
+ * Injected when AI is disabled (default case).
+ * All methods return null or empty results and
+ * do not block core functions.
  */
 @Injectable()
 export class NoOpAIAdapter implements IAIAdapter {

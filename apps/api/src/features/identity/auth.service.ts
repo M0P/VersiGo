@@ -48,15 +48,15 @@ export function normalizeIdentifier(identifier: string): string {
 }
 
 /**
- * Validierung eines Benutzernamens (nach Normalisierung).
- * Erlaubt sind 3-32 Zeichen aus [a-z0-9._-], beginnend mit Buchstabe/Ziffer.
- * ASCII-only: vermeidet Homoglyphen-/Umlaut-Probleme bei Login-Identifiers.
+ * Username validation (after normalization).
+ * Allows 3-32 characters from [a-z0-9._-], starting with a letter/digit.
+ * ASCII-only: avoids homoglyph/umlaut problems with login identifiers.
  */
 export const USERNAME_REGEX = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 
 /**
- * Passwortrichtlinie: mindestens 12 Zeichen, hoechstens 128 Zeichen.
- * Keine weiteren Komplexitaetsregeln (Laenge ist der wirksamste Faktor).
+ * Password policy: at least 12 characters, at most 128 characters.
+ * No further complexity rules (length is the most effective factor).
  */
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 128;
@@ -124,9 +124,9 @@ export class AuthService {
   }
 
   /**
-   * Findet einen User ueber seine gebundene OIDC-Identitaet (ADR-007).
-   * OIDC provisioniert keine Konten: Ohne (oder bei gesperrtem) Konto
-   * wird null zurueckgegeben, damit der OIDC-Login generisch fehlschlaegt.
+   * Finds a user via their bound OIDC identity (ADR-007).
+   * OIDC does not provision accounts: without a (or with a locked) bound
+   * account null is returned so the OIDC login fails generically.
    */
   async findByOidcIdentity(
     oidcIssuer: string,
@@ -145,11 +145,11 @@ export class AuthService {
     });
 
     if (!user) {
-      this.logger.warn(`OIDC-Login fuer ungebundene Identitaet abgelehnt (issuer=${oidcIssuer})`);
+      this.logger.warn(`OIDC login rejected for unbound identity (issuer=${oidcIssuer})`);
       return null;
     }
     if (user.status !== UserStatus.ACTIVE) {
-      this.logger.warn(`OIDC-Login fuer nicht aktives Konto ${user.id} abgelehnt`);
+      this.logger.warn(`OIDC login rejected for inactive account ${user.id}`);
       return null;
     }
 
@@ -157,9 +157,9 @@ export class AuthService {
   }
 
   /**
-   * BugFix-07 (Self-Service-Verknuepfung): Liefert die aktuelle OIDC-Bindung
-   * eines Kontos (null, wenn keine besteht). Nur der eigene User darf seine
-   * Bindung lesen (Aufruf erfolgt aus dem authentifizierten AuthController).
+   * BugFix-07 (self-service linking): returns the current OIDC binding of
+   * an account (null if none exists). Only the user itself may read its
+   * own binding (called from the authenticated AuthController).
    */
   async getOidcBinding(userId: string): Promise<{ oidcIssuer: string; oidcSubject: string } | null> {
     const user = await this.db.user.findUnique({
@@ -173,21 +173,21 @@ export class AuthService {
   }
 
   /**
-   * BugFix-07 (Self-Service-Verknuepfung): Bindet die beim Link-Callback
-   * bestaetigte OIDC-Identitaet an den angemeldeten User. Ersetzt eine
-   * bestehende Bindung desselben Kontos; ist die Identitaet bereits an ein
-   * ANDERES Konto gebunden, wird ConflictException geworfen (UNIQUE-
-   * Constraint (oidcIssuer, oidcSubject)). Keine Provisionierung: Ohne
-   * existierendes Konto gibt es nichts zu binden.
+   * BugFix-07 (self-service linking): binds the OIDC identity confirmed in
+   * the link callback to the signed-in user. Replaces an existing binding
+   * of the same account; if the identity is already bound to ANOTHER
+   * account, a ConflictException is thrown (UNIQUE constraint
+   * (oidcIssuer, oidcSubject)). No provisioning: without an existing
+   * account there is nothing to bind.
    */
   async bindOidcIdentityForUser(
     userId: string,
     oidcIssuer: string,
     oidcSubject: string,
   ): Promise<{ oidcIssuer: string; oidcSubject: string }> {
-    // BugFix-07 (Code-Review, R2): Gemeinsame Normalisierung statt Inline-
-    // Duplikat, damit Admin-Bindung, Self-Service-Bindung und Login-Vergleich
-    // nie divergieren (ADR-007).
+    // BugFix-07 (code review, R2): shared normalization instead of an
+    // inline duplicate so admin binding, self-service binding and the login
+    // comparison never diverge (ADR-007).
     // BugFix-09 (CI fix): lazy, method-level import instead of a top-level
     // import - avoids the auth.service <-> oidc.strategy module-evaluation
     // cycle (see comment above). At call time the oidc.strategy module is
@@ -197,7 +197,7 @@ export class AuthService {
     try {
       const result = await this.db.$transaction(async (tx) => {
         const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true } });
-        if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+        if (!user) throw new NotFoundException('User not found');
 
         await tx.user.update({
           where: { id: userId },
@@ -209,10 +209,10 @@ export class AuthService {
       await this.auditOidcSelf(userId, 'OIDC_BOUND_SELF', { oidcIssuer: normalizedIssuer });
       return result;
     } catch (error) {
-      // P2002: (oidcIssuer, oidcSubject) ist bereits an ein anderes Konto gebunden
+      // P2002: (oidcIssuer, oidcSubject) is already bound to another account
       if ((error as { code?: string }).code === 'P2002') {
         throw new ConflictException(
-          'Diese OIDC-Identitaet ist bereits an ein anderes Konto gebunden',
+          'This OIDC identity is already bound to another account',
         );
       }
       throw error;
@@ -220,9 +220,9 @@ export class AuthService {
   }
 
   /**
-   * BugFix-07 (Self-Service-Verknuepfung): Loest die OIDC-Bindung des
-   * angemeldeten Kontos (nur die Bindung, nie das Konto). Wirft
-   * ConflictException, wenn keine Bindung besteht.
+   * BugFix-07 (self-service linking): removes the OIDC binding of the
+   * signed-in account (only the binding, never the account). Throws
+   * ConflictException when no binding exists.
    */
   async unbindOidcIdentityForUser(userId: string): Promise<void> {
     await this.db.$transaction(async (tx) => {
@@ -230,9 +230,9 @@ export class AuthService {
         where: { id: userId },
         select: { oidcIssuer: true },
       });
-      if (!user) throw new NotFoundException('Benutzer nicht gefunden');
+      if (!user) throw new NotFoundException('User not found');
       if (!user.oidcIssuer) {
-        throw new ConflictException('Konto hat keine OIDC-Bindung');
+        throw new ConflictException('Account has no OIDC binding');
       }
 
       await tx.user.update({ where: { id: userId }, data: { oidcIssuer: null, oidcSubject: null } });
@@ -262,12 +262,12 @@ export class AuthService {
   }
 
   /**
-   * Registriert ein neues lokales Konto. Das Konto wird mit dem Status
-   * PENDING_APPROVAL angelegt und ist bis zur Freischaltung durch einen
-   * Admin gesperrt (weder lokaler noch OIDC-Login moeglich).
+   * Registers a new local account. The account is created with the status
+   * PENDING_APPROVAL and is locked until an admin approves it (neither
+   * local nor OIDC login is possible).
    *
-   * Wirft ConflictException, wenn der Benutzername bereits vergeben ist.
-   * Passwortwerte werden niemals gespeichert, geloggt oder auditiert.
+   * Throws ConflictException when the username is already taken. Password
+   * values are never stored, logged or audited.
    */
   async registerLocalAccount(input: RegisterLocalAccountInput): Promise<{ id: string }> {
     const username = normalizeIdentifier(input.username);
@@ -310,18 +310,18 @@ export class AuthService {
     } catch (error) {
       // P2002: users_username_key bereits belegt
       if ((error as { code?: string }).code === 'P2002') {
-        throw new ConflictException('Benutzername ist bereits vergeben');
+        throw new ConflictException('Username is already taken');
       }
       throw error;
     }
   }
 
   /**
-   * Versucht die lokale Anmeldung mit Benutzername und Passwort.
+   * Attempts local login with username and password.
    *
-   * Liefert bei Erfolg den authentifizierten User, sonst null (generisch –
-   * ohne Hinweis, ob der Benutzername existiert, das Passwort falsch war
-   * oder das Konto gesperrt/freizuschaltend ist).
+   * Returns the authenticated user on success, otherwise null (generic -
+   * without revealing whether the username exists, the password was wrong
+   * or the account is locked/pending approval).
    */
   async localLogin(username: string, password: string): Promise<AuthenticatedUser | null> {
     const normalized = normalizeIdentifier(username);
@@ -339,11 +339,11 @@ export class AuthService {
       },
     });
 
-    // Generischer Fehlerpfad: weder Benutzerexistenz noch Status verraten.
+    // Generic error path: reveal neither user existence nor status.
     if (!user || user.status !== UserStatus.ACTIVE || !user.credential) {
       if (user && user.status !== UserStatus.ACTIVE) {
         this.logger.warn(
-          `Anmeldung fuer nicht aktives Konto ${user.id} abgelehnt (Status ${user.status})`,
+          `Login rejected for inactive account ${user.id} (status ${user.status})`,
         );
       }
       await this.auditAuthFailure(user?.id ?? null);
@@ -391,14 +391,14 @@ export class AuthService {
   }
 
   /**
-   * Prueft, ob ein User eine Policy lesen darf.
+   * Checks whether a user may read a policy.
    *
-   * - Jeder Zugriff erfordert die Household-Mitgliedschaft (Isolation).
-   * - USER/ADMIN duerfen alle Policies ihres Households lesen (bestehender
-   *   Berechtigungsrahmen bleibt erhalten).
-   * - READ_ONLY darf ausschliesslich explizit freigegebene Policies lesen
-   *   (INSURANCE-/CATEGORY-/ALL_OWNED-Freigabe mit permission READ) – auch
-   *   eigene historische Daten sind ohne Freigabe nicht sichtbar (AP-16).
+   * - Every access requires household membership (isolation).
+   * - USER/ADMIN may read all policies of their household (the existing
+   *   permission framework stays unchanged).
+   * - READ_ONLY may read exclusively explicitly shared policies
+   *   (INSURANCE-/CATEGORY-/ALL_OWNED share with permission READ) - even
+   *   own historical data is not visible without a share (AP-16).
    */
   async assertPolicyReadAccess(
     user: AuthenticatedUser,
@@ -407,7 +407,7 @@ export class AuthService {
   ): Promise<void> {
     const membership = await this.getMembership(user.id, householdId);
     if (!membership) {
-      throw new ForbiddenException('Isolation: kein Zugriff auf fremdes Household');
+      throw new ForbiddenException('Isolation: no access to a foreign household');
     }
 
     const policy = await this.db.insurancePolicy.findFirst({
@@ -415,22 +415,22 @@ export class AuthService {
       select: { id: true },
     });
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
 
     if (user.role === GlobalRole.READ_ONLY) {
       const readable = await this.hasPolicyReadShare(householdId, user.id, policyId);
       if (!readable) {
-        throw new ForbiddenException('Keine Lese-Freigabe fuer diese Versicherung');
+        throw new ForbiddenException('No read share for this policy');
       }
     }
   }
 
   /**
-   * Liefert die fuer den User lesbaren Policy-IDs eines Households.
-   * Returns null fuer USER/ADMIN (alle Policies des Households).
-   * Fuer READ_ONLY werden nur die explizit mit READ freigegebenen Policies
-   * zurueckgegeben.
+   * Returns the policy IDs readable by the user for a household.
+   * Returns null for USER/ADMIN (all policies of the household).
+   * For READ_ONLY only the policies explicitly shared with READ are
+   * returned.
    */
   async getReadablePolicyIds(
     user: AuthenticatedUser,

@@ -7,8 +7,8 @@ import {
 import { AuthService } from './auth.service';
 import { AuthenticatedUser } from './auth.service';
 
-// Erzwingt Mandantentrennung: jeder Request mit :householdId-Param wird
-// datenbankseitig gegen die tatsaechliche Mitgliedschaft geprueft, nicht nur
+// Enforces tenant separation: every request with a :householdId param is
+// checked against the actual membership at the database level, not only
 // gegen den (potenziell veralteten) Session-Claim.
 @Injectable()
 export class HouseholdMembershipGuard implements CanActivate {
@@ -21,11 +21,11 @@ export class HouseholdMembershipGuard implements CanActivate {
       request.params?.householdId ?? request.body?.householdId;
 
     if (!householdId) return true;
-    if (!user) throw new ForbiddenException('Nicht authentifiziert');
+    if (!user) throw new ForbiddenException('Not authenticated');
 
     const membership = await this.authService.getMembership(user.id, householdId);
     if (!membership) {
-      throw new ForbiddenException('Isolation: kein Zugriff auf fremdes Household');
+      throw new ForbiddenException('Isolation: no access to a foreign household');
     }
 
     request.householdMembership = membership;

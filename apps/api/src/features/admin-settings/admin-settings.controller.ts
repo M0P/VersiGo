@@ -38,7 +38,7 @@ import {
 import { assertSafeTestEndpoint } from '../../common/connectivity/connectivity-guard';
 import { testEndpoint } from '../../common/connectivity/connectivity-test';
 
-// Hilfsfunktion: Prueft, ob der User die globale Rolle ADMIN hat (ADR-007)
+// Helper: checks whether the user has the global role ADMIN (ADR-007)
 function assertIsGlobalAdmin(user: AuthenticatedUser): void {
   if (user.role !== GlobalRole.ADMIN) {
     throw new ForbiddenException('Nur globale Administratoren koennen diese Aktion ausfuehren');
@@ -82,18 +82,18 @@ export class AdminSettingsController {
     @Body() dto: CreateGlobalSettingDto,
   ) {
     assertIsGlobalAdmin(user);
-    // M3: Legacy-Endpunkte laufen durch dieselbe Katalog-Allowlist und
-    // Typvalidierung wie die neue Systemkonfiguration; isSecret wird NIE
-    // vom Aufrufer uebernommen, sondern aus der Katalog-Kategorie erzwungen.
+    // M3: legacy endpoints pass through the same catalog allowlist and
+    // type validation as the new system configuration; isSecret is NEVER
+    // taken from the caller but enforced from the catalog category.
     const definition = this.assertCatalogSetting(dto.key);
-    // m9: Anlage ohne Wert wuerde eine "tote" Zeile ohne Wert erzeugen,
-    // die in keiner UI auftaucht und nicht zurueckgesetzt werden kann.
-    // `== null` faengt sowohl undefined als auch explizites null ab
-    // (null passiert @IsOptional() und wuerde sonst einen HTTP-500 in der
-    // Typvalidierung ausloesen).
+    // m9: creating an entry without a value would produce a "dead" row
+    // that is not shown in any UI and cannot be reset.
+    // `== null` catches both undefined and explicit null
+    // (null passes @IsOptional() and would otherwise cause an HTTP-500 in
+    // the type validation).
     if (dto.valuePlain == null) {
       throw new BadRequestException(
-        `Ein Wert ist fuer '${dto.key}' erforderlich (Anlage).`,
+        `A value is required for '${dto.key}' (create).`,
       );
     }
     const { valuePlain, isSecret } = this.validateLegacyValue(definition, dto.valuePlain);
@@ -144,18 +144,18 @@ export class AdminSettingsController {
           const healthy = await this.db.isHealthy();
           result.success = healthy;
           result.message = healthy
-            ? 'Datenbankverbindung erfolgreich'
-            : 'Datenbankverbindung fehlgeschlagen';
+            ? 'Database connection successful'
+            : 'Database connection failed';
           break;
         }
         default: {
-          // Allgemeiner HTTP-Connectivity-Test fuer externe Dienste
+          // Generic HTTP connectivity test for external services
           if (dto.endpoint) {
-            // BugFix-06 (Teil 2): SSRF-Lockerung ist explizit opt-in. Der
-            // strikte Default (nur oeffentliche http(s)-Endpunkte) bleibt
-            // erhalten; erst die Admin-Einstellung
-            // CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS erlaubt lokale/private
-            // Endpunkte (Cloud-Metadata bleibt immer gesperrt).
+            // BugFix-06 (part 2): SSRF relaxation is explicitly opt-in. The
+            // strict default (only public http(s) endpoints) remains in
+            // place; only the admin setting
+            // CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS allows local/private
+            // endpoints (cloud metadata stays always blocked).
             const allowPrivate = await this.resolveBooleanSetting(
               'CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS',
             );
@@ -165,40 +165,39 @@ export class AdminSettingsController {
             try {
               await assertSafeTestEndpoint(dto.endpoint, { allowPrivate });
             } catch (error: unknown) {
-              // M5-ext: gleiche Handlungsanleitung wie beim
-              // Systemkonfigurations-Test, damit Nutzer nicht annehmen,
-              // lokale Dienste seien per UI testbar.
+              // M5-ext: same actionable guidance as for the system
+              // configuration test, so users do not assume local services
+              // are testable via the UI.
               result.message =
-                `Endpunkt aus Sicherheitsgruenden abgelehnt: ` +
-                `${(error as Error).message} – der Connectivity-Test erlaubt ` +
-                `aus SSRF-Schutz nur oeffentliche http(s)-Endpunkte; lokale ` +
-                `Dienste (z. B. Ollama unter localhost) pruefen Sie bitte ` +
-                `direkt auf dem Host.`;
+                `Endpoint rejected for security reasons: ` +
+                `${(error as Error).message} – the connectivity test only allows ` +
+                `public http(s) endpoints due to SSRF protection; please test ` +
+                `local services (e.g. Ollama on localhost) directly on the host.`;
               break;
             }
             try {
               const tested = await testEndpoint(dto.endpoint, {
                 token: dto.apiToken,
                 rejectUnauthorized: allowSelfSigned ? false : true,
-                // Redirect-Ziele mit dem gleichen Modus gegen den SSRF-Guard
-                // pruefen (BugFix-06, Review-Fix).
+                // Check redirect targets with the same mode against the
+                // SSRF guard (BugFix-06, review fix).
                 allowPrivate,
               });
               result.success = tested.success;
               result.message = tested.message;
             } catch {
               result.success = false;
-              result.message = 'Verbindungsfehler: Der Endpunkt ist nicht erreichbar.';
+              result.message = 'Connection error: the endpoint is not reachable.';
             }
           } else {
-            result.message = `Kein Endpoint fuer Integration '${dto.integrationKey}' angegeben`;
+            result.message = `No endpoint specified for integration '${dto.integrationKey}'`;
           }
           break;
         }
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
-      result.message = `Verbindungsfehler: ${message}`;
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      result.message = `Connection error: ${message}`;
     }
 
     return result;
@@ -209,11 +208,11 @@ export class AdminSettingsController {
   // =====================
 
   /**
-   * Startet API und Worker kontrolliert neu, damit boot-relevante
-   * Einstellungen (Kategorie "restart", z. B. OIDC-Bootstrap) wirksam
-   * werden. Nur globale Admins. Die HTTP-Antwort erreicht den Client
-   * (der API-Prozess beendet sich erst nach kurzer Verzoegerung);
-   * Compose (`restart: unless-stopped`) startet den Container neu.
+   * Restarts API and worker in a controlled way so that boot-relevant
+   * settings (category "restart", e.g. OIDC bootstrap) take effect.
+   * Global admins only. The HTTP response reaches the client (the API
+   * process exits only after a short delay); Compose
+   * (`restart: unless-stopped`) restarts the container.
    */
   @Post('admin/restart')
   async restartServices(
@@ -222,7 +221,7 @@ export class AdminSettingsController {
   ) {
     assertIsGlobalAdmin(user);
     await this.restartService.requestRestart(user, dto.reason);
-    return { success: true, message: 'Neustart von API und Worker ausgeloest.' };
+    return { success: true, message: 'Restart of API and worker triggered.' };
   }
 
   // =====================
@@ -238,7 +237,7 @@ export class AdminSettingsController {
     const checks: { key: string; status: 'ok' | 'warn' | 'error'; message: string }[] = [];
 
     try {
-      // Pruefe Datenbank (liest einen Dummy-Eintrag)
+      // Check database (reads a dummy entry)
       const dbOk = await this.config.get('DATABASE_URL')?.length > 0;
       checks.push({
         key: 'DATABASE_URL',
@@ -268,7 +267,7 @@ export class AdminSettingsController {
       });
     }
 
-    // Verschlüsselungsschlüssel
+    // Encryption key
     try {
       const encKey = this.config.get('SETTINGS_ENCRYPTION_KEY');
       const isValid = /^[0-9a-fA-F]{64}$/.test(encKey);
@@ -287,7 +286,7 @@ export class AdminSettingsController {
       });
     }
 
-    // Sitzungs-Geheimnis
+    // Session secret
     try {
       const sessionSecret = this.config.get('SESSION_SECRET');
       checks.push({
@@ -306,7 +305,7 @@ export class AdminSettingsController {
       });
     }
 
-    // Optional: OIDC-Konfiguration
+    // Optional: OIDC configuration
     const oidcEnabled = this.config.get('OIDC_ENABLED');
     if (oidcEnabled) {
       checks.push({
@@ -336,7 +335,7 @@ export class AdminSettingsController {
       });
     }
 
-    // Pruefe ob alle Pflicht-Settings vorhanden sind
+    // Check whether all required settings are present
     const appBaseUrl = this.config.get('APP_PORT');
     checks.push({
       key: 'APP_PORT',
@@ -418,21 +417,21 @@ export class AdminSettingsController {
   }
 
   // =====================
-  // Intern (M3): Katalog-Allowlist + Wertvalidierung fuer Legacy-Endpunkte
+  // Internal (M3): catalog allowlist + value validation for legacy endpoints
   // =====================
 
   /**
-   * Liest einen katalogisierten Boolean-Schluessel ueber die zentrale
-   * Aufloesung (UI > .env > Default). Ein Aufloesungsfehler degradiert
-   * sicher auf `false` (= striktes Verhalten), damit ein kaputter
-   * DB-Wert niemals den SSRF-Schutz lockert.
+   * Reads a catalogued boolean key through the central resolution
+   * (UI > .env > default). A resolution error degrades safely to
+   * `false` (= strict behavior), so a broken DB value never
+   * relaxes the SSRF protection.
    */
   private async resolveBooleanSetting(key: string): Promise<boolean> {
     try {
       return (await this.resolver.getEffectiveBoolean(key)) ?? false;
     } catch (error) {
       this.logger.warn(
-        `Einstellung '${key}' konnte nicht aufgeloest werden – verwende strikten Default: ${
+        `Setting '${key}' could not be resolved – using strict default: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -441,32 +440,31 @@ export class AdminSettingsController {
   }
 
   /**
-   * Allowlist-Pruefung fuer die Legacy-Global-Settings-Endpunkte: Der
-   * Schluessel muss im versionierten Settings-Katalog existieren und darf
-   * nicht der Bootstrap-Kategorie angehoeren (nur Environment/Compose).
-   * Unbekannte oder Bootstrap-Schluessel koennen ueber die UI weder
-   * angelegt noch geaendert werden.
+   * Allowlist check for the legacy global-settings endpoints: the key
+   * must exist in the versioned settings catalog and must not belong
+   * to the bootstrap category (only environment/Compose). Unknown or
+   * bootstrap keys can neither be created nor changed via the UI.
    */
   private assertCatalogSetting(key: string): SettingDefinition {
     const definition = getSettingDefinition(key);
     if (!definition) {
       throw new BadRequestException(
-        `Unbekannter Settings-Schluessel '${key}' – nicht im Katalog (Allowlist).`,
+        `Unknown settings key '${key}' – not in the catalog (allowlist).`,
       );
     }
     if (definition.category === 'bootstrap') {
       throw new BadRequestException(
-        `'${key}' ist eine Infrastruktur-/Bootstrap-Konfiguration und nur ueber Environment/Compose setzbar.`,
+        `'${key}' is an infrastructure/bootstrap configuration and can only be set via environment/Compose.`,
       );
     }
     return definition;
   }
 
   /**
-   * Wertvalidierung + erzwungenes Geheimnis-Flag: `isSecret` wird NIE vom
-   * Aufrufer uebernommen, sondern ausschliesslich aus der Katalog-Kategorie
-   * abgeleitet. Ein Katalog-Secret kann so nicht als Klartext abgelegt
-   * werden und ein Nicht-Secret nicht versehentlich als Secret.
+   * Value validation + enforced secret flag: `isSecret` is NEVER taken
+   * from the caller but derived exclusively from the catalog category.
+   * A catalog secret can thus not be stored in plaintext, and a
+   * non-secret cannot accidentally become a secret.
    */
   private validateLegacyValue(
     definition: SettingDefinition,
@@ -479,7 +477,7 @@ export class AdminSettingsController {
     const validated = validateSettingValue(definition, valuePlain);
     if (!validated.ok) {
       throw new BadRequestException(
-        `Ungueltiger Wert fuer '${definition.key}': ${validated.error}`,
+        `Invalid value for '${definition.key}': ${validated.error}`,
       );
     }
     return { valuePlain: validated.canonical, isSecret };

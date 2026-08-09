@@ -136,6 +136,7 @@ setzbar; die Admin-API lehnt diese Schlüssel ab (`ForbiddenException`):
 | `SETTINGS_ENCRYPTION_KEY` | Infrastruktur | **Root-Secret** (AES-256-GCM) |
 | `SESSION_SECRET` | Infrastruktur | **Session-Secret** |
 | `NEXT_PUBLIC_API_BASE_URL` | Infrastruktur | Browser-Build-Zeit |
+| `APP_VERSION`, `NEXT_PUBLIC_APP_VERSION` | Infrastruktur | Laufzeit-Versionskennung (`/health`, `/ready`, Web-Footer; BugFix-11/R7) |
 | `NEXT_ALLOWED_DEV_ORIGINS` | Infrastruktur | Dev-HMR-Origins |
 | `LOCAL_AUTH_ENABLED`, `LOCAL_ADMIN_USERNAME`, `LOCAL_ADMIN_PASSWORD` | Authentifizierung | Boot-/Fail-Fast-Logik |
 | `OIDC_ENABLED`, `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_CALLBACK_URL` | Authentifizierung | Boot-/Fail-Fast-Logik, Client-Secret |

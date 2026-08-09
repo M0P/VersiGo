@@ -40,7 +40,7 @@ describe('AiAssistController', () => {
   const householdId = 'household-1';
   const policyId = 'policy-1';
 
-  it('startExtraction delegiert an Service', async () => {
+  it('startExtraction delegates to the service', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     service.startExtraction.mockResolvedValue({ jobId: 'job-1', status: 'PENDING' });
@@ -51,7 +51,7 @@ describe('AiAssistController', () => {
     expect(service.startExtraction).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 
-  it('extractNow delegiert an Service', async () => {
+  it('extractNow delegates to the service', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     const expected = { fields: { insurerName: 'Test AG' }, confidence: {}, model: 'test' };
@@ -63,7 +63,7 @@ describe('AiAssistController', () => {
     expect(service.extractNow).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 
-  it('listJobs delegiert an Service', async () => {
+  it('listJobs delegates to the service', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     service.listJobs.mockResolvedValue([{ id: 'job-1', status: 'COMPLETED' }]);
@@ -74,7 +74,7 @@ describe('AiAssistController', () => {
     expect(service.listJobs).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
-  it('getJobStatus delegiert an Service', async () => {
+  it('getJobStatus delegates to the service', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     service.getJobStatus.mockResolvedValue({ id: 'job-1', status: 'COMPLETED' });
@@ -85,7 +85,7 @@ describe('AiAssistController', () => {
     expect(service.getJobStatus).toHaveBeenCalledWith(householdId, mockUser, policyId, 'job-1');
   });
 
-  it('summarize delegiert an Service', async () => {
+  it('summarize delegates to the service', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     const expected = { summaryMarkdown: '# Zusammenfassung', model: 'test' };
@@ -97,7 +97,7 @@ describe('AiAssistController', () => {
     expect(service.summarize).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 
-  it('getLatestSummary delegiert an getLatestSummaryWithSources', async () => {
+  it('getLatestSummary delegates to getLatestSummaryWithSources', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     service.getLatestSummaryWithSources.mockResolvedValue({
@@ -115,7 +115,7 @@ describe('AiAssistController', () => {
     expect(service.getLatestSummaryWithSources).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
-  it('setDocumentExclusion delegiert an Service', async () => {
+  it('setDocumentExclusion delegates to the service', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     service.setDocumentExclusion.mockResolvedValue({ success: true });
@@ -131,7 +131,7 @@ describe('AiAssistController', () => {
     );
   });
 
-  it('healthCheck delegiert an Service', async () => {
+  it('healthCheck delegates to the service', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     service.healthCheck.mockResolvedValue({ connected: false, provider: 'none' });
@@ -141,7 +141,7 @@ describe('AiAssistController', () => {
     expect(result).toEqual({ connected: false, provider: 'none' });
   });
 
-  it('aiStatus delegiert an healthCheck', async () => {
+  it('aiStatus delegates to healthCheck', async () => {
     const service = createMockService();
     const controller = new AiAssistController(service as never);
     service.healthCheck.mockResolvedValue({ connected: true, provider: 'ollama' });

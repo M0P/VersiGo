@@ -1,6 +1,6 @@
 /**
- * AI-Assist-Queue-Name fuer BullMQ.
- * Wird sowohl vom API-Feature (Job-Erstellung) als auch vom
- * Worker-Prozessor (Job-Verarbeitung) verwendet.
+ * AI assist queue name for BullMQ.
+ * Used both by the API feature (job creation) and
+ * used by the worker processor (job processing).
  */
 export const AI_EXTRACTION_QUEUE = 'ai-extraction';

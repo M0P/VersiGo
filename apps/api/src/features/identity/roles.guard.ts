@@ -9,12 +9,12 @@ import { GlobalRole } from '@prisma/client';
 import { ROLES_KEY } from './roles.decorator';
 import { AuthenticatedUser } from './auth.service';
 
-// Global-Guard: prueft die instance-weite Rolle (GlobalRole) des Users gegen
-// die @Roles(...)-Metadaten. Die Rollen sind hierarchisch:
-// ADMIN (3) > USER (2) > READ_ONLY (1). Ein User ist zugelassen, wenn seine
-// Rolle mindestens die niedrigste geforderte Rolle erreicht. Dadurch gilt
-// "ADMIN darf alles, was USER darf" auch fuer Routen, die nur mit
-// @Roles(GlobalRole.USER) ausgezeichnet sind.
+// Global guard: checks the user's instance-wide role (GlobalRole) against
+// the @Roles(...) metadata. The roles are hierarchical:
+// ADMIN (3) > USER (2) > READ_ONLY (1). A user is allowed if their role
+// reaches at least the lowest required role. Therefore
+// "ADMIN may do everything USER may do" also applies to routes that are
+// only decorated with @Roles(GlobalRole.USER).
 @Injectable()
 export class RolesGuard implements CanActivate {
   private static readonly ROLE_RANK: Record<GlobalRole, number> = {
@@ -36,7 +36,7 @@ export class RolesGuard implements CanActivate {
     const user: AuthenticatedUser = request.user;
 
     if (!user) {
-      throw new ForbiddenException('Nicht authentifiziert');
+      throw new ForbiddenException('Not authenticated');
     }
 
     const minimumRank = Math.min(
@@ -44,7 +44,7 @@ export class RolesGuard implements CanActivate {
     );
 
     if ((RolesGuard.ROLE_RANK[user.role] ?? 0) < minimumRank) {
-      throw new ForbiddenException('Rolle reicht fuer diese Aktion nicht aus');
+      throw new ForbiddenException('Role is not sufficient for this action');
     }
 
     return true;

@@ -3,12 +3,12 @@ import { DatabaseService } from '@versigo/foundation';
 import type { UserPreferenceResponseDto } from './dto/user-preferences.dto';
 
 /**
- * Versionierter Katalog der persoenlichen UI-Praeferenzen (AP-17).
+ * Versioned catalog of personal UI preferences (AP-17).
  *
- * Die konkrete Liste ist eine Allowlist – KEIN unvalidiertes JSON-Sammelfeld.
- * Nur katalogisierte Schluessel duerfen gelesen oder gesetzt werden;
- * unbekannte Schluessel werden strikt abgewiesen. Jeder Schluessel hat
- * einen festen Wertetyp mit eigener Validierung.
+ * The concrete list is an allowlist – NOT an unvalidated JSON collection
+ * field. Only catalogued keys may be read or set; unknown keys are
+ * strictly rejected. Every key has a fixed value type with its own
+ * validation.
  */
 export const USER_PREFERENCES_VERSION = 1;
 
@@ -22,11 +22,11 @@ export interface UserPreferenceDefinition {
 export const USER_PREFERENCE_CATALOG: Readonly<Record<string, UserPreferenceDefinition>> = {
   'ui:accentColour': {
     type: 'hexColour',
-    description: 'Akzentfarbe des Design-Systems (3- oder 6-stelliges Hex).',
+    description: 'Accent colour of the design system (3- or 6-digit hex).',
   },
   'theme': {
     type: 'themeMode',
-    description: 'Darstellungsmodus: light, dark oder system.',
+    description: 'Display mode: light, dark or system.',
   },
 } as const;
 
@@ -53,7 +53,7 @@ export class UserPreferencesService {
     const definition = USER_PREFERENCE_CATALOG[key];
     if (!definition) {
       throw new BadRequestException(
-        `Unbekannter Praeferenz-Schluessel '${key}' – nicht im Katalog (Allowlist).`,
+        `Unknown preference key '${key}' – not in the catalog (allowlist).`,
       );
     }
 
@@ -86,7 +86,7 @@ export class UserPreferencesService {
     const definition = USER_PREFERENCE_CATALOG[key];
     if (!definition) {
       throw new BadRequestException(
-        `Unbekannter Praeferenz-Schluessel '${key}' – nicht im Katalog (Allowlist).`,
+        `Unknown preference key '${key}' – not in the catalog (allowlist).`,
       );
     }
 

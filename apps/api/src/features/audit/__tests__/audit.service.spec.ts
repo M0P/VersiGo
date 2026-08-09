@@ -26,7 +26,7 @@ describe('AuditService', () => {
   });
 
   describe('listEvents', () => {
-    it('liefert Events ohne diffJson-Inhalt, aber mit hasDiff-Flag', async () => {
+    it('returns events without diffJson content but with the hasDiff flag', async () => {
       db.auditEvent.findMany.mockResolvedValue([
         {
           id: 'e1',
@@ -69,7 +69,7 @@ describe('AuditService', () => {
       expect(result.events[1].hasDiff).toBe(false);
     });
 
-    it('begrenzt take auf maximal 200 und setzt den Default auf 50', async () => {
+    it('caps take at 200 and defaults it to 50', async () => {
       db.auditEvent.findMany.mockResolvedValue([]);
       db.auditEvent.count.mockResolvedValue(0);
 
@@ -84,7 +84,7 @@ describe('AuditService', () => {
       );
     });
 
-    it('baut Zeit- und Filterkriterien in die Where-Clause', async () => {
+    it('builds time and filter criteria into the where clause', async () => {
       db.auditEvent.findMany.mockResolvedValue([]);
       db.auditEvent.count.mockResolvedValue(0);
 
@@ -110,7 +110,7 @@ describe('AuditService', () => {
   });
 
   describe('getEvent', () => {
-    it('liefert das Detail inklusive diffJson', async () => {
+    it('returns the detail including diffJson', async () => {
       db.auditEvent.findUnique.mockResolvedValue({
         id: 'e1',
         actorUserId: 'u1',
@@ -129,7 +129,7 @@ describe('AuditService', () => {
       expect(result.actorUsername).toBe('alice');
     });
 
-    it('wirft NotFoundException bei unbekanntem Event', async () => {
+    it('throws NotFoundException for an unknown event', async () => {
       db.auditEvent.findUnique.mockResolvedValue(null);
 
       await expect(service.getEvent('missing')).rejects.toThrow(NotFoundException);
@@ -137,7 +137,7 @@ describe('AuditService', () => {
   });
 
   describe('record', () => {
-    it('schreibt ein Audit-Event', async () => {
+    it('writes an audit event', async () => {
       db.auditEvent.create.mockResolvedValue({ id: 'e1' });
 
       await service.record({
@@ -159,7 +159,7 @@ describe('AuditService', () => {
       });
     });
 
-    it('ist fail-soft: Fehler beim Schreiben werfen nicht', async () => {
+    it('is fail-soft: write errors do not throw', async () => {
       db.auditEvent.create.mockRejectedValue(new Error('db down'));
 
       await expect(

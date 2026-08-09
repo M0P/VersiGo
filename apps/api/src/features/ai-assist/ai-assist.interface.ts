@@ -1,8 +1,8 @@
 /**
- * AI-Adapter-Port.
+ * AI adapter port.
  *
- * Re-exportiert die Typen aus @versigo/foundation fuer eine
- * konsistente Nutzung innerhalb des API-Feature-Slices.
+ * Re-exports the types from @versigo/foundation for
+ * consistent use within the API feature slice.
  */
 export type {
   IAIAdapter,

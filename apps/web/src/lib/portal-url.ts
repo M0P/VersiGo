@@ -1,14 +1,14 @@
 /**
- * BugFix-05 (Befund 2): Portal-URL-Normalisierung (Client-seitige
- * Defense-in-Depth).
+ * BugFix-05 (finding 2): portal URL normalization (client-side
+ * defense in depth).
  *
- * Fehlt das Schema, wird `https://` vorangestellt. Nur wenn KEIN Schema
- * vorhanden ist – `http://…` bleibt unveraendert und `javascript:`/`data:`
- * koennen hier nie entstehen (sie besitzen kein `://`). Die eigentliche
- * Sicherheitsvalidierung (nur http/https, Laengenlimit) uebernimmt das
- * Server-DTO (`@IsUrl` + `@MaxLength(2048)` in policy-registry.dto.ts).
+ * When the scheme is missing, `https://` is prepended. Only when NO scheme
+ * is present – `http://…` stays unchanged and `javascript:`/`data:` can never
+ * arise here (they have no `://`). The actual security validation (http/https
+ * only, length limit) is done by the server DTO (`@IsUrl` + `@MaxLength(2048)`
+ * in policy-registry.dto.ts).
  *
- * Bewusst von der Komponente getrennt, damit der Helper unit-testbar ist
+ * Deliberately separated from the component so the helper is unit-testable
  * (apps/web/src/__tests__/portal-url.spec.ts).
  */
 export function normalizePortalUrl(value: string): string {

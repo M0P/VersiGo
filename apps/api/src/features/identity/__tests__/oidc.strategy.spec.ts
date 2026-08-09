@@ -3,8 +3,8 @@ import { UnauthorizedException } from '@nestjs/common';
 import { OidcStrategy, normalizeIssuerUrl } from '../oidc.strategy';
 import { GlobalRole, UserStatus } from '@prisma/client';
 
-// openid-client v6-Funktionen werden gemockt, damit kein echter
-// Discovery-HTTP-Request noetig ist und die Fehlerpfade isoliert testbar sind.
+// openid-client v6 functions are mocked so no real discovery HTTP
+// request is needed and the error paths can be tested in isolation.
 vi.mock('openid-client', () => ({
   discovery: vi.fn(),
   buildAuthorizationUrl: vi.fn(),
@@ -62,8 +62,8 @@ function createMockAuthService() {
 
 type Strategy = OidcStrategy;
 
-/** Greift testweise auf das private `client`-Feld zu (kein OIDC-Happy-Path
- *  ohne gecallten onModuleInit). */
+/** Accesses the private `client` field for testing (no OIDC happy path
+ *  without a called onModuleInit). */
 function setClient(strategy: Strategy, client: unknown): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (strategy as unknown as { client: any }).client = client;
@@ -93,12 +93,12 @@ const mockUser = {
 };
 
 describe('normalizeIssuerUrl', () => {
-  it('entfernt nachgestellte Slashes', () => {
+  it('removes trailing slashes', () => {
     expect(normalizeIssuerUrl('https://idp.example.com/')).toBe('https://idp.example.com');
     expect(normalizeIssuerUrl('https://idp.example.com////')).toBe('https://idp.example.com');
   });
 
-  it('laesst URLs ohne Slash unveraendert und trimmt Whitespace', () => {
+  it('leaves URLs without a slash unchanged and trims whitespace', () => {
     expect(normalizeIssuerUrl('  https://idp.example.com  ')).toBe('https://idp.example.com');
     expect(normalizeIssuerUrl('https://idp.example.com')).toBe('https://idp.example.com');
   });
@@ -110,7 +110,7 @@ describe('OidcStrategy', () => {
   });
 
   describe('onModuleInit', () => {
-    it('laesst den Client unkonfiguriert, wenn OIDC deaktiviert ist', async () => {
+    it('leaves the client unconfigured when OIDC is disabled', async () => {
       const { strategy, capabilities } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(false);
 
@@ -120,7 +120,7 @@ describe('OidcStrategy', () => {
       await expect(strategy.isEnabled()).resolves.toBe(false);
     });
 
-    it('konfiguriert den Client per discovery() wenn OIDC aktiv ist', async () => {
+    it('configures the client via discovery() when OIDC is active', async () => {
       const { strategy, config, capabilities } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(true);
       config.get.mockImplementation((key: string) => {
@@ -148,16 +148,16 @@ describe('OidcStrategy', () => {
           redirect_uris: ['https://app.example.com/auth/callback'],
           client_secret: 'secret',
         }),
-        // BugFix-06 (Teil 2): discovery() erhaelt jetzt immer die
-        // (leeren) DiscoveryRequestOptions als 5. Argument – ohne
-        // aktivierte Lockerungs-Flags bleiben sie leer.
+        // BugFix-06 (part 2): discovery() now always receives the
+        // (empty) DiscoveryRequestOptions as the 5th argument – with no
+        // relaxation flags enabled they stay empty.
         undefined,
         expect.objectContaining({}),
       );
       await expect(strategy.isEnabled()).resolves.toBe(true);
     });
 
-    it('faehrt fail-closed weiter, wenn discovery fehlschlaegt', async () => {
+    it('continues fail-closed when discovery fails', async () => {
       const { strategy, config, capabilities } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(true);
       config.get.mockImplementation((key: string) => {
@@ -179,7 +179,7 @@ describe('OidcStrategy', () => {
       await expect(strategy.isEnabled()).resolves.toBe(false);
     });
 
-    it('setzt allowInsecureRequests (execute), wenn CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS aktiv ist', async () => {
+    it('sets allowInsecureRequests (execute) when CONNECTIVITY_ALLOW_PRIVATE_ENDPOINTS is active', async () => {
       const { strategy, config, capabilities, settings } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(true);
       config.get.mockImplementation((key: string) => {
@@ -213,7 +213,7 @@ describe('OidcStrategy', () => {
       await expect(strategy.isEnabled()).resolves.toBe(true);
     });
 
-    it('setzt customFetch=relaxedFetch, wenn CONNECTIVITY_ALLOW_SELF_SIGNED aktiv ist', async () => {
+    it('sets customFetch=relaxedFetch when CONNECTIVITY_ALLOW_SELF_SIGNED is active', async () => {
       const { strategy, config, capabilities, settings } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(true);
       config.get.mockImplementation((key: string) => {
@@ -237,12 +237,12 @@ describe('OidcStrategy', () => {
 
       const options = mockedDiscovery.mock.calls[0][4] as Record<PropertyKey, unknown>;
       expect(options).toMatchObject({ [customFetch]: relaxedFetch });
-      // Kein execute-Eintrag ohne allowPrivate-Flag.
+      // No execute entry without the allowPrivate flag.
       expect(options.execute).toBeUndefined();
       await expect(strategy.isEnabled()).resolves.toBe(true);
     });
 
-    it('laesst die Lockerungs-Optionen leer, wenn beide Flags deaktiviert sind', async () => {
+    it('leaves the relaxation options empty when both flags are disabled', async () => {
       const { strategy, config, capabilities } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(true);
       config.get.mockImplementation((key: string) => {
@@ -266,10 +266,10 @@ describe('OidcStrategy', () => {
       expect(options[customFetch]).toBeUndefined();
     });
 
-    it('faellt auf den Umgebungs-Snapshot zurueck, wenn die Capability-Aufloesung fehlschlaegt (DB down)', async () => {
+    it('falls back to the environment snapshot when capability resolution fails (DB down)', async () => {
       const { strategy, config, capabilities } = createStrategy();
       capabilities.isEnabled.mockRejectedValue(new Error('connect ECONNREFUSED'));
-      // DB down + OIDC_ENABLED im Env deaktiviert -> kein discovery, Boot ok.
+      // DB down + OIDC_ENABLED disabled in the env -> no discovery, boot ok.
       config.get.mockImplementation((key: string) => {
         switch (key) {
           case 'OIDC_ENABLED':
@@ -284,7 +284,7 @@ describe('OidcStrategy', () => {
       expect(mockedDiscovery).not.toHaveBeenCalled();
     });
 
-    it('faellt auf den Umgebungs-Snapshot zurueck und konfiguriert den Client, wenn OIDC im Env aktiv ist (DB down)', async () => {
+    it('falls back to the environment snapshot and configures the client when OIDC is active in the env (DB down)', async () => {
       const { strategy, config, capabilities } = createStrategy();
       capabilities.isEnabled.mockRejectedValue(new Error('connect ECONNREFUSED'));
       config.get.mockImplementation((key: string) => {
@@ -310,7 +310,7 @@ describe('OidcStrategy', () => {
   });
 
   describe('getStatus (BugFix-07)', () => {
-    it('meldet ready=true, wenn Capability aktiv und Client initialisiert', async () => {
+    it('reports ready=true when the capability is active and the client is initialized', async () => {
       const { strategy, capabilities } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(true);
       setClient(strategy, {});
@@ -318,14 +318,14 @@ describe('OidcStrategy', () => {
       await expect(strategy.getStatus()).resolves.toEqual({ ready: true, error: null });
     });
 
-    it('meldet ready=false ohne Fehler, wenn OIDC komplett deaktiviert ist', async () => {
+    it('reports ready=false without error when OIDC is fully disabled', async () => {
       const { strategy, capabilities } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(false);
 
       await expect(strategy.getStatus()).resolves.toEqual({ ready: false, error: null });
     });
 
-    it('meldet den Init-Fehler, wenn die Capability aktiv, der Client aber nicht bereit ist', async () => {
+    it('reports the init error when the capability is active but the client is not ready', async () => {
       const { strategy, config, capabilities } = createStrategy();
       capabilities.isEnabled.mockResolvedValue(true);
       config.get.mockImplementation((key: string) => {
@@ -353,7 +353,7 @@ describe('OidcStrategy', () => {
   });
 
   describe('callbackParams', () => {
-    it('baut die vollstaendige Callback-URL aus dem Express-Request', () => {
+    it('builds the full callback URL from the Express request', () => {
       const { strategy } = createStrategy();
       const url = strategy.callbackParams({
         protocol: 'https',
@@ -367,7 +367,7 @@ describe('OidcStrategy', () => {
       );
     });
 
-    it('liefert null bei fehlendem Host (ungueltige Callback-URL)', () => {
+    it('returns null for a missing host (invalid callback URL)', () => {
       const { strategy } = createStrategy();
       expect(
         strategy.callbackParams({
@@ -378,7 +378,7 @@ describe('OidcStrategy', () => {
       ).toBeNull();
     });
 
-    it('liefert null bei fehlendem originalUrl', () => {
+    it('returns null for a missing originalUrl', () => {
       const { strategy } = createStrategy();
       expect(
         strategy.callbackParams({
@@ -390,7 +390,7 @@ describe('OidcStrategy', () => {
   });
 
   describe('getAuthorizationUrl', () => {
-    it('baut die Authorization-URL mit PKCE und state', async () => {
+    it('builds the authorization URL with PKCE and state', async () => {
       const { strategy, config } = createStrategy();
       setClient(strategy, {});
       config.get.mockReturnValue('https://app.example.com/auth/callback');
@@ -421,14 +421,14 @@ describe('OidcStrategy', () => {
       });
     });
 
-    it('wirft, wenn kein Client konfiguriert ist', async () => {
+    it('throws when no client is configured', async () => {
       const { strategy } = createStrategy();
-      await expect(strategy.getAuthorizationUrl()).rejects.toThrow('OIDC nicht konfiguriert');
+      await expect(strategy.getAuthorizationUrl()).rejects.toThrow('OIDC not configured');
     });
   });
 
   describe('validateCallback', () => {
-    it('wirft UnauthorizedException ohne konfigurierten Client (fail-closed)', async () => {
+    it('throws UnauthorizedException without a configured client (fail-closed)', async () => {
       const { strategy } = createStrategy();
       const url = new URL('https://app.example.com/auth/callback?code=abc');
       await expect(strategy.validateCallback(url, 'verifier', 'state')).rejects.toThrow(
@@ -436,7 +436,7 @@ describe('OidcStrategy', () => {
       );
     });
 
-    it('leitet Token-Austausch-Fehler als generisches UnauthorizedException weiter', async () => {
+    it('propagates token exchange errors as a generic UnauthorizedException', async () => {
       const { strategy, authService } = createStrategy();
       setClient(strategy, {});
       mockedAuthorizationCodeGrant.mockRejectedValue(new Error('state mismatch'));
@@ -448,7 +448,7 @@ describe('OidcStrategy', () => {
       expect(authService.findByOidcIdentity).not.toHaveBeenCalled();
     });
 
-    it('findet den User ueber normalisierten Issuer und Subject', async () => {
+    it('finds the user via normalized issuer and subject', async () => {
       const { strategy, authService } = createStrategy();
       setClient(strategy, {});
       authService.findByOidcIdentity.mockResolvedValue(mockUser);
@@ -461,7 +461,7 @@ describe('OidcStrategy', () => {
         strategy.validateCallback(url, 'verifier', 'state'),
       ).resolves.toEqual(mockUser);
 
-      // claims.iss mit Trailing-Slash wird auf die gespeicherte Form normalisiert
+      // claims.iss with a trailing slash is normalized to the stored form
       expect(authService.findByOidcIdentity).toHaveBeenCalledWith(
         'https://idp.example.com',
         'sub-1',
@@ -473,7 +473,7 @@ describe('OidcStrategy', () => {
       );
     });
 
-    it('lehnt Token ohne iss-Wert ab', async () => {
+    it('rejects tokens without an iss value', async () => {
       const { strategy, authService } = createStrategy();
       setClient(strategy, {});
       mockedAuthorizationCodeGrant.mockResolvedValue({
@@ -486,11 +486,11 @@ describe('OidcStrategy', () => {
           'verifier',
           'state',
         ),
-      ).rejects.toThrow('iss-Wert');
+      ).rejects.toThrow('iss claim');
       expect(authService.findByOidcIdentity).not.toHaveBeenCalled();
     });
 
-    it('lehnt ungebundene Identitaeten generisch ab', async () => {
+    it('rejects unbound identities generically', async () => {
       const { strategy, authService } = createStrategy();
       setClient(strategy, {});
       authService.findByOidcIdentity.mockResolvedValue(null);
@@ -504,7 +504,7 @@ describe('OidcStrategy', () => {
           'verifier',
           'state',
         ),
-      ).rejects.toThrow('OIDC-Anmeldung fehlgeschlagen');
+      ).rejects.toThrow('OIDC authentication failed');
     });
   });
 });

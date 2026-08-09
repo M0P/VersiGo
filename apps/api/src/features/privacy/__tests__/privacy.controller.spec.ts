@@ -13,7 +13,7 @@ const mockUser: AuthenticatedUser = {
 };
 
 describe('PrivacyController', () => {
-  it('export nutzt ausschliesslich die Session-Identitaet (kein IDOR)', async () => {
+  it('export uses exclusively the session identity (no IDOR)', async () => {
     const service = { exportPersonalData: vi.fn(), deleteAccount: vi.fn() };
     const controller = new PrivacyController(service as never);
     service.exportPersonalData.mockResolvedValue({ exportedAt: 'x' });
@@ -24,7 +24,7 @@ describe('PrivacyController', () => {
     expect(service.exportPersonalData).toHaveBeenCalledWith('user-1');
   });
 
-  it('deleteAccount delegiert an den Service und gibt 204 zurueck', async () => {
+  it('deleteAccount delegates to the service and returns 204', async () => {
     const service = { exportPersonalData: vi.fn(), deleteAccount: vi.fn() };
     const controller = new PrivacyController(service as never);
     service.deleteAccount.mockResolvedValue(undefined);

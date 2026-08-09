@@ -1,17 +1,17 @@
 import { z } from 'zod';
 
 /**
- * Zentrales, typisiertes Konfigurationsschema fuer API und Worker.
- * Jede Umgebungsvariable wird explizit validiert; keine impliziten
- * Defaults fuer sicherheitsrelevante Werte.
+ * Central, typed configuration schema for API and worker.
+ * Every environment variable is validated explicitly; no implicit
+ * defaults for security-relevant values.
  */
 
 /**
- * z.coerce.boolean() wandelt JEDEN nicht-leeren String (auch "false")
- * zu true, da intern Boolean(str) verwendet wird. Fuer Env-Variablen
- * ist daher ein strikter Parser notwendig, der nur "true"/"false"
- * (case-insensitive) akzeptiert und alles andere als Validierungsfehler
- * behandelt, statt stillschweigend auf false zu fallen.
+ * z.coerce.boolean() converts ANY non-empty string (including "false")
+ * to true, because it uses Boolean(str) internally. For environment
+ * variables a strict parser is therefore required that only accepts
+ * "true"/"false" (case-insensitive) and treats everything else as a
+ * validation error instead of silently falling back to false.
  */
 const booleanFromEnv = z
   .union([z.boolean(), z.string()])
@@ -22,17 +22,16 @@ const booleanFromEnv = z
     if (normalized === 'false') return false;
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: `Ungueltiger Boolean-Wert "${val}", erwartet wird "true" oder "false"`,
+      message: `Invalid boolean value "${val}", expected "true" or "false"`,
     });
     return z.NEVER;
   });
 
 /**
- * Wie `booleanFromEnv`, behandelt aber einen leeren String als
- * "nicht gesetzt". Docker Compose reicht Variablen ohne gesetzten
- * Default-Wert als leeren String in den Container durch; diese werden
- * hier nicht als explizite (ungueltige) Angabe gewertet, sondern fallen
- * auf den Default zurueck.
+ * Like `booleanFromEnv`, but treats an empty string as "unset".
+ * Docker Compose passes variables without a set default into the
+ * container as empty strings; these are not treated as an explicit
+ * (invalid) value here, but fall back to the default.
  */
 const optionalBooleanFromEnv = z
   .union([z.boolean(), z.string()])
@@ -44,17 +43,16 @@ const optionalBooleanFromEnv = z
     if (normalized === 'false') return false;
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: `Ungueltiger Boolean-Wert "${val}", erwartet wird "true" oder "false"`,
+      message: `Invalid boolean value "${val}", expected "true" or "false"`,
     });
     return z.NEVER;
   });
 
 /**
- * Optionaler Env-String, der leere Werte wie nicht gesetzte Variablen
- * behandelt (Docker Compose reicht Variablen ohne gesetzten Wert als
- * "" in den Container durch). `.optional()` muss INNERHALB des
- * Preprocess-Schritts liegen, damit das Ergebnis "undefined" (leerer
- * String) die Validierung passiert.
+ * Optional env string that treats empty values like unset variables
+ * (Docker Compose passes variables without a set value into the
+ * container as ""). `.optional()` must sit INSIDE the preprocess step
+ * so that the result "undefined" (empty string) passes validation.
  */
 const optionalEnvString = (schema: z.ZodString) =>
   z.preprocess(
@@ -66,23 +64,28 @@ export const appConfigSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
+    // BugFix-11 (R7): runtime application version (e.g. "1.0.0-beta.1"),
+    // injected via APP_VERSION in Compose. Public, harmless value exposed on
+    // the health/readiness endpoints; empty values are treated as unset.
+    APP_VERSION: optionalEnvString(z.string().min(1)).optional(),
+
     APP_PORT: z.coerce.number().int().positive().default(3001),
     WEB_PORT: z.coerce.number().int().positive().default(3000),
 
-    // AP-19: Worker-Liveness-Server + Heartbeat. WORKER_HEALTH_PORT wird nur
-    // innerhalb des Container-Netzwerks genutzt (Compose-Healthcheck), nie
-    // nach aussen publiziert. WORKER_HEARTBEAT_TIMEOUT_MS bestimmt, ab wann
-    // die API den Worker in /ready als 'down' meldet (nicht als bereit-
-    // heitsrelevant fuer die API selbst, nur als Status-Information).
+    // AP-19: worker liveness server + heartbeat. WORKER_HEALTH_PORT is used
+    // only inside the container network (Compose healthcheck), never exposed
+    // publicly. WORKER_HEARTBEAT_TIMEOUT_MS determines when the API reports
+    // the worker as 'down' in /ready (not readiness-relevant for the API
+    // itself, only status information).
     WORKER_HEALTH_PORT: z.coerce.number().int().positive().default(3100),
     WORKER_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(15_000),
     WORKER_HEARTBEAT_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
 
-    // AP-16: Erlaubte Browser-Origins fuer CORS (Komma-separierte Liste).
-    // Die Web-App (Standard: http://localhost:3000) ruft die API cross-origin
-    // mit credentials:'include' auf; ohne enableCors blockiert der Browser
-    // das Lesen der Antworten (Preflight/AC-AO-Header). Nur explizit gelistete
-    // Origins werden akzeptiert. Ein leerer Wert faellt auf den Default zurueck.
+    // AP-16: allowed browser origins for CORS (comma-separated list).
+    // The web app (default: http://localhost:3000) calls the API cross-origin
+    // with credentials:'include'; without enableCors the browser blocks
+    // reading the responses (preflight/AC-AO headers). Only explicitly
+    // listed origins are accepted. An empty value falls back to the default.
     CORS_ORIGINS: z
       .string()
       .default('http://localhost:3000')
@@ -94,26 +97,25 @@ export const appConfigSchema = z
       )
       .transform((origins) => (origins.length > 0 ? origins : ['http://localhost:3000'])),
 
-    // AP-16/ADR-007: Express "trust proxy". Steuert, ob die App die
-    // X-Forwarded-*-Header eines Reverse-Proxys fuer req.ip akzeptiert.
-    // Ohne diese Einstellung faellt hinter einem Proxy jede Anfrage auf
-    // dieselbe Proxy-IP zurueck (Rate-Limits auf req.ip wuerden alle
-    // Clients global sperren). Standard ist false (direkte Verbindung);
-    // nur hinter einem vertrauenswuerdigen Reverse-Proxy auf true setzen.
+    // AP-16/ADR-007: Express "trust proxy". Controls whether the app
+    // accepts the X-Forwarded-* headers of a reverse proxy for req.ip.
+    // Without this setting, every request behind a proxy falls back to
+    // the same proxy IP (rate limits on req.ip would lock out all clients
+    // globally). Default is false (direct connection); only set to true
+    // behind a trusted reverse proxy.
     TRUST_PROXY: optionalBooleanFromEnv.optional(),
 
-    // AP-20: Secure-Flag des Session-Cookies. Default: true in Produktion,
-    // false sonst (wie bisher config.isProduction). Express-Session setzt
-    // bei secure:true ueber reines HTTP gar kein Cookie (dokumentiertes
-    // Verhalten); Deployments hinter einem TLS-terminierenden Reverse-Proxy
-    // (interne HTTP-Verbindung) oder kontrollierte interne Installationen
-    // ohne TLS koennen das Flag daher explizit setzen. In allen anderen
-    // Faellen den Standard beibehalten.
+    // AP-20: secure flag of the session cookie. Default: true in production,
+    // false otherwise (as before, config.isProduction). Express-session sets
+    // no cookie at all over plain HTTP when secure:true (documented behavior);
+    // deployments behind a TLS-terminating reverse proxy (internal HTTP
+    // connection) or controlled internal installations without TLS can set
+    // the flag explicitly. In all other cases keep the default.
     COOKIE_SECURE: optionalBooleanFromEnv.optional(),
 
-    DATABASE_URL: z.string().min(1, 'DATABASE_URL ist erforderlich'),
+    DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
-    REDIS_URL: z.string().min(1, 'REDIS_URL ist erforderlich'),
+    REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
 
     STORAGE_ENABLED: booleanFromEnv.default(false),
 
@@ -123,21 +125,22 @@ export const appConfigSchema = z
     LOCAL_AUTH_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900_000), // 15 minutes
 
-    // Initialer lokaler Administrator (nur fuer lokale Entwicklung/Test).
-    // AP-16/ADR-007: Der Login-Identifier ist der Benutzername (normalisiert
-    // im Bootstrap: lowercase + trim), keine E-Mail. Validierung entspricht
-    // der USERNAME_REGEX der Anwendung (3-32 Zeichen, [a-z0-9._-], Start mit
-    // Buchstabe/Ziffer); Grossbuchstaben werden vor Anlage normalisiert.
+    // Initial local administrator (only for local development/test).
+    // AP-16/ADR-007: The login identifier is the username (normalized
+    // during bootstrap: lowercase + trim), not an email. Validation matches
+    // the application's USERNAME_REGEX (3-32 characters, [a-z0-9._-],
+    // starting with a letter/digit); uppercase letters are normalized
+    // before the account is created.
     LOCAL_ADMIN_USERNAME: optionalEnvString(
       z
         .string()
         .regex(
           /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,31}$/,
-          'LOCAL_ADMIN_USERNAME: 3-32 Zeichen aus [a-z0-9._-], Start mit Buchstabe oder Ziffer',
+          'LOCAL_ADMIN_USERNAME: 3-32 characters from [a-z0-9._-], starting with a letter or digit',
         ),
     ),
     LOCAL_ADMIN_PASSWORD: optionalEnvString(
-      z.string().min(1, 'LOCAL_ADMIN_PASSWORD darf nicht leer sein'),
+      z.string().min(1, 'LOCAL_ADMIN_PASSWORD must not be empty'),
     ),
 
     OIDC_ENABLED: optionalBooleanFromEnv.optional(),
@@ -160,31 +163,30 @@ export const appConfigSchema = z
     PAPERLESS_URL: z.string().optional(),
     PAPERLESS_API_TOKEN: z.string().optional(),
 
-    // BugFix-05: Familien-Freigaben (Household-Sharing) sind standardmaessig
-    // aktiviert (Bestandsverhalten); Admins koennen sie in der Feature-
-    // Verwaltung deaktivieren (Default true, daher kein zwingender
-    // Umgebungs-Default in .env.example noetig).
-    // Hinweis: `booleanFromEnv` lehnt leere Strings ab (Docker Compose setzt
-    // ungesetzte Variablen als ""). Die Variable darf daher NICHT leer in
-    // Compose/.env gefuehrt werden – bei spaeterer Erweiterung optionalBooleanFromEnv.
+    // BugFix-05: family sharing (household sharing) is enabled by default
+    // (existing behavior); admins can disable it in the feature management
+    // (default true, therefore no mandatory env default in .env.example).
+    // Note: `booleanFromEnv` rejects empty strings (Docker Compose sets
+    // unset variables as ""). The variable must therefore NOT be listed
+    // empty in Compose/.env — use optionalBooleanFromEnv for later additions.
     FAMILY_SHARING_ENABLED: booleanFromEnv.default(true),
 
     SETTINGS_ENCRYPTION_KEY: z
       .string()
-      .regex(/^[0-9a-fA-F]{64}$/, 'SETTINGS_ENCRYPTION_KEY muss ein 32-Byte-Hex-String (64 Zeichen) sein'),
+      .regex(/^[0-9a-fA-F]{64}$/, 'SETTINGS_ENCRYPTION_KEY must be a 32-byte hex string (64 characters)'),
 
     SESSION_SECRET: z
       .string()
-      .min(32, 'SESSION_SECRET muss mindestens 32 Zeichen lang sein'),
+      .min(32, 'SESSION_SECRET must be at least 32 characters long'),
   })
   .transform((cfg) => ({
     ...cfg,
-    // OIDC ist nur bei expliziter Aktivierung aktiv.
+    // OIDC is only active when explicitly enabled.
     OIDC_ENABLED: cfg.OIDC_ENABLED ?? false,
-    // Lokale Authentifizierung ist der Standard fuer lokale Entwicklungs-
-    // und Testumgebungen. In Produktion bleibt sie deaktiviert, bis sie
-    // explizit gesetzt wird; dann greift der Fail-Fast im IdentityModule,
-    // falls keine Authentifizierungsmethode konfiguriert ist.
+    // Local authentication is the default for local development and
+    // test environments. In production it stays disabled until set
+    // explicitly; then the fail-fast in the IdentityModule kicks in
+    // if no authentication method is configured.
     LOCAL_AUTH_ENABLED: cfg.LOCAL_AUTH_ENABLED ?? cfg.NODE_ENV !== 'production',
     TRUST_PROXY: cfg.TRUST_PROXY ?? false,
     COOKIE_SECURE: cfg.COOKIE_SECURE ?? cfg.NODE_ENV === 'production',
@@ -198,7 +200,7 @@ export function parseAppConfig(env: Record<string, string | undefined>): AppConf
     const issues = result.error.issues
       .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
       .join('; ');
-    throw new Error(`Ungueltige Konfiguration: ${issues}`);
+    throw new Error(`Invalid configuration: ${issues}`);
   }
   return result.data;
 }

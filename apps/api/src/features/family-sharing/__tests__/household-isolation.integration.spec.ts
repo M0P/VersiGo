@@ -63,7 +63,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     );
   });
 
-  it('User A erstellt Freigabe in Household A (erlaubt)', async () => {
+  it('user A creates a share in household A (allowed)', async () => {
     setupMemberships([
       { userId: userA.id, householdId: householdA, role: 'MEMBER' },
       { userId: targetUser.id, householdId: householdA, role: 'MEMBER' },
@@ -89,7 +89,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     expect(result.id).toBe('share-1');
   });
 
-  it('User A kann keine Freigabe in Household B erstellen (Isolation)', async () => {
+  it('user A cannot create a share in household B (isolation)', async () => {
     setupMemberships([
       { userId: userA.id, householdId: householdA, role: 'OWNER' },
     ]);
@@ -103,7 +103,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine Freigaben in Household A sehen (Isolation)', async () => {
+  it('user B cannot see shares in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -113,7 +113,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine eingehenden Freigaben in Household A sehen (Isolation)', async () => {
+  it('user B cannot see incoming shares in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -123,7 +123,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine ausgehenden Freigaben in Household A sehen (Isolation)', async () => {
+  it('user B cannot see outgoing shares in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -133,7 +133,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine einzelne Freigabe in Household A sehen (Isolation)', async () => {
+  it('user B cannot see a single share in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -143,7 +143,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine Freigabe in Household A aktualisieren (Isolation)', async () => {
+  it('user B cannot update a share in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -155,7 +155,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine Freigabe in Household A entziehen (Isolation)', async () => {
+  it('user B cannot revoke a share in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -165,7 +165,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User A kann ALL_OWNED Freigabe erstellen (ohne scopeRef)', async () => {
+  it('user A can create an ALL_OWNED share (without scopeRef)', async () => {
     setupMemberships([
       { userId: userA.id, householdId: householdA, role: 'MEMBER' },
       { userId: targetUser.id, householdId: householdA, role: 'MEMBER' },
@@ -189,8 +189,8 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     expect(result.id).toBe('share-2');
   });
 
-  it('stellt sicher, dass checkPermission ohne Household-Mitgliedschaft nicht aufgerufen wird (Owner-Check)', async () => {
-    // checkPermission braucht keine Household-Prüfung, da es intern nur Shares checkt
+  it('ensures checkPermission is not called without household membership (owner check)', async () => {
+    // checkPermission needs no household check since it only checks shares internally
     const result = await service.checkPermission(
       householdA, userA.id, userA.id,
       ObjectShareScopeType.INSURANCE, 'policy-1', ObjectSharePermission.READ,
@@ -199,7 +199,7 @@ describe('Family-Sharing Household-Isolation (Integration)', () => {
     expect(result).toBe(true);
   });
 
-  it('checkPermission verweigert fremden User ohne Freigabe', async () => {
+  it('checkPermission denies a foreign user without a share', async () => {
     mockDb.objectShare.findMany.mockResolvedValue([]);
 
     const result = await service.checkPermission(

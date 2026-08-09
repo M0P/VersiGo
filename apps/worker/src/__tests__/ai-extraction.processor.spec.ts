@@ -72,7 +72,7 @@ describe('AiExtractionProcessor', () => {
 
       // NoOp always returns null → retry is thrown → caught as failure
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Retry erforderlich');
+      expect(result.error).toContain('retry required');
       // Job was set to RUNNING first, then to PENDING (retry)
       expect(db.aiExtractionJob.update).toHaveBeenCalledTimes(2);
       expect(db.aiExtractionJob.update.mock.calls[0][0].data.status).toBe('RUNNING');
@@ -130,7 +130,7 @@ describe('AiExtractionProcessor', () => {
       // With NoOp + AI disabled, extraction always returns null
       // After retry check: retryCount(4) > maxRetries(3) → FAILED
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Maximale Anzahl');
+      expect(result.error).toContain('Maximum number of retries');
     });
   });
 });

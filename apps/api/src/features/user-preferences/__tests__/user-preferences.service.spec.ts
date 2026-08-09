@@ -127,7 +127,7 @@ describe('UserPreferencesService', () => {
       expect(theme.value).toBe('dark');
     });
 
-    it('should reject the removed language key (AP-21: eigene Sprach-API)', async () => {
+    it('should reject the removed language key (AP-21: dedicated language API)', async () => {
       await expect(
         service.setPreference('user-1', 'language', 'en'),
       ).rejects.toThrow(BadRequestException);

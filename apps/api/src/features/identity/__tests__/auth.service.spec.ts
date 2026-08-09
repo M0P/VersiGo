@@ -47,15 +47,15 @@ function createMockPasswordHashing() {
 type MockPasswordHashing = ReturnType<typeof createMockPasswordHashing>;
 
 describe('normalizeIdentifier', () => {
-  it('wandelt in Kleinbuchstaben um', () => {
+  it('converts to lowercase', () => {
     expect(normalizeIdentifier('Benutzer')).toBe('benutzer');
   });
 
-  it('entfernt fuehrende/folgende Leerzeichen', () => {
+  it('removes leading/trailing whitespace', () => {
     expect(normalizeIdentifier('  user  ')).toBe('user');
   });
 
-  it('kombiniert Trimmen und Lowercase', () => {
+  it('combines trimming and lowercase', () => {
     expect(normalizeIdentifier('  Max Mustermann  ')).toBe('max mustermann');
   });
 
@@ -65,15 +65,15 @@ describe('normalizeIdentifier', () => {
 });
 
 describe('USERNAME_REGEX', () => {
-  it('erlaubt 3-32 Zeichen aus [a-z0-9._-] mit alphanumerischem Start', () => {
+  it('allows 3-32 characters from [a-z0-9._-] with an alphanumeric start', () => {
     expect(USERNAME_REGEX.test('max')).toBe(true);
     expect(USERNAME_REGEX.test('max.muster_2')).toBe(true);
     expect(USERNAME_REGEX.test('a1-b2.c3')).toBe(true);
   });
 
-  it('lehnt ungueltige Benutzernamen ab', () => {
-    expect(USERNAME_REGEX.test('ab')).toBe(false); // zu kurz
-    expect(USERNAME_REGEX.test('-max')).toBe(false); // Start mit Sonderzeichen
+  it('rejects invalid usernames', () => {
+    expect(USERNAME_REGEX.test('ab')).toBe(false); // too short
+    expect(USERNAME_REGEX.test('-max')).toBe(false); // starts with a special character
     expect(USERNAME_REGEX.test('max m')).toBe(false); // Leerzeichen
     expect(USERNAME_REGEX.test('Max')).toBe(false); // Grossbuchstaben
     expect(USERNAME_REGEX.test('x'.repeat(33))).toBe(false); // zu lang
@@ -94,17 +94,17 @@ describe('AuthService.registerLocalAccount', () => {
     mockDb.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(mockDb));
   });
 
-  it('erstellt PENDING_APPROVAL-Konto, Credential und Audit-Eintrag (ohne Passwort im Audit)', async () => {
+  it('creates a PENDING_APPROVAL account, credential and audit entry (without the password in the audit)', async () => {
     mockDb.user.create.mockResolvedValue({ id: 'user-1' });
 
     const result = await service.registerLocalAccount({
       username: '  Max  ',
       displayName: 'Max Muster',
-      password: 'ein-langes-passwort',
+      password: 'a-long-password',
     });
 
     expect(result).toEqual({ id: 'user-1' });
-    expect(mockPasswordHashing.hash).toHaveBeenCalledWith('ein-langes-passwort');
+    expect(mockPasswordHashing.hash).toHaveBeenCalledWith('a-long-password');
     expect(mockDb.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -120,21 +120,21 @@ describe('AuthService.registerLocalAccount', () => {
     });
     const auditCall = mockDb.auditEvent.create.mock.calls[0][0];
     expect(auditCall.data.action).toBe('REGISTER_PENDING');
-    // Kein Passwort, kein Hash, kein Benutzername-Klartext im Audit
-    expect(JSON.stringify(auditCall.data)).not.toContain('ein-langes-passwort');
+    // No password, no hash, no plain-text username in the audit
+    expect(JSON.stringify(auditCall.data)).not.toContain('a-long-password');
     expect(JSON.stringify(auditCall.data)).not.toContain('$2b$12$hash');
   });
 
-  it('wirft ConflictException bei bereits vergebenem Benutzernamen (P2002)', async () => {
+  it('throws ConflictException when the username is already taken (P2002)', async () => {
     mockDb.user.create.mockRejectedValue({ code: 'P2002' });
 
     await expect(
       service.registerLocalAccount({
         username: 'max',
         displayName: 'Max',
-        password: 'ein-langes-passwort',
+        password: 'a-long-password',
       }),
-    ).rejects.toThrow('Benutzername ist bereits vergeben');
+    ).rejects.toThrow('Username is already taken');
   });
 });
 
@@ -149,7 +149,7 @@ describe('AuthService.findByOidcIdentity', () => {
     service = new AuthService(mockDb as never, mockPasswordHashing as never);
   });
 
-  it('sucht ueber (oidcIssuer, oidcSubject) und liefert den User', async () => {
+  it('looks up by (oidcIssuer, oidcSubject) and returns the user', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       id: 'user-1',
       username: 'max',
@@ -180,13 +180,13 @@ describe('AuthService.findByOidcIdentity', () => {
     });
   });
 
-  it('gibt null bei ungebundener Identitaet zurueck (kein Provisioning)', async () => {
+  it('returns null for an unbound identity (no provisioning)', async () => {
     mockDb.user.findUnique.mockResolvedValue(null);
     const result = await service.findByOidcIdentity('https://issuer.example.com', 'sub-999');
     expect(result).toBeNull();
   });
 
-  it('gibt null bei nicht aktivem Konto zurueck (PENDING_APPROVAL/DISABLED)', async () => {
+  it('returns null for a non-active account (PENDING_APPROVAL/DISABLED)', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       id: 'user-1',
       username: 'max',
@@ -213,7 +213,7 @@ describe('AuthService Self-Service-OIDC-Verknuepfung (BugFix-07)', () => {
   });
 
   describe('getOidcBinding', () => {
-    it('liefert die Bindung des Kontos', async () => {
+    it('returns the binding of the account', async () => {
       mockDb.user.findUnique.mockResolvedValue({
         oidcIssuer: 'https://issuer.example.com',
         oidcSubject: 'sub-1',
@@ -230,14 +230,14 @@ describe('AuthService Self-Service-OIDC-Verknuepfung (BugFix-07)', () => {
       });
     });
 
-    it('liefert null ohne Bindung', async () => {
+    it('returns null without a binding', async () => {
       mockDb.user.findUnique.mockResolvedValue({ oidcIssuer: null, oidcSubject: null });
       await expect(service.getOidcBinding('user-1')).resolves.toBeNull();
     });
   });
 
   describe('bindOidcIdentityForUser', () => {
-    it('bindet die Identitaet (normalisierter Issuer) und auditiert', async () => {
+    it('binds the identity (normalized issuer) and audits', async () => {
       mockDb.user.findUnique.mockResolvedValue({ id: 'user-1' });
 
       const result = await service.bindOidcIdentityForUser(
@@ -259,25 +259,25 @@ describe('AuthService Self-Service-OIDC-Verknuepfung (BugFix-07)', () => {
       expect(auditCall.data.actorUserId).toBe('user-1');
     });
 
-    it('wirft ConflictException, wenn die Identitaet bereits an ein anderes Konto gebunden ist', async () => {
+    it('throws ConflictException when the identity is already bound to another account', async () => {
       mockDb.user.findUnique.mockResolvedValue({ id: 'user-1' });
       mockDb.user.update.mockRejectedValue({ code: 'P2002' });
 
       await expect(
         service.bindOidcIdentityForUser('user-1', 'https://issuer.example.com', 'sub-1'),
-      ).rejects.toThrow('Diese OIDC-Identitaet ist bereits an ein anderes Konto gebunden');
+      ).rejects.toThrow('This OIDC identity is already bound to another account');
     });
 
-    it('wirft NotFoundException bei unbekanntem User', async () => {
+    it('throws NotFoundException for an unknown user', async () => {
       mockDb.user.findUnique.mockResolvedValue(null);
       await expect(
         service.bindOidcIdentityForUser('user-999', 'https://issuer.example.com', 'sub-1'),
-      ).rejects.toThrow('Benutzer nicht gefunden');
+      ).rejects.toThrow('User not found');
     });
   });
 
   describe('unbindOidcIdentityForUser', () => {
-    it('loest die Bindung und auditiert OIDC_UNBOUND_SELF', async () => {
+    it('removes the binding and audits OIDC_UNBOUND_SELF', async () => {
       mockDb.user.findUnique.mockResolvedValue({ oidcIssuer: 'https://issuer.example.com' });
 
       await service.unbindOidcIdentityForUser('user-1');
@@ -290,10 +290,10 @@ describe('AuthService Self-Service-OIDC-Verknuepfung (BugFix-07)', () => {
       expect(auditCall.data.action).toBe('OIDC_UNBOUND_SELF');
     });
 
-    it('wirft ConflictException ohne bestehende Bindung', async () => {
+    it('throws ConflictException without an existing binding', async () => {
       mockDb.user.findUnique.mockResolvedValue({ oidcIssuer: null });
       await expect(service.unbindOidcIdentityForUser('user-1')).rejects.toThrow(
-        'Konto hat keine OIDC-Bindung',
+        'Account has no OIDC binding',
       );
     });
   });
@@ -320,7 +320,7 @@ describe('AuthService.localLogin', () => {
     service = new AuthService(mockDb as never, mockPasswordHashing as never);
   });
 
-  it('gibt AuthenticatedUser bei korrekten Anmeldedaten zurueck', async () => {
+  it('returns AuthenticatedUser with correct credentials', async () => {
     mockDb.user.findUnique.mockResolvedValue(activeUser);
     mockPasswordHashing.verify.mockResolvedValue(true);
 
@@ -340,7 +340,7 @@ describe('AuthService.localLogin', () => {
     );
   });
 
-  it('gibt null bei falschem Passwort zurueck (generic)', async () => {
+  it('returns null for a wrong password (generic)', async () => {
     mockDb.user.findUnique.mockResolvedValue(activeUser);
     mockPasswordHashing.verify.mockResolvedValue(false);
 
@@ -348,14 +348,14 @@ describe('AuthService.localLogin', () => {
     expect(result).toBeNull();
   });
 
-  it('gibt null bei unbekanntem Benutzernamen zurueck (generic)', async () => {
+  it('returns null for an unknown username (generic)', async () => {
     mockDb.user.findUnique.mockResolvedValue(null);
 
     const result = await service.localLogin('unbekannt', 'passwort');
     expect(result).toBeNull();
   });
 
-  it('gibt null bei nicht aktivem Benutzer zurueck (generic, auch PENDING_APPROVAL)', async () => {
+  it('returns null for a non-active user (generic, incl. PENDING_APPROVAL)', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       ...activeUser,
       status: UserStatus.PENDING_APPROVAL,
@@ -366,7 +366,7 @@ describe('AuthService.localLogin', () => {
     expect(mockPasswordHashing.verify).not.toHaveBeenCalled();
   });
 
-  it('gibt null bei Konto ohne Credential zurueck', async () => {
+  it('returns null for an account without a credential', async () => {
     mockDb.user.findUnique.mockResolvedValue({
       ...activeUser,
       credential: null,
@@ -388,7 +388,7 @@ describe('AuthService.assertPolicyReadAccess', () => {
     service = new AuthService(mockDb as never, mockPasswordHashing as never);
   });
 
-  it('laesst USER/ADMIN mit Mitgliedschaft lesen', async () => {
+  it('lets USER/ADMIN with membership read', async () => {
     mockDb.householdMembership.findUnique.mockResolvedValue({ householdId: 'h1', userId: 'user-1' });
     mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: 'policy-1' });
 
@@ -399,11 +399,11 @@ describe('AuthService.assertPolicyReadAccess', () => {
         'policy-1',
       ),
     ).resolves.toBeUndefined();
-    // Kein ObjectShare-Zugriff fuer USER
+    // No ObjectShare access for USER
     expect(mockDb.objectShare.findMany).not.toHaveBeenCalled();
   });
 
-  it('blockt ohne Household-Mitgliedschaft (Isolation)', async () => {
+  it('blocks without household membership (isolation)', async () => {
     mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
     await expect(
@@ -415,7 +415,7 @@ describe('AuthService.assertPolicyReadAccess', () => {
     ).rejects.toThrow('Isolation');
   });
 
-  it('blockt READ_ONLY ohne explizite READ-Freigabe', async () => {
+  it('blocks READ_ONLY without an explicit READ share', async () => {
     mockDb.householdMembership.findUnique.mockResolvedValue({ householdId: 'h1', userId: 'user-1' });
     mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: 'policy-1' });
     mockDb.objectShare.findMany.mockResolvedValue([]);
@@ -426,10 +426,10 @@ describe('AuthService.assertPolicyReadAccess', () => {
         'h1',
         'policy-1',
       ),
-    ).rejects.toThrow('Keine Lese-Freigabe');
+    ).rejects.toThrow('No read share');
   });
 
-  it('laesst READ_ONLY mit expliziter INSURANCE-READ-Freigabe lesen', async () => {
+  it('lets READ_ONLY with an explicit INSURANCE-READ share read', async () => {
     mockDb.householdMembership.findUnique.mockResolvedValue({ householdId: 'h1', userId: 'user-1' });
     mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: 'policy-1' });
     mockDb.objectShare.findMany.mockResolvedValue([
@@ -458,7 +458,7 @@ describe('AuthService.getReadablePolicyIds', () => {
     service = new AuthService(mockDb as never, mockPasswordHashing as never);
   });
 
-  it('liefert null fuer USER/ADMIN (alle Policies des Households)', async () => {
+  it('returns null for USER/ADMIN (all policies of the household)', async () => {
     const result = await service.getReadablePolicyIds(
       { id: 'user-1', username: 'u', displayName: 'U', role: GlobalRole.USER, status: UserStatus.ACTIVE, memberships: [] },
       'h1',
@@ -467,7 +467,7 @@ describe('AuthService.getReadablePolicyIds', () => {
     expect(mockDb.objectShare.findMany).not.toHaveBeenCalled();
   });
 
-  it('liefert freigegebene Policy-IDs fuer READ_ONLY', async () => {
+  it('returns shared policy IDs for READ_ONLY', async () => {
     mockDb.objectShare.findMany.mockResolvedValue([
       { scopeType: ObjectShareScopeType.INSURANCE, scopeRef: 'policy-1', sourceUserId: 'owner-1' },
       { scopeType: ObjectShareScopeType.ALL_OWNED, scopeRef: null, sourceUserId: 'owner-2' },
@@ -482,7 +482,7 @@ describe('AuthService.getReadablePolicyIds', () => {
       'h1',
     );
     expect(result).toEqual(['policy-1', 'policy-2']);
-    // READ-Freigabe wird verlangt
+    // A READ share is required
     expect(mockDb.objectShare.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -493,7 +493,7 @@ describe('AuthService.getReadablePolicyIds', () => {
     );
   });
 
-  it('liefert leere Liste ohne jegliche Freigabe', async () => {
+  it('returns an empty list without any share', async () => {
     mockDb.objectShare.findMany.mockResolvedValue([]);
     const result = await service.getReadablePolicyIds(
       { id: 'user-1', username: 'u', displayName: 'U', role: GlobalRole.READ_ONLY, status: UserStatus.ACTIVE, memberships: [] },

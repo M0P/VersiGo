@@ -49,7 +49,7 @@ function createService(overrides: Record<string, any> = {}) {
 }
 
 describe('MonitoringService', () => {
-  it('queueOverview liefert nur Zaehler, keine Payloads', async () => {
+  it('queueOverview only returns counters, no payloads', async () => {
     const { service, queue } = createService();
     queue.getJobCounts.mockResolvedValue({
       waiting: 3,
@@ -67,7 +67,7 @@ describe('MonitoringService', () => {
     expect(result[0]).not.toHaveProperty('data');
   });
 
-  it('listFailedJobs redigiert: nur Metadaten und gekuerzte failedReason, nie job.data', async () => {
+  it('listFailedJobs redacts: only metadata and a truncated failedReason, never job.data', async () => {
     const { service, queue } = createService();
     queue.getFailed.mockResolvedValue([
       {
@@ -94,7 +94,7 @@ describe('MonitoringService', () => {
     expect(result[0]).not.toHaveProperty('data');
   });
 
-  it('retryFailedJob reiht einen existierenden Job erneut ein', async () => {
+  it('retryFailedJob re-enqueues an existing job', async () => {
     const { service, queue } = createService();
     const job = { retry: vi.fn().mockResolvedValue(undefined) };
     queue.getJob.mockResolvedValue(job);
@@ -104,14 +104,14 @@ describe('MonitoringService', () => {
     expect(job.retry).toHaveBeenCalled();
   });
 
-  it('retryFailedJob wirft NotFoundException fuer unbekannte Jobs', async () => {
+  it('retryFailedJob throws NotFoundException for unknown jobs', async () => {
     const { service, queue } = createService();
     queue.getJob.mockResolvedValue(null);
 
     await expect(service.retryFailedJob('nope')).rejects.toThrow(NotFoundException);
   });
 
-  it('aiJobs liefert Status-Zaehler und Metadaten ohne errorMessage/extractedFieldsJson', async () => {
+  it('aiJobs returns status counters and metadata without errorMessage/extractedFieldsJson', async () => {
     const { service, db } = createService();
     db.aiExtractionJob.groupBy.mockResolvedValue([
       { status: 'COMPLETED', _count: { _all: 2 } },
@@ -142,7 +142,7 @@ describe('MonitoringService', () => {
     expect(result.recent[0].id).toBe('job-1');
   });
 
-  it('integrations liefert nur enabled/connected, keine URLs/Tokens', async () => {
+  it('integrations only returns enabled/connected, no URLs/tokens', async () => {
     const { service, aiAssist, paperless, settings, capabilities } = createService();
     aiAssist.healthCheck.mockResolvedValue({ connected: true, provider: 'ollama' });
     paperless.healthCheck.mockResolvedValue(true);
@@ -158,7 +158,7 @@ describe('MonitoringService', () => {
     expect(JSON.stringify(result)).not.toContain('http');
   });
 
-  it('integrations meldet Portal-Connector-Plugins mit Health, ohne Zugangsdaten', async () => {
+  it('integrations reports portal-connector plugins with health, without credentials', async () => {
     const { service, portalConnectors, aiAssist } = createService({
       portalConnectors: {
         listPlugins: vi.fn().mockReturnValue([
@@ -174,7 +174,7 @@ describe('MonitoringService', () => {
         getPluginHealth: vi.fn().mockResolvedValue({
           available: false,
           healthy: false,
-          reason: `Experimentelles Plugin ist deaktiviert. ${'x'.repeat(500)}`,
+          reason: `Experimental plugin is disabled. ${'x'.repeat(500)}`,
           checkedAt: '2026-01-01T00:00:00.000Z',
         }),
       },
@@ -198,7 +198,7 @@ describe('MonitoringService', () => {
     expect(JSON.stringify(result)).not.toContain('credential');
   });
 
-  it('integrations meldet keine Portal-Connectors, wenn keine Plugins registriert sind', async () => {
+  it('integrations reports no portal connectors when no plugins are registered', async () => {
     const { service, portalConnectors, aiAssist } = createService();
     aiAssist.healthCheck.mockResolvedValue({ connected: false, provider: 'none' });
 
@@ -208,7 +208,7 @@ describe('MonitoringService', () => {
     expect(portalConnectors.getPluginHealth).not.toHaveBeenCalled();
   });
 
-  it('integrations meldet AI als deaktiviert, wenn kein Provider konfiguriert ist', async () => {
+  it('integrations reports AI as disabled when no provider is configured', async () => {
     const { service, aiAssist } = createService();
     aiAssist.healthCheck.mockResolvedValue({ connected: false, provider: 'none' });
 

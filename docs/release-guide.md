@@ -148,7 +148,8 @@ Before publishing, verify:
       images (see step 1). Secrets are injected via environment variables.
 - [ ] **Registry is private by default** unless you intentionally publish a
       public image.
-- [ ] **Tags and changelog updated** (see `docs/release-notes-template.md`).
+- [ ] **Tags and changelog updated** (concrete notes: `docs/release-notes-v1.0.0-beta.1.md`;
+      reusable template: `docs/release-notes-template.md`).
 - [ ] **Documentation updated** (`docs/end-user-guide.md` matches the release;
       the Compose configuration in the release tag matches the guide).
 - [ ] **Fresh-clone test:** `cp .env.example .env && docker compose up --build`

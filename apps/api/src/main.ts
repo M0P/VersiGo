@@ -7,9 +7,9 @@ import { AppConfigService, preloadRestartSettingsIntoEnv } from '@versigo/founda
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  // AP-17: Neustart-Settings (Kategorie "restart") vor dem Nest-Bootstrap
-  // aus der Datenbank in process.env laden, damit sie ab dem ersten
-  // Prozessstart wirken (fail-soft bei nicht erreichbarer DB).
+  // AP-17: restart settings (category "restart") before the Nest bootstrap
+  // load from the database into process.env so that from the first
+  // take effect at the next process start (fail-soft when the DB is unreachable).
   await preloadRestartSettingsIntoEnv();
 
   const app = await NestFactory.create(AppModule);
@@ -20,8 +20,8 @@ async function bootstrap(): Promise<void> {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-      // BugFix-02: Strukturierte Validierungsfehler zurückgeben
-      // Damit das Frontend feldspezifische Fehlermeldungen anzeigen kann
+      // BugFix-02: return structured validation errors
+      // So the frontend can display field-specific error messages
       exceptionFactory: (errors) => {
         const fieldErrors = errors.flatMap((error) => {
           const field = error.property;
@@ -49,7 +49,7 @@ async function bootstrap(): Promise<void> {
         });
         return new HttpException(
           {
-            message: 'Validierung fehlgeschlagen',
+            message: 'Validation failed',
             errors: fieldErrors,
             statusCode: 400,
           },
@@ -59,23 +59,25 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // AP-16/ADR-007: Nur hinter einem vertrauenswuerdigen Reverse-Proxy aktivieren.
-  // Ohne trust proxy faellt req.ip hinter einem Proxy auf die Proxy-IP zurueck,
-  // wodurch die per-IP-Rate-Limits (Login/Registrierung) alle Clients global
-  // sperren wuerden. Default false = direkte Verbindung, Proxy-IP ist die
+  // AP-16/ADR-007: only enable behind a trusted reverse proxy.
+  // Without trust proxy, req.ip behind a proxy falls back to the proxy IP,
+  // which would make the per-IP rate limits (login/registration) block
+  // all clients globally. Default false = direct connection, the proxy IP
+  // is
   // Client-IP.
   app.getHttpAdapter().getInstance().set('trust proxy', config.get('TRUST_PROXY'));
 
-  // AP-16: Die Web-App (z.B. http://localhost:3000) ruft die API cross-origin
-  // mit credentials:'include' auf (Login/Registrierung, /auth/me, Admin-UI).
-  // CORS ist daher auf die konfigurierten Web-Origins beschraenkt
-  // (CORS_ORIGINS, Komma-separiert) und erlaubt Cookies (credentials: true).
-  // Ohne diesen Header blockiert der Browser das Lesen aller API-Antworten.
+  // AP-16: the web app (e.g. http://localhost:3000) calls the API
+  // cross-origin with credentials:'include' (login/registration, /auth/me,
+  // admin UI). CORS is therefore restricted to the configured web origins
+  // (CORS_ORIGINS, comma-separated) and allows cookies (credentials: true).
+  // Without this header the browser blocks reading all API responses.
   //
-  // AP-17/BugFix-02: In Entwicklung (NODE_ENV !== 'production') erlauben wir
-  // zusaetzlich jeden localhost-Origin (beliebiger Port), damit nicht-standardmaessige
-  // Ports (z. B. 2478/2479 in Testumgebungen) ohne manuelle CORS_ORIGINS-Anpassung
-  // funktionieren. In Produktion gilt strikt die konfigurierte CORS_ORIGINS-Liste.
+  // AP-17/BugFix-02: in development (NODE_ENV !== 'production') we allow
+  // additionally every localhost origin (any port), so that non-standard
+  // ports (e.g. 2478/2479 in test environments) work without a manual
+  // CORS_ORIGINS adjustment. In production only the configured CORS_ORIGINS
+  // list applies.
   const corsOrigins = config.get('CORS_ORIGINS');
   const isDevelopment = config.get('NODE_ENV') !== 'production';
   app.enableCors({
@@ -88,7 +90,7 @@ async function bootstrap(): Promise<void> {
         return callback(null, true);
       }
       if (isDevelopment && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-        // Erlaube jeden localhost-Port in Entwicklung
+        // Allow any localhost port in development
         return callback(null, true);
       }
       callback(new Error(`CORS: Origin ${origin} not allowed`), false);
@@ -107,7 +109,7 @@ async function bootstrap(): Promise<void> {
         httpOnly: true,
         secure: config.get('COOKIE_SECURE'),
         sameSite: 'lax',
-        // BugFix-02: In development, set cookie domain to 'localhost' (without port)
+        // BugFix-02: in development, set the cookie domain to 'localhost' (without port)
         // so the session cookie works across different localhost ports (e.g., web on 2478, API on 2479).
         // This makes the cookie a domain cookie for 'localhost' instead of a host-only cookie
         // that includes the port. In production, leave undefined to use the default host-only behavior.

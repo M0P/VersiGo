@@ -28,7 +28,7 @@ export class UpdateDocumentMetadataDto {
   documentDate?: string;
 }
 
-// BugFix-07 (Q3): Paperless-Dokument per ID an eine Versicherung binden.
+// BugFix-07 (Q3): bind a Paperless document to a policy by ID.
 export class CreatePaperlessLinkDto {
   @IsInt()
   @Min(1)

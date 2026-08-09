@@ -1,22 +1,22 @@
 import type { Translator } from './core';
 
 /**
- * AP-21: Lokalisierte Fehlertexte fuer die Auth-Flows (Login/Registrierung).
+ * AP-21: localized error texts for the auth flows (login/registration).
  *
- * Die API liefert ihre Fehlermeldungen bislang nur auf Deutsch und in
- * Freitextform (kein Maschinen-Code). Damit die UI unabhaengig von der
- * Sprache der API antwortet, werden Fehler hier UEBER DEN HTTP-STATUS auf
- * lokalisierte Katalog-Schluessel abgebildet – die rohe `message`-Antwort
- * der API wird in der UI nicht mehr angezeigt.
+ * The API currently delivers its error messages only in German and in
+ * free-text form (no machine code). So that the UI can respond
+ * independently of the API's language, errors are mapped here VIA THE HTTP
+ * STATUS to localized catalog keys – the raw `message` response
+ * of the API is no longer displayed in the UI.
  *
- * Status-Semantik der Auth-Endpunkte (Vertrag mit apps/api):
- * - 429 = Rate-Limit (Login und Registrierung)
- * - 501 = Funktion nicht aktiviert (Login/Registrierung deaktiviert)
- * - 400 = Validierungsfehler (Login: Zugangsdaten fehlen; Registrierung:
- *   DTO-Validierung)
- * - 401 = Zugangsdaten ungueltig (Login)
- * - 409 = Benutzername bereits vergeben (nur Registrierung)
- * - 500 = Session-Fehler (Login)
+ * Status semantics of the auth endpoints (contract with apps/api):
+ * - 429 = rate limit (login and registration)
+ * - 501 = function not enabled (login/registration disabled)
+ * - 400 = validation error (login: credentials missing; registration:
+ *   DTO validation)
+ * - 401 = invalid credentials (login)
+ * - 409 = username already taken (registration only)
+ * - 500 = session error (login)
  */
 export function localizeAuthError(
   t: Translator,

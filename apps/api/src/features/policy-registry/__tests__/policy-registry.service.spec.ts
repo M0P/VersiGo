@@ -8,23 +8,23 @@ import { PortalConnectorService } from '../../portal-connectors/portal-connector
 import { experimentalMailboxSyncPlugin } from '../../portal-connectors/experimental-mailbox.plugin';
 
 /**
- * Fake-EncryptionPort: reversibler Roundtrip (base64 mit Praefix), damit
- * Tests "nicht Klartext in der DB" und Entschluesselbarkeit pruefen koennen,
- * ohne echte AES-Schluessel konfigurieren zu muessen.
+ * Fake encryption port: reversible roundtrip (base64 with prefix), so tests
+ * can verify "no plain text in the DB" and decryptability without having to
+ * configure real AES keys.
  */
 function createFakeEncryption() {
   const encrypt = vi.fn(async (plain: string) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`);
   const decrypt = vi.fn(async (cipher: string) => {
     const match = /^enc:(.+)$/.exec(cipher);
-    if (!match) throw new Error('Ungueltiges Chiffrat-Format');
+    if (!match) throw new Error('Invalid cipher format');
     return Buffer.from(match[1], 'base64').toString('utf8');
   });
   return { encrypt, decrypt };
 }
 
 function createPortalConnectorService() {
-  // Wie das Modul (OnModuleInit): das experimentelle Plugin registrieren,
-  // damit Tests die Degradations-Regel pruefen koennen.
+  // Like the module (OnModuleInit): register the experimental plugin so the
+  // tests can verify the degradation rule.
   const registry = new PortalConnectorRegistry();
   registry.register(experimentalMailboxSyncPlugin);
   return new PortalConnectorService(registry);
@@ -98,7 +98,7 @@ describe('PolicyRegistryService', () => {
   });
 
   describe('create', () => {
-    it('erstellt eine Policy und protokolliert Audit-Ereignis', async () => {
+    it('creates a policy and logs an audit event', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.create.mockResolvedValue({
         id: policyId,
@@ -134,7 +134,7 @@ describe('PolicyRegistryService', () => {
       );
     });
 
-    it('verweigert Erstellung ohne Household-Mitgliedschaft', async () => {
+    it('refuses creation without household membership', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -149,7 +149,7 @@ describe('PolicyRegistryService', () => {
   });
 
   describe('findAll', () => {
-    it('gibt nur nicht-archivierte Policies zurueck', async () => {
+    it('returns only non-archived policies', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([
         { id: 'p1', householdId, coveredPersons: [], portalLinks: [] },
@@ -168,14 +168,14 @@ describe('PolicyRegistryService', () => {
   });
 
   describe('findOne', () => {
-    it('wirft NotFoundException bei fehlender Policy', async () => {
+    it('throws NotFoundException when the policy is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
       await expect(service.findOne(householdId, user, 'nonexistent')).rejects.toThrow(NotFoundException);
     });
 
-    it('gibt Policy mit allen Relationen zurueck', async () => {
+    it('returns the policy with all relations', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({
         id: policyId,
@@ -194,7 +194,7 @@ describe('PolicyRegistryService', () => {
   });
 
   describe('update', () => {
-    it('aktualisiert eine Policy und protokolliert Audit', async () => {
+    it('updates a policy and logs an audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'ADMIN' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.insurancePolicy.update.mockResolvedValue({
@@ -219,8 +219,8 @@ describe('PolicyRegistryService', () => {
     });
   });
 
-  describe('remove (archivieren)', () => {
-    it('archiviert eine Policy und protokolliert Audit', async () => {
+  describe('remove (archive)', () => {
+    it('archives a policy and logs an audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.insurancePolicy.update.mockResolvedValue({ id: policyId, archivedAt: new Date() });
@@ -240,7 +240,7 @@ describe('PolicyRegistryService', () => {
   });
 
   describe('hardDelete', () => {
-    it('loescht eine Policy endgueltig', async () => {
+    it('permanently deletes a policy', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.insurancePolicy.delete.mockResolvedValue({ id: policyId });
@@ -253,7 +253,7 @@ describe('PolicyRegistryService', () => {
   });
 
   describe('Covered Persons', () => {
-    it('fuegt versicherte Person hinzu mit Audit', async () => {
+    it('adds a covered person with audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.coveredPerson.create.mockResolvedValue({
@@ -276,7 +276,7 @@ describe('PolicyRegistryService', () => {
       );
     });
 
-    it('entfernt versicherte Person', async () => {
+    it('removes a covered person', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'ADMIN' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.coveredPerson.findFirst.mockResolvedValue({ id: 'cp-1', policyId });
@@ -290,7 +290,7 @@ describe('PolicyRegistryService', () => {
   });
 
   describe('Portal Account Links', () => {
-    it('erstellt Portal-Link mit Audit und Deeplink-Anreicherung', async () => {
+    it('creates a portal link with audit and deeplink enrichment', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, contractNumber: 'HUK-123' });
       mockDb.portalAccountLink.create.mockResolvedValue(makeLink());
@@ -300,13 +300,13 @@ describe('PolicyRegistryService', () => {
       });
 
       expect(result.providerKey).toBe('huk-coburg');
-      // Deeplink wird aus dem Katalog aufgeloest (Kernumfang).
+      // The deeplink is resolved from the catalog (core scope).
       expect(result.deepLinkUrl).toBe('https://meine.huk.de/');
-      // Katalog- und Connector-Sicht sind angereichert.
+      // Catalog and connector views are enriched.
       expect(result.catalog?.displayName).toBe('HUK-COBURG');
       expect(result.catalog?.accessHint).toBeTruthy();
       expect(result.credentialsSet).toBe(false);
-      // Kein Chiffrat-/Klartext-Feld in der Antwort.
+      // No cipher/plain-text field in the response.
       expect(result).not.toHaveProperty('credentialsEncrypted');
       expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -315,58 +315,58 @@ describe('PolicyRegistryService', () => {
       );
     });
 
-    it('speichert Credentials verschluesselt und nie im Klartext', async () => {
+    it('stores credentials encrypted and never in plain text', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, contractNumber: 'HUK-123' });
       mockDb.portalAccountLink.create.mockResolvedValue(
-        makeLink({ credentialsEncrypted: await encryption.encrypt(JSON.stringify({ portalUsername: 'max', portalPassword: 'geheim' })) }),
+        makeLink({ credentialsEncrypted: await encryption.encrypt(JSON.stringify({ portalUsername: 'max', portalPassword: 'secret' })) }),
       );
 
       const result = await service.createPortalLink(householdId, userId, policyId, {
         providerKey: 'huk-coburg',
-        credentials: { portalUsername: 'max', portalPassword: 'geheim' },
+        credentials: { portalUsername: 'max', portalPassword: 'secret' },
       });
 
-      // Die DB erhaelt ausschliesslich das Chiffrat, nie Klartext.
+      // The DB receives exclusively the cipher, never plain text.
       const createCall = mockDb.portalAccountLink.create.mock.calls[0][0] as {
         data: { credentialsEncrypted: string | null };
       };
       expect(createCall.data.credentialsEncrypted).toBeTruthy();
       expect(createCall.data.credentialsEncrypted).not.toContain('max');
-      expect(createCall.data.credentialsEncrypted).not.toContain('geheim');
+      expect(createCall.data.credentialsEncrypted).not.toContain('secret');
 
-      // Roundtrip: Entschluesselt sind die Werte identisch vorhanden.
+      // Roundtrip: after decryption the values are identically present.
       const decrypted = JSON.parse(
         await encryption.decrypt(createCall.data.credentialsEncrypted as string),
       );
-      expect(decrypted).toEqual({ portalUsername: 'max', portalPassword: 'geheim' });
+      expect(decrypted).toEqual({ portalUsername: 'max', portalPassword: 'secret' });
 
-      // Antwort enthaelt nur credentialsSet, nie die Werte.
+      // The response only contains credentialsSet, never the values.
       expect(result.credentialsSet).toBe(true);
-      expect(JSON.stringify(result)).not.toContain('geheim');
+      expect(JSON.stringify(result)).not.toContain('secret');
       expect(JSON.stringify(result)).not.toContain('portalPassword');
     });
 
-    it('auditiert Credentials-Aenderungen redigiert (ohne Werte)', async () => {
+    it('audits credential changes redacted (without values)', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, contractNumber: 'HUK-123' });
       mockDb.portalAccountLink.create.mockResolvedValue(makeLink());
 
       await service.createPortalLink(householdId, userId, policyId, {
         providerKey: 'huk-coburg',
-        credentials: { portalUsername: 'max', portalPassword: 'super-geheim' },
+        credentials: { portalUsername: 'max', portalPassword: 'super-secret' },
       });
 
       const auditData = mockDb.auditEvent.create.mock.calls[0][0] as { data: { diffJson: unknown } };
       const serialized = JSON.stringify(auditData.data.diffJson);
-      expect(serialized).not.toContain('super-geheim');
+      expect(serialized).not.toContain('super-secret');
       expect(serialized).not.toContain('portalPassword');
       expect(auditData.data.diffJson).toEqual(
         expect.objectContaining({ providerKey: 'huk-coburg', credentialsSet: true }),
       );
     });
 
-    it('lehnt leere Credentials ab (kein toter Datensatz)', async () => {
+    it('rejects empty credentials (no dead record)', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, contractNumber: 'HUK-123' });
 
@@ -379,7 +379,7 @@ describe('PolicyRegistryService', () => {
       expect(mockDb.portalAccountLink.create).not.toHaveBeenCalled();
     });
 
-    it('loescht Credentials bei credentials: null', async () => {
+    it('deletes credentials when credentials: null', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, contractNumber: 'HUK-123' });
       mockDb.portalAccountLink.findFirst.mockResolvedValue(makeLink({ credentialsEncrypted: 'enc:abc' }));
@@ -398,7 +398,7 @@ describe('PolicyRegistryService', () => {
       expect(auditData.data.diffJson).toEqual(expect.objectContaining({ credentialsSet: false }));
     });
 
-    it('Update ersetzt Zugangsdaten vollstaendig (Replace-Semantik)', async () => {
+    it('update replaces credentials completely (replace semantics)', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, contractNumber: 'HUK-123' });
       mockDb.portalAccountLink.findFirst.mockResolvedValue(
@@ -407,7 +407,7 @@ describe('PolicyRegistryService', () => {
       mockDb.portalAccountLink.update.mockResolvedValue(makeLink({ credentialsEncrypted: 'enc:neu' }));
 
       await service.updatePortalLink(householdId, userId, policyId, 'pl-1', {
-        credentials: { portalPassword: 'nur-passwort' },
+        credentials: { portalPassword: 'password-only' },
       });
 
       const updateCall = mockDb.portalAccountLink.update.mock.calls[0][0] as {
@@ -416,14 +416,14 @@ describe('PolicyRegistryService', () => {
       const decrypted = JSON.parse(
         await encryption.decrypt(updateCall.data.credentialsEncrypted as string),
       );
-      // Nur das uebermittelte Feld ist enthalten – kein Alt-Benutzername.
-      expect(decrypted).toEqual({ portalPassword: 'nur-passwort' });
+      // Only the submitted field is present – no old username.
+      expect(decrypted).toEqual({ portalPassword: 'password-only' });
     });
 
-    it('nicht verfuegbarer Connector beeintraechtigt den Portal-Link nicht', async () => {
+    it('an unavailable connector does not impair the portal link', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, contractNumber: 'HUK-123' });
-      // connectorKey verweist auf ein registriertes, aber DEAKTIVIERTES Plugin.
+      // connectorKey points to a registered but DEACTIVATED plugin.
       mockDb.portalAccountLink.create.mockResolvedValue(
         makeLink({ connectorKey: 'mailbox-sync-browser-automation' }),
       );
@@ -433,22 +433,22 @@ describe('PolicyRegistryService', () => {
         connectorKey: 'mailbox-sync-browser-automation',
       });
 
-      // Der Portal-Link funktioniert weiterhin (Deeplink vorhanden).
+      // The portal link still works (deeplink present).
       expect(result.deepLinkUrl).toBe('https://meine.huk.de/');
-      // Der Connector ist sichtbar, aber als deaktiviert markiert.
+      // The connector is visible but marked as deactivated.
       expect(result.connector).not.toBeNull();
       expect(result.connector?.available).toBe(false);
       expect(result.connector?.experimental).toBe(true);
     });
 
-    it('unbekannter Connector-Schluessel ergibt keine Connector-Sicht, aber intakten Link', async () => {
+    it('unknown connector key yields no connector view but an intact link', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId, contractNumber: 'HUK-123' });
-      mockDb.portalAccountLink.create.mockResolvedValue(makeLink({ connectorKey: 'unbekanntes-plugin' }));
+      mockDb.portalAccountLink.create.mockResolvedValue(makeLink({ connectorKey: 'unknown-plugin' }));
 
       const result = await service.createPortalLink(householdId, userId, policyId, {
         providerKey: 'huk-coburg',
-        connectorKey: 'unbekanntes-plugin',
+        connectorKey: 'unknown-plugin',
       });
 
       expect(result.connector).toBeNull();
@@ -457,8 +457,8 @@ describe('PolicyRegistryService', () => {
     });
   });
 
-  describe('Dashboard Pinning (BugFix-06, Teil 4)', () => {
-    it('pin setzt pinnedAt und protokolliert Audit-Ereignis', async () => {
+  describe('Dashboard Pinning (BugFix-06, part 4)', () => {
+    it('pin sets pinnedAt and logs an audit event', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.insurancePolicy.update.mockResolvedValue({
@@ -480,7 +480,7 @@ describe('PolicyRegistryService', () => {
       expect(auditData.data.diffJson.pinnedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
-    it('unpin setzt pinnedAt auf null und protokolliert Audit-Ereignis', async () => {
+    it('unpin sets pinnedAt to null and logs an audit event', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({
         id: policyId,
@@ -502,7 +502,7 @@ describe('PolicyRegistryService', () => {
       expect(auditData.data.action).toBe('UNPIN');
     });
 
-    it('pin/unpin werfen NotFoundException fuer fremde Policies', async () => {
+    it('pin/unpin throw NotFoundException for foreign policies', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
@@ -511,7 +511,7 @@ describe('PolicyRegistryService', () => {
       expect(mockDb.insurancePolicy.update).not.toHaveBeenCalled();
     });
 
-    it('findPinned liefert nur angepinnte Policies, neueste zuerst', async () => {
+    it('findPinned returns only pinned policies, newest first', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findMany.mockResolvedValue([
         {
@@ -541,10 +541,10 @@ describe('PolicyRegistryService', () => {
       expect(findManyCall.orderBy).toEqual({ pinnedAt: 'desc' });
     });
 
-    it('findPinned verweigert den Zugriff auf fremde Households', async () => {
+    it('findPinned denies access to foreign households', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
-      await expect(service.findPinned('household-fremd', user)).rejects.toThrow(ForbiddenException);
+      await expect(service.findPinned('household-foreign', user)).rejects.toThrow(ForbiddenException);
       expect(mockDb.insurancePolicy.findMany).not.toHaveBeenCalled();
     });
   });

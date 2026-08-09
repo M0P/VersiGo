@@ -44,7 +44,7 @@ describe('LoginRateLimiterService', () => {
   });
 
   describe('recordAttempt', () => {
-    it('erhoeht den Zaehler fuer eine IP', async () => {
+    it('increments the counter for an IP', async () => {
       // Mock Redis incr to return 1
       (service as unknown as { client: Redis }).client = {
         incr: vi.fn().mockResolvedValue(1),
@@ -58,7 +58,7 @@ describe('LoginRateLimiterService', () => {
       expect(count).toBe(1);
     });
 
-    it('setzt TTL beim ersten Versuch', async () => {
+    it('sets the TTL on the first attempt', async () => {
       const client = {
         incr: vi.fn().mockResolvedValue(1),
         pexpire: vi.fn().mockResolvedValue('OK'),
@@ -72,7 +72,7 @@ describe('LoginRateLimiterService', () => {
       expect(client.pexpire).toHaveBeenCalledWith('login:attempts:192.168.1.1', 900_000);
     });
 
-    it('nutzt den register-Scope fuer getrennte Zaehler', async () => {
+    it('uses the register scope for separate counters', async () => {
       const client = {
         incr: vi.fn().mockResolvedValue(1),
         pexpire: vi.fn().mockResolvedValue('OK'),
@@ -87,7 +87,7 @@ describe('LoginRateLimiterService', () => {
       expect(client.pexpire).toHaveBeenCalledWith('register:attempts:192.168.1.1', 900_000);
     });
 
-    it('gibt 1 bei Redis-Fehler zurueck (Fail-Open)', async () => {
+    it('returns 1 on a Redis error (fail-open)', async () => {
       const client = {
         incr: vi.fn().mockRejectedValue(new Error('Redis down')),
         pexpire: vi.fn(),
@@ -103,7 +103,7 @@ describe('LoginRateLimiterService', () => {
   });
 
   describe('isBlocked', () => {
-    it('gibt true zurueck wenn Grenze ueberschritten', async () => {
+    it('returns true when the limit is exceeded', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),
@@ -117,7 +117,7 @@ describe('LoginRateLimiterService', () => {
       expect(blocked).toBe(true);
     });
 
-    it('gibt false zurueck wenn Grenze nicht ueberschritten', async () => {
+    it('returns false when the limit is not exceeded', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),
@@ -131,7 +131,7 @@ describe('LoginRateLimiterService', () => {
       expect(blocked).toBe(false);
     });
 
-    it('gibt false zurueck wenn kein Eintrag existiert', async () => {
+    it('returns false when no entry exists', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),
@@ -145,7 +145,7 @@ describe('LoginRateLimiterService', () => {
       expect(blocked).toBe(false);
     });
 
-    it('prueft den register-Scope getrennt vom Login-Zaehler', async () => {
+    it('checks the register scope separately from the login counter', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),
@@ -160,7 +160,7 @@ describe('LoginRateLimiterService', () => {
       expect(blocked).toBe(true);
     });
 
-    it('gibt false bei Redis-Fehler zurueck (Fail-Open)', async () => {
+    it('returns false on a Redis error (fail-open)', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),
@@ -176,7 +176,7 @@ describe('LoginRateLimiterService', () => {
   });
 
   describe('resetAttempts', () => {
-    it('loescht den Eintrag fuer eine IP', async () => {
+    it('deletes the entry for an IP', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),
@@ -190,7 +190,7 @@ describe('LoginRateLimiterService', () => {
       expect(client.del).toHaveBeenCalledWith('login:attempts:192.168.1.1');
     });
 
-    it('loescht den register-Scope-Eintrag getrennt', async () => {
+    it('deletes the register scope entry separately', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),
@@ -206,7 +206,7 @@ describe('LoginRateLimiterService', () => {
   });
 
   describe('onModuleDestroy', () => {
-    it('schliesst die Redis-Verbindung beim Herunterfahren', async () => {
+    it('closes the Redis connection on shutdown', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),
@@ -221,7 +221,7 @@ describe('LoginRateLimiterService', () => {
       expect(client.quit).toHaveBeenCalled();
     });
 
-    it('wirft keinen Fehler bei fehlschlagendem quit', async () => {
+    it('does not throw when quit fails', async () => {
       const client = {
         incr: vi.fn(),
         pexpire: vi.fn(),

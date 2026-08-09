@@ -6,28 +6,26 @@ import { getBootPreloadKeys, getSettingDefinition } from './settings-catalog';
 import { validateSettingValue } from './settings-validation';
 
 /**
- * Boot-Preload fuer Konstruktionszeit-Settings (AP-17/BugFix-05).
+ * Boot preload for construction-time settings (AP-17/BugFix-05).
  *
- * Kategorie-4-Werte ("nicht dynamisch anwendbar") werden ueber die
- * Admin-UI in der Datenbank gespeichert und erst beim naechsten
- * Prozessstart aktiv. Diese Funktion liest sie VOR der Nest-DI-
- * Initialisierung aus der Datenbank und schreibt sie in die
- * Umgebungsvariable, damit Konstruktionszeit-Konsumenten (z. B.
- * Rate-Limiter, OIDC-Strategie) die DB-Werte sehen.
+ * Category-4 values ("not dynamically applicable") are stored via the
+ * admin UI in the database and only become active at the next process
+ * start. This function reads them from the database BEFORE the Nest DI
+ * initialization and writes them into the environment so that
+ * construction-time consumers (e.g. rate limiter, OIDC strategy) see
+ * the DB values.
  *
- * Garantien:
- * - Fail-soft: Ist die Datenbank beim Start nicht erreichbar oder
- *   fehlt die Env-Konfiguration, wird der Preload uebersprungen und
- *   die App startet mit der reinen `.env`-Konfiguration (Log-Warnung).
- * - Zeitgebunden: Der gesamte Preload ist mit einer Obergrenze
- *   (Default 15 s) versehen. Haengt der DB-Zugriff (z. B. Verbindungs-
- *   Timeout, ausgelasteter Pool), gibt der Preload nach Ablauf auf und
- *   die App startet trotzdem – ein App-Start darf nie am Preload
- *   haengen bleiben.
- * - Es werden nur katalogisierte `restart`-Schluessel sowie Secrets
- *   mit `bootActivation` (z. B. OIDC_CLIENT_SECRET) uebertragen;
- *   keine bootstrap-Werte.
- * - Wird von API- und Worker-main.ts vor NestFactory aufgerufen.
+ * Guarantees:
+ * - Fail-soft: if the database is unreachable at startup or the env
+ *   configuration is missing, the preload is skipped and the app starts
+ *   with the plain `.env` configuration (log warning).
+ * - Time-bound: the whole preload has an upper limit (default 15 s).
+ *   If the DB access hangs (e.g. connection timeout, saturated pool),
+ *   the preload gives up after the limit and the app still starts — an
+ *   app start must never hang on the preload.
+ * - Only catalogued `restart` keys and secrets with `bootActivation`
+ *   (e.g. OIDC_CLIENT_SECRET) are transferred; no bootstrap values.
+ * - Called from API and worker main.ts before NestFactory.
  */
 const PRELOAD_TIMED_OUT = 'PRELOAD_TIMED_OUT';
 
@@ -42,7 +40,7 @@ export async function preloadRestartSettingsIntoEnv(
   const encryptionKeyHex = env.SETTINGS_ENCRYPTION_KEY;
   if (!databaseUrl || !encryptionKeyHex) {
     Logger.warn(
-      'Settings-Preload uebersprungen: DATABASE_URL oder SETTINGS_ENCRYPTION_KEY fehlt.',
+      'Settings preload skipped: DATABASE_URL or SETTINGS_ENCRYPTION_KEY is missing.',
       'SettingsPreload',
     );
     return 0;
@@ -65,10 +63,10 @@ export async function preloadRestartSettingsIntoEnv(
       for (const row of rows) {
         const definition = getSettingDefinition(row.key);
         if (!definition) {
-          // Unbekannter Schluessel (z. B. aus Legacy-Eintraegen): nie in die
-          // Umgebung uebernehmen – die Allowlist gilt ausnahmslos.
+          // Unknown key (e.g. from legacy entries): never adopt into the
+          // environment — the allowlist applies without exception.
           Logger.warn(
-            `Settings-Preload: Schluessel '${row.key}' ist nicht im Katalog (Allowlist) – uebersprungen.`,
+            `Settings preload: key '${row.key}' is not in the catalog (allowlist) – skipped.`,
             'SettingsPreload',
           );
           skipped += 1;
@@ -80,43 +78,44 @@ export async function preloadRestartSettingsIntoEnv(
           : (row.valuePlain ?? null);
         if (rawValue === null) continue;
 
-        // Typstrikte Validierung gegen die Katalog-Definition: Ein ungueltiger
-        // DB-Wert wird NIE in die Umgebung geschrieben (sonst koennte der
-        // AppConfigService beim Boot hart scheitern – Fail-soft-Garantie).
+        // Strictly typed validation against the catalog definition: an
+        // invalid DB value is NEVER written into the environment (otherwise
+        // the AppConfigService could fail hard during boot — fail-soft
+        // guarantee).
         const validated = validateSettingValue(definition, rawValue);
         if (!validated.ok) {
           Logger.warn(
-            `Settings-Preload: DB-Wert fuer '${row.key}' ungueltig (${validated.error}) – ` +
-              'nicht uebernommen, .env/Default bleibt aktiv.',
+            `Settings preload: DB value for '${row.key}' invalid (${validated.error}) – ` +
+              'not applied, .env/default stays active.',
             'SettingsPreload',
           );
           skipped += 1;
           continue;
         }
 
-        // Kanonische Form schreiben, damit Env-Konsumenten genau den Wert
-        // sehen, den auch die Validierung/Aufloesung verwenden.
+        // Write the canonical form so that env consumers see exactly the
+        // value that validation/resolution also use.
         env[row.key] = validated.canonical;
         applied += 1;
       }
       if (applied > 0 || skipped > 0) {
         Logger.log(
-          `Settings-Preload: ${applied} Neustart-Setting(s) aus der Datenbank uebernommen` +
-            (skipped > 0 ? `, ${skipped} ungueltige/r uebersprungen` : '') +
+          `Settings preload: ${applied} restart setting(s) applied from the database` +
+            (skipped > 0 ? `, ${skipped} invalid skipped` : '') +
             '.',
           'SettingsPreload',
         );
       }
       return applied;
     } finally {
-      // Disconnect darf den Start ebenfalls nicht blockieren.
+      // Disconnect must not block the startup either.
       await prisma.$disconnect().catch(() => undefined);
     }
   };
 
   const timeout = new Promise<number | typeof PRELOAD_TIMED_OUT>((resolve) => {
     const timer = setTimeout(() => resolve(PRELOAD_TIMED_OUT), timeoutMs);
-    // Der Timer soll den Prozess-Exit nicht kuenstlich verzoegern.
+    // The timer must not artificially delay the process exit.
     timer.unref?.();
   });
 
@@ -124,8 +123,8 @@ export async function preloadRestartSettingsIntoEnv(
     const result = await Promise.race([work(), timeout]);
     if (result === PRELOAD_TIMED_OUT) {
       Logger.warn(
-        `Settings-Preload uebersprungen (Zeitueberschreitung nach ${timeoutMs} ms): ` +
-          'DB-Zugriff haengt – die App startet mit der .env-Konfiguration.',
+        `Settings preload skipped (timeout after ${timeoutMs} ms): ` +
+          'DB access hangs – the app starts with the .env configuration.',
         'SettingsPreload',
       );
       return 0;
@@ -133,9 +132,9 @@ export async function preloadRestartSettingsIntoEnv(
     return result;
   } catch (error) {
     Logger.warn(
-      `Settings-Preload uebersprungen (Datenbank nicht erreichbar?): ${
-        error instanceof Error ? error.message : 'unbekannter Fehler'
-      } – die App startet mit der .env-Konfiguration.`,
+      `Settings preload skipped (database unreachable?): ${
+        error instanceof Error ? error.message : 'unknown error'
+      } – the app starts with the .env configuration.`,
       'SettingsPreload',
     );
     return 0;

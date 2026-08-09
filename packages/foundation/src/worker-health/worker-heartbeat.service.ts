@@ -4,40 +4,39 @@ import { DatabaseService } from '../database';
 import { AppConfigService } from '../config';
 
 export interface WorkerHeartbeatStatus {
-  /** 'up' = Heartbeat frisch, 'down' = Heartbeat veraltet, 'unknown' = noch nie gesehen */
+  /** 'up' = fresh heartbeat, 'down' = stale heartbeat, 'unknown' = never seen */
   worker: 'up' | 'down' | 'unknown';
   lastSeenAt: string | null;
   workerId: string | null;
 }
 
 /**
- * AP-19: Worker-Heartbeat.
+ * AP-19: worker heartbeat.
  *
- * Der Worker ruft `start()` beim Boot auf und schreibt danach regelmaessig
- * einen Heartbeat (Upsert auf `workerId`) in die Datenbank. Die API liest
- * ueber `getStatus()` den aktuellsten Heartbeat, um in GET /ready den
- * Worker-Zustand (up/down/unknown) auszuweisen.
+ * The worker calls `start()` during boot and then periodically writes
+ * a heartbeat (upsert on `workerId`) into the database. The API reads
+ * the most recent heartbeat via `getStatus()` to report the worker
+ * state (up/down/unknown) in GET /ready.
  *
- * Wichtig: `start()` wird NUR im Worker-Prozess aufgerufen. Der API-Prozess
- * injiziert denselben Service (via WorkerHealthFoundationModule), nutzt
- * aber ausschliesslich `getStatus()` – dadurch kann die API niemals als
- * Worker "erscheinen".
+ * Important: `start()` is only called in the worker process. The API
+ * process injects the same service (via WorkerHealthFoundationModule)
+ * but only uses `getStatus()` — so the API can never "appear" as a worker.
  *
- * Es werden keine sensiblen Daten geschrieben/gelesen, nur Worker-Identitaet
- * (Hostname) und Zeitstempel. Ein Redis-Ausfall ist nicht relevant, da der
- * Heartbeat in PostgreSQL liegt; ein DB-Ausfall degradiert fail-soft
- * (Warnung, kein Prozessabbruch).
+ * No sensitive data is written/read, only the worker identity (hostname)
+ * and timestamps. A Redis outage is irrelevant because the heartbeat
+ * lives in PostgreSQL; a DB outage degrades fail-soft (warning, no
+ * process abort).
  */
 @Injectable()
 export class WorkerHeartbeatService implements OnModuleDestroy {
   /**
-   * Retentionsfenster fuer verwaiste Heartbeat-Rows. Da `workerId` den
-   * Prozess-PID enthaelt, bleibt nach jedem Worker-Neustart eine alte Row
-   * liegen; `start()` raeumt solche Rows (aelter als dieses Fenster) auf.
-   * Aktive Worker aktualisieren alle `intervalMs` (Default 15s) und sind
-   * damit weit vor dem Fenster sicher vor dem Aufraeumen.
+   * Retention window for orphaned heartbeat rows. Because `workerId`
+   * contains the process PID, an old row remains after every worker
+   * restart; `start()` prunes such rows (older than this window).
+   * Active workers update every `intervalMs` (default 15s) and are
+   * therefore safely ahead of the window before pruning.
    */
-  private static readonly PRUNE_RETENTION_MS = 60 * 60 * 1000; // 1 Stunde
+  private static readonly PRUNE_RETENTION_MS = 60 * 60 * 1000; // 1 hour
 
   private readonly logger = new Logger(WorkerHeartbeatService.name);
   private timer?: NodeJS.Timeout;
@@ -54,7 +53,7 @@ export class WorkerHeartbeatService implements OnModuleDestroy {
     this.timeoutMs = config.get('WORKER_HEARTBEAT_TIMEOUT_MS');
   }
 
-  /** Startet das Heartbeat-Intervall. Nur im Worker-Prozess aufrufen. */
+  /** Starts the heartbeat interval. Only call in the worker process. */
   start(): void {
     if (this.timer) return;
     void this.pruneStaleHeartbeats();
@@ -64,8 +63,8 @@ export class WorkerHeartbeatService implements OnModuleDestroy {
   }
 
   /**
-   * Loescht verwaiste Heartbeat-Rows (fail-soft: Fehler werden nur geloggt,
-   * das Starten des Workers wird nie durch die Aufraeumung blockiert).
+   * Deletes orphaned heartbeat rows (fail-soft: errors are only logged,
+   * the worker startup is never blocked by the cleanup).
    */
   private async pruneStaleHeartbeats(): Promise<void> {
     try {
@@ -75,12 +74,12 @@ export class WorkerHeartbeatService implements OnModuleDestroy {
       });
     } catch (error) {
       this.logger.warn(
-        `Heartbeat-Aufraeumung fehlgeschlagen: ${(error as Error).message}`,
+        `Heartbeat cleanup failed: ${(error as Error).message}`,
       );
     }
   }
 
-  /** Stoppt das Heartbeat-Intervall (z. B. beim Herunterfahren). */
+  /** Stops the heartbeat interval (e.g. on shutdown). */
   stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
@@ -89,7 +88,7 @@ export class WorkerHeartbeatService implements OnModuleDestroy {
   }
 
   /**
-   * Schreibt einen Heartbeat (fail-soft: Fehler werden geloggt, werfen nie).
+   * Writes a heartbeat (fail-soft: errors are logged, never thrown).
    */
   async writeHeartbeat(): Promise<void> {
     try {
@@ -106,14 +105,14 @@ export class WorkerHeartbeatService implements OnModuleDestroy {
       });
     } catch (error) {
       this.logger.warn(
-        `Worker-Heartbeat konnte nicht geschrieben werden: ${(error as Error).message}`,
+        `Worker heartbeat could not be written: ${(error as Error).message}`,
       );
     }
   }
 
   /**
-   * Liest den aktuellsten Heartbeat und bewertet ihn gegen den konfigurierten
-   * Timeout. Fail-soft: Bei DB-Fehlern wird 'unknown' geliefert.
+   * Reads the most recent heartbeat and evaluates it against the configured
+   * timeout. Fail-soft: 'unknown' is returned on DB errors.
    */
   async getStatus(): Promise<WorkerHeartbeatStatus> {
     try {

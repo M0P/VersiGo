@@ -57,8 +57,8 @@ export class DocumentsService {
     private readonly db: DatabaseService,
     private readonly config: AppConfigService,
     private readonly authService: AuthService,
-    // BugFix-07 (Q3): Adapter fuer Paperless-Links. Degradiert selbst
-    // kontrolliert (null/leere Ergebnisse), wenn Paperless deaktiviert ist.
+    // BugFix-07 (Q3): adapter for Paperless links. Degrades itself in a
+    // controlled way (null/empty results) when Paperless is disabled.
     @Inject(PAPERLESS_ADAPTER) private readonly paperless: IPaperlessAdapter,
   ) {
     this.storagePath = path.resolve(config.get('DOCUMENTS_STORAGE_PATH'));
@@ -66,7 +66,7 @@ export class DocumentsService {
 
   private assertValidId(id: string, label: string): void {
     if (!UUID_REGEX.test(id)) {
-      throw new BadRequestException(`${label} ist keine gueltige UUID`);
+      throw new BadRequestException(`${label} is not a valid UUID`);
     }
   }
 
@@ -74,7 +74,7 @@ export class DocumentsService {
     const root = path.resolve(this.storagePath) + path.sep;
     const resolved = path.resolve(this.storagePath, ...segments);
     if (!resolved.startsWith(root)) {
-      throw new ForbiddenException('Ungueltiger Pfad');
+      throw new ForbiddenException('Invalid path');
     }
     return resolved;
   }
@@ -84,7 +84,7 @@ export class DocumentsService {
       where: { householdId_userId: { householdId, userId } },
     });
     if (!membership) {
-      throw new ForbiddenException('Isolation: kein Zugriff auf fremdes Household');
+      throw new ForbiddenException('Isolation: no access to a foreign household');
     }
   }
 
@@ -96,7 +96,7 @@ export class DocumentsService {
     });
 
     if (!policy) {
-      throw new NotFoundException('Versicherung nicht gefunden');
+      throw new NotFoundException('Policy not found');
     }
   }
 
@@ -106,21 +106,21 @@ export class DocumentsService {
 
     const valid = signatures.some((sig) => sig.equals(buffer.subarray(0, sig.length)));
     if (!valid) {
-      throw new BadRequestException('Datei-Inhalt stimmt nicht mit dem angegebenen Dateityp überein');
+      throw new BadRequestException('File content does not match the declared file type');
     }
   }
 
   private validateFile(file: UploadedFile): void {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      throw new BadRequestException(`Dateityp ${file.mimetype} ist nicht erlaubt`);
+      throw new BadRequestException(`File type ${file.mimetype} is not allowed`);
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      throw new BadRequestException(`Datei überschreitet das maximale Limit von ${MAX_FILE_SIZE / 1024 / 1024} MB`);
+      throw new BadRequestException(`File exceeds the maximum limit of ${MAX_FILE_SIZE / 1024 / 1024} MB`);
     }
 
     if (file.originalname.length > 255) {
-      throw new BadRequestException('Dateiname ist zu lang (max. 255 Zeichen)');
+      throw new BadRequestException('Filename is too long (max. 255 characters)');
     }
 
     this.validateFileMagicBytes(file.mimetype, file.buffer);
@@ -169,7 +169,7 @@ export class DocumentsService {
     policyId: string,
     docId: string,
   ): Promise<{ document: { id: string; fileName: string; mimeType: string | null }; filePath: string }> {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const document = await this.db.policyDocument.findFirst({
@@ -177,7 +177,7 @@ export class DocumentsService {
     });
 
     if (!document) {
-      throw new NotFoundException('Dokument nicht gefunden');
+      throw new NotFoundException('Document not found');
     }
 
     const filePath = this.resolveSafePath(policyId, docId, docId);
@@ -204,7 +204,7 @@ export class DocumentsService {
       });
 
       if (existing) {
-        throw new BadRequestException('Ein Dokument mit derselben Prüfsumme existiert bereits');
+        throw new BadRequestException('A document with the same checksum already exists');
       }
 
       return tx.policyDocument.create({
@@ -267,7 +267,7 @@ export class DocumentsService {
   }
 
   async findAll(householdId: string, user: AuthenticatedUser, policyId: string) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const documents = await this.db.policyDocument.findMany({
@@ -276,9 +276,9 @@ export class DocumentsService {
       take: 200,
     });
 
-    // BugFix-07 (Q3): Fuer PAPERLESS_LINK-Dokumente den Deep-Link in die
-    // Paperless-UI mitliefern (fehlertolerant – bei Paperless-Ausfall bleibt
-    // der Link null und die UI zeigt nur die Metadaten an).
+    // BugFix-07 (Q3): include the deep link into the Paperless UI for
+    // PAPERLESS_LINK documents (fault-tolerant - on a Paperless outage the
+    // link stays null and the UI only shows the metadata).
     return Promise.all(
       documents.map(async (doc) => {
         if (doc.storageType !== 'PAPERLESS_LINK' || !doc.storageRef) return doc;
@@ -289,19 +289,18 @@ export class DocumentsService {
   }
 
   /**
-   * BugFix-07 (Q3): Bindet ein Paperless-Dokument als PolicyDocument
-   * (storageType PAPERLESS_LINK, storageRef = paperlessId). Dedupliziert pro
-   * (policyId, storageRef): Ein erneutes Verbinden desselben Dokuments
-   * liefert idempotent den bestehenden Eintrag zurueck. Das Dokument muss in
-   * Paperless existieren und der Adapter konfiguriert sein.
+   * BugFix-07 (Q3): binds a Paperless document as a PolicyDocument
+   * (storageType PAPERLESS_LINK, storageRef = paperlessId). Deduplicates per
+   * (policyId, storageRef): re-linking the same document idempotently
+   * returns the existing entry. The document must exist in Paperless and
+   * the adapter must be configured.
    *
-   * Race-sicher (BugFix-07, Code-Review): Check-then-Insert laeuft innerhalb
-   * EINER Transaktion. Parallel verbundene Requests, die beide den Check
-   * bestehen, werden durch den partiellen Unique-Index
-   * (policyId, storageRef) WHERE archivedAt IS NULL AND
-   * storageType = 'PAPERLESS_LINK' (Migration ..._bugfix07_paperless_link_dedupe)
-   * abgefangen: Der verlierende Writer erhaelt P2002 und es wird idempotent
-   * der bestehende Eintrag zurueckgegeben.
+   * Race-safe (BugFix-07, code review): check-then-insert runs inside ONE
+   * transaction. Concurrently linked requests that both pass the check are
+   * caught by the partial unique index (policyId, storageRef) WHERE
+   * archivedAt IS NULL AND storageType = 'PAPERLESS_LINK'
+   * (migration ..._bugfix07_paperless_link_dedupe): the losing writer gets
+   * P2002 and the existing entry is returned idempotently.
    */
   async linkPaperlessDocument(
     householdId: string,
@@ -314,7 +313,7 @@ export class DocumentsService {
     const metadata = await this.paperless.getDocumentMetadata(paperlessDocumentId);
     if (!metadata) {
       throw new NotFoundException(
-        'Dokument in Paperless nicht gefunden oder Paperless nicht konfiguriert',
+        'Document not found in Paperless or Paperless is not configured',
       );
     }
 
@@ -334,7 +333,7 @@ export class DocumentsService {
           data: {
             policyId,
             storageType: 'PAPERLESS_LINK',
-            fileName: metadata.title?.trim() || `Paperless-Dokument ${paperlessDocumentId}`,
+            fileName: metadata.title?.trim() || `Paperless document ${paperlessDocumentId}`,
             mimeType: null,
             fileSize: null,
             storageRef: String(paperlessDocumentId),
@@ -362,8 +361,8 @@ export class DocumentsService {
         return document;
       });
     } catch (error) {
-      // P2002 (Unique-Verletzung des partiellen Index) = ein paralleler
-      // Request hat denselben Link bereits angelegt: idempotent aufloesen.
+      // P2002 (unique violation of the partial index) = a parallel request
+      // has already created the same link: resolve idempotently.
       if ((error as { code?: string }).code === 'P2002') {
         const existing = await this.db.policyDocument.findFirst({
           where: {
@@ -380,7 +379,7 @@ export class DocumentsService {
   }
 
   async findOne(householdId: string, user: AuthenticatedUser, policyId: string, docId: string) {
-    // Wirft 403/404 je nach Rolle und Freigabe (READ_ONLY nur bei Share)
+    // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const document = await this.db.policyDocument.findFirst({
@@ -388,7 +387,7 @@ export class DocumentsService {
     });
 
     if (!document) {
-      throw new NotFoundException('Dokument nicht gefunden');
+      throw new NotFoundException('Document not found');
     }
 
     return document;
@@ -409,7 +408,7 @@ export class DocumentsService {
       });
 
       if (!existing) {
-        throw new NotFoundException('Dokument nicht gefunden');
+        throw new NotFoundException('Document not found');
       }
 
       const document = await tx.policyDocument.update({
@@ -472,7 +471,7 @@ export class DocumentsService {
       });
 
       if (!existing) {
-        throw new NotFoundException('Dokument nicht gefunden');
+        throw new NotFoundException('Document not found');
       }
 
       await tx.policyDocument.update({

@@ -9,18 +9,18 @@ function createGuard(enabled: boolean): FamilySharingGuard {
   return new FamilySharingGuard(capabilities as never);
 }
 
-describe('FamilySharingGuard (BugFix-05 Feature-Schalter)', () => {
-  it('erlaubt Zugriff, solange Familien-Freigaben aktiv sind (Default true)', async () => {
+describe('FamilySharingGuard (BugFix-05 feature flag)', () => {
+  it('allows access while family sharing is active (default true)', async () => {
     const guard = createGuard(true);
     await expect(guard.canActivate({} as never)).resolves.toBe(true);
   });
 
-  it('liefert 403, wenn FAMILY_SHARING_ENABLED=false', async () => {
+  it('returns 403 when FAMILY_SHARING_ENABLED=false', async () => {
     const guard = createGuard(false);
     await expect(guard.canActivate({} as never)).rejects.toThrow(ForbiddenException);
   });
 
-  it('fragt die Capability ueber den Resolver ab', async () => {
+  it('queries the capability through the resolver', async () => {
     const capabilities = {
       isEnabled: vi.fn().mockResolvedValue(true),
     };

@@ -7,25 +7,25 @@ import type { AuthenticatedUser } from '../identity/auth.service';
 import { UpdateProfileDto, ProfileResponseDto } from './dto/profile.dto';
 
 /**
- * Persoenliches Profil (AP-17).
+ * Personal profile (AP-17).
  *
- * Berechtigungsgrenze: NUR USER und ADMIN (Rollenhierarchie) – READ_ONLY
- * erhaelt ueber direkte Anfragen weder Profilwerte noch Aenderungsmoeglichkeiten.
+ * Permission boundary: only USER and ADMIN (role hierarchy) - READ_ONLY
+ * receives neither profile values nor change capabilities via direct requests.
  *
- * Route-Prefix: /user/profile
+ * Route prefix: /user/profile
  */
 @Controller('user/profile')
 @Roles(GlobalRole.USER)
 export class ProfileController {
   constructor(private readonly profile: ProfileService) {}
 
-  /** Eigenes Profil lesen. */
+  /** Read the own profile. */
   @Get()
   async get(@CurrentUser() user: AuthenticatedUser): Promise<ProfileResponseDto> {
     return this.profile.getProfile(user.id);
   }
 
-  /** Eigenes Profil aendern (nur persoenliche Felder). */
+  /** Change the own profile (only personal fields). */
   @Patch()
   async update(
     @CurrentUser() user: AuthenticatedUser,

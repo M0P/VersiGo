@@ -26,8 +26,8 @@ type SessionRequest = Request & {
     userId?: string;
     oidcCodeVerifier?: string;
     oidcState?: string;
-    // BugFix-07: Self-Service-Verknuepfung – der Callback bindet die
-    // Identitaet an den bereits angemeldeten User statt einzuloggen.
+    // BugFix-07: self-service linking – the callback binds the identity
+    // to the already logged-in user instead of logging in.
     oidcLinkMode?: boolean;
     regenerate: (callback: (err?: Error | null) => void) => void;
     destroy: (callback: () => void) => void;
@@ -46,11 +46,11 @@ export class AuthController {
   @Public()
   @Get('login')
   async login(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
-    // BugFix-05: oidc.isEnabled() ist seit der Resolver-Umstellung async.
+    // BugFix-05: oidc.isEnabled() has been async since the resolver change.
     if (!(await this.oidc.isEnabled())) {
       res.status(501).json({
         message:
-          'OIDC ist nicht konfiguriert. Setze OIDC_ENABLED=true und konfiguriere Issuer/Client/Callback.',
+          'OIDC is not configured. Set OIDC_ENABLED=true and configure issuer/client/callback.',
       });
       return;
     }
@@ -58,9 +58,9 @@ export class AuthController {
     const { url, codeVerifier, state } = await this.oidc.getAuthorizationUrl();
     req.session.oidcCodeVerifier = codeVerifier;
     req.session.oidcState = state;
-    // BugFix-07 (Code-Review, R2): Ein vom Self-Service-Link-Flow (POST
-    // /auth/oidc/link) zurueckgelassener oidcLinkMode darf den spaeteren
-    // Login-Callback nicht in den Link-Modus versetzen; hier defensiv loeschen.
+    // BugFix-07 (code review, R2): an oidcLinkMode left behind by the
+    // self-service link flow (POST /auth/oidc/link) must not put a later
+    // login callback into link mode; delete it defensively here.
     delete req.session.oidcLinkMode;
     res.redirect(url);
   }
@@ -76,31 +76,31 @@ export class AuthController {
     registrationEnabled: boolean;
   }> {
     const [oidcStatus, oidcConfigured, localEnabled] = await Promise.all([
-      // BugFix-07 (Befund 2): getStatus() trennt "Capability aktiv, aber
-      // Client/Discovery fehlgeschlagen oder Neustart fehlt" (oidcReady=false
-      // + oidcError) von "OIDC komplett deaktiviert" (oidcEnabled=false).
+      // BugFix-07 (finding 2): getStatus() separates "capability active, but
+      // client/discovery failed or restart missing" (oidcReady=false
+      // + oidcError) from "OIDC fully disabled" (oidcEnabled=false).
       this.oidc.getStatus(),
       this.capabilities.isEnabled('oidc'),
       this.capabilities.isEnabled('local'),
     ]);
     return {
-      // AP-16/Review-4: oidcEnabled darf nicht nur das Capability-Flag melden,
-      // sondern muss anzeigen, ob die Strategie tatsaechlich einsatzbereit ist
-      // (Discovery erfolgreich, Client gesetzt). Sonst wuerde die Login-Seite
-      // den OIDC-Button anbieten, obwohl /auth/login 501 liefert.
+      // AP-16/review-4: oidcEnabled must not only report the capability flag
+      // but must show whether the strategy is actually ready (discovery
+      // succeeded, client set). Otherwise the login page would offer the
+      // OIDC button even though /auth/login returns 501.
       oidcEnabled: oidcStatus.ready,
       oidcReady: oidcStatus.ready,
-      // BugFix-07: Roh-Capability, damit die UI "deaktiviert" (kein Button,
-      // keine Warnung) von "aktiviert, aber Neustart/Discovery fehlt"
-      // (Warnung + kein Button) unterscheiden kann.
+      // BugFix-07: raw capability so the UI can distinguish "disabled" (no
+      // button, no warning) from "enabled, but restart/discovery missing"
+      // (warning + no button).
       oidcConfigured,
-      // BugFix-07 (Code-Review, Minor): Der Oeffentliche Endpunkt darf keine
-      // internen Diagnose-Details (Discovery-URL, Issuer-Konfiguration etc.)
-      // leaken. Nur ein generischer Hinweis; die Detail-Fehlerbehandlung
-      // bleibt im Server-Log und im authentifizierten GET /auth/oidc/link
-      // (Settings-Area) sichtbar.
+      // BugFix-07 (code review, minor): the public endpoint must not leak
+      // internal diagnostic details (discovery URL, issuer configuration,
+      // etc.). Only a generic hint; detailed error handling stays visible in
+      // the server log and in the authenticated GET /auth/oidc/link
+      // (settings area).
       oidcError: oidcStatus.error
-        ? 'OIDC ist nicht verfuegbar (Details im Server-Log)'
+        ? 'OIDC is unavailable (see server log)'
         : null,
       localEnabled,
       registrationEnabled: localEnabled,
@@ -115,25 +115,24 @@ export class AuthController {
     @Body() body: RegisterLocalAccountDto,
   ): Promise<{ status: 'PENDING_APPROVAL' }> {
     if (!(await this.capabilities.isEnabled('local'))) {
-      // 501 (nicht 409): Registrierung ist NICHT aktiviert. Der Status
-      // unterscheidet sich bewusst von einem Namens-Konflikt (409,
-      // "Benutzername bereits vergeben") und spiegelt das 501-Verhalten des
-      // Login-Endpunkts wider – so kann die Web-UI Fehler ueber den
-      // HTTP-Status auf lokalisierte Meldungen abbilden (AP-21).
+      // 501 (not 409): registration is NOT enabled. The status deliberately
+      // differs from a name conflict (409, "username already taken") and
+      // mirrors the 501 behavior of the login endpoint – so the web UI can
+      // map errors to localized messages via the HTTP status (AP-21).
       throw new HttpException(
-        'Lokale Registrierung ist nicht konfiguriert',
+        'Local registration is not configured',
         HttpStatus.NOT_IMPLEMENTED,
       );
     }
 
-    // AP-16/ADR-007: Per-IP-Rate-Limit auf die Registrierung, damit die
-    // Admin-Freischalt-Warteschlange nicht durch Massen-Registrierungen
-    // ueberflutet werden kann (Scope "register", getrennt vom Login-Zaehler).
+    // AP-16/ADR-007: per-IP rate limit on registration so the admin
+    // approval queue cannot be flooded by mass registrations (scope
+    // "register", separate from the login counter).
     const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
     const blocked = await this.rateLimiter.isBlocked(ip, 'register');
     if (blocked) {
       throw new HttpException(
-        'Zu viele Registrierungsversuche. Bitte versuchen Sie es spaeter erneut.',
+        'Too many registration attempts. Please try again later.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -145,23 +144,23 @@ export class AuthController {
         password: body.password,
       });
     } catch (error) {
-      // Nur Konflikt-/Enumerationstreffer (409, z.B. "Benutzername bereits
-      // vergeben") zaehlen mit: Sie verraten, dass ein Konto existiert bzw.
-      // der Name belegt ist. Validierungsfehler (400) und unerwartete Fehler
-      // werden bewusst nicht gezahlt.
+      // Only conflict/enumeration hits (409, e.g. "username already taken")
+      // count: they reveal that an account exists or the name is taken.
+      // Validation errors (400) and unexpected errors are deliberately not
+      // counted.
       if (error instanceof ConflictException) {
         await this.rateLimiter.recordAttempt(ip, 'register');
       }
       throw error;
     }
 
-    // Auch erfolgreiche Registrierungen zaehlen: Eine IP kann pro Fenster nur
-    // eine begrenzte Anzahl neuer Pending-Konten erzeugen (kein Reset hier,
-    // sonst waere die Freischalt-Warteschlange weiterhin ueberflutbar).
+    // Successful registrations also count: an IP can only create a limited
+    // number of new pending accounts per window (no reset here, otherwise
+    // the approval queue would remain floodable).
     await this.rateLimiter.recordAttempt(ip, 'register');
 
-    // Kein Account-Detail in der Antwort: Die Registrierung ist immer mit
-    // Status PENDING_APPROVAL; erst Admins schalten frei.
+    // No account details in the response: registration always results in
+    // status PENDING_APPROVAL; only admins approve.
     return { status: 'PENDING_APPROVAL' };
   }
 
@@ -175,7 +174,7 @@ export class AuthController {
     if (!(await this.capabilities.isEnabled('local'))) {
       res.status(501).json({
         message:
-          'Lokale Anmeldung ist nicht konfiguriert. Setze LOCAL_AUTH_ENABLED=true.',
+          'Local login is not configured. Set LOCAL_AUTH_ENABLED=true.',
       });
       return;
     }
@@ -185,7 +184,7 @@ export class AuthController {
     if (blocked) {
       // Return generic error without revealing account existence
       res.status(429).json({
-        message: 'Anmeldeversuch fehlgeschlagen. Bitte versuchen Sie es spaeter erneut.',
+        message: 'Login attempt failed. Please try again later.',
       });
       return;
     }
@@ -194,7 +193,7 @@ export class AuthController {
     const password = body?.password ?? '';
 
     if (!username || !password) {
-      res.status(400).json({ message: 'Benutzername und Passwort sind erforderlich' });
+      res.status(400).json({ message: 'Username and password are required' });
       return;
     }
 
@@ -204,17 +203,17 @@ export class AuthController {
       await this.rateLimiter.recordAttempt(ip);
       // Generic error - does not reveal whether the username exists
       res.status(401).json({
-        message: 'Anmeldedaten sind ungueltig.',
+        message: 'Invalid credentials.',
       });
       return;
     }
 
-    // Success: Der Zaehler wird erst nach bestaetigter Session-Rotation
-    // zurueckgesetzt (nur bei erfolgreicher Regeneration), damit ein Fehler
-    // beim Session-Neuaufbau den Lockout nicht vorzeitig aufhebt.
+    // Success: the counter is only reset after confirmed session rotation
+    // (only on successful regeneration), so an error during session rebuild
+    // does not lift the lockout prematurely.
     req.session.regenerate(async (err?: Error | null) => {
       if (err) {
-        res.status(500).json({ message: 'Session-Fehler' });
+        res.status(500).json({ message: 'Session error' });
         return;
       }
       await this.rateLimiter.resetAttempts(ip);
@@ -259,12 +258,11 @@ export class AuthController {
       return;
     }
 
-    // BugFix-07: Self-Service-Verknuepfung. Der Callback laeuft im
-    // "Link-Modus", wenn POST /auth/oidc/link ihn gestartet hat: Die
-    // bestaetigte Identitaet (iss, sub) wird an den bereits angemeldeten
-    // User gebunden – KEINE Session-Rotation, KEIN Login. Ohne angemeldeten
-    // User ist der Link-Modus ungueltig (der Flow wurde von einer
-    // ausgeloggten Session gestartet oder die Session wurde ersetzt).
+    // BugFix-07: self-service linking. The callback runs in "link mode"
+    // when POST /auth/oidc/link started it: the verified identity (iss, sub)
+    // is bound to the already logged-in user – NO session rotation, NO
+    // login. Without a logged-in user the link mode is invalid (the flow
+    // was started from a logged-out session or the session was replaced).
     if (req.session.oidcLinkMode) {
       const userId = req.session.userId;
       delete req.session.oidcCodeVerifier;
@@ -283,7 +281,7 @@ export class AuthController {
         await this.authService.bindOidcIdentityForUser(userId, issuer, subject);
         res.redirect('/settings?oidc=linked');
       } catch (error) {
-        // 409: Identitaet bereits an ein anderes Konto gebunden.
+        // 409: identity already bound to another account.
         if (error instanceof ConflictException) {
           res.redirect('/settings?error=oidc-link-conflict');
           return;
@@ -311,8 +309,8 @@ export class AuthController {
   }
 
   /**
-   * BugFix-07: Self-Service-Verknuepfung (Q2). Status der OIDC-Bindung des
-   * angemeldeten Users. Authentifiziert (kein @Public).
+   * BugFix-07: self-service linking (Q2). Status of the OIDC binding of
+   * the logged-in user. Authenticated (no @Public).
    */
   @Get('oidc/link')
   async getOidcLink(@CurrentUser() user: AuthenticatedUser): Promise<{
@@ -336,9 +334,9 @@ export class AuthController {
   }
 
   /**
-   * BugFix-07: Startet den Link-Flow. Liefert die Provider-URL; die
-   * Session merkt sich den Link-Modus, damit der Callback die Identitaet
-   * bindet statt einzuloggen. 501, wenn OIDC nicht einsatzbereit ist.
+   * BugFix-07: starts the link flow. Returns the provider URL; the session
+   * remembers the link mode so the callback binds the identity instead of
+   * logging in. 501 when OIDC is not ready.
    */
   @Post('oidc/link')
   @HttpCode(HttpStatus.OK)
@@ -349,7 +347,7 @@ export class AuthController {
     const status = await this.oidc.getStatus();
     if (!status.ready) {
       throw new HttpException(
-        'OIDC ist nicht konfiguriert oder der Client konnte nicht initialisiert werden',
+        'OIDC is not configured or the client could not be initialized',
         HttpStatus.NOT_IMPLEMENTED,
       );
     }
@@ -362,8 +360,8 @@ export class AuthController {
   }
 
   /**
-   * BugFix-07: Loest die OIDC-Bindung des angemeldeten Users (nur die
-   * Bindung, nie das Konto). 409, wenn keine Bindung besteht.
+   * BugFix-07: removes the OIDC binding of the logged-in user (only the
+   * binding, never the account). 409 when no binding exists.
    */
   @Delete('oidc/link')
   @HttpCode(HttpStatus.NO_CONTENT)

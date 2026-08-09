@@ -23,12 +23,12 @@ const mockUser: AuthenticatedUser = {
 };
 
 describe('LanguageController', () => {
-  it('erlaubt auf Controller-Ebene bereits READ_ONLY (niedrigste Rolle)', () => {
+  it('already allows READ_ONLY at the controller level (lowest role)', () => {
     const roles = Reflect.getMetadata(ROLES_KEY, LanguageController);
     expect(roles).toContain(GlobalRole.READ_ONLY);
   });
 
-  it('get delegiert Nutzer, Sitzung und Accept-Language an den Service', async () => {
+  it('get delegates user, session and Accept-Language to the service', async () => {
     const service = createMockService();
     const controller = new LanguageController(service as never);
     service.resolveLanguage.mockResolvedValue({ language: 'de', persistence: 'session' });
@@ -46,7 +46,7 @@ describe('LanguageController', () => {
     );
   });
 
-  it('get toleriert fehlende Sitzung und fehlenden Accept-Language-Header', async () => {
+  it('get tolerates a missing session and a missing Accept-Language header', async () => {
     const service = createMockService();
     const controller = new LanguageController(service as never);
     service.resolveLanguage.mockResolvedValue({ language: 'en', persistence: 'session' });
@@ -57,7 +57,7 @@ describe('LanguageController', () => {
     expect(service.resolveLanguage).toHaveBeenCalledWith(mockUser, undefined, undefined);
   });
 
-  it('set delegiert Nutzer, Sitzung und DTO an den Service', async () => {
+  it('set delegates user, session and DTO to the service', async () => {
     const service = createMockService();
     const controller = new LanguageController(service as never);
     service.setLanguage.mockResolvedValue({ language: 'de', persistence: 'session' });

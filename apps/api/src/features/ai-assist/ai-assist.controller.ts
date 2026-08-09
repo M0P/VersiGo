@@ -21,7 +21,7 @@ export class AiAssistController {
   constructor(private readonly aiAssistService: AiAssistService) {}
 
   /**
-   * Startet einen asynchronen AI-Extraktions-Job.
+   * Starts an asynchronous AI extraction job.
    */
   @Post('extract')
   @Roles(GlobalRole.USER, GlobalRole.ADMIN)
@@ -34,7 +34,7 @@ export class AiAssistController {
   }
 
   /**
-   * Fuehrt eine Extraktion sofort durch (synchron, fuer Debug).
+   * Runs an extraction immediately (synchronous, for debugging).
    */
   @Post('extract-now')
   @Roles(GlobalRole.USER, GlobalRole.ADMIN)
@@ -45,13 +45,13 @@ export class AiAssistController {
   ) {
     const result = await this.aiAssistService.extractNow(householdId, user.id, dto.policyId);
     if (result === null) {
-      throw new NotFoundException('AI-Extraktion fehlgeschlagen oder AI deaktiviert');
+      throw new NotFoundException('AI extraction failed or AI is disabled');
     }
     return result;
   }
 
   /**
-   * Listet alle Extraktions-Jobs einer Police auf.
+   * Lists all extraction jobs of a policy.
    */
   @Get(':policyId/jobs')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
@@ -64,7 +64,7 @@ export class AiAssistController {
   }
 
   /**
-   * Ruft den Status eines bestimmten Extraktions-Jobs ab.
+   * Retrieves the status of a specific extraction job.
    */
   @Get(':policyId/jobs/:jobId')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
@@ -78,7 +78,7 @@ export class AiAssistController {
   }
 
   /**
-   * Erstellt eine Zusammenfassung des Versicherungsschutzes.
+   * Creates a summary of the insurance coverage.
    */
   @Post(':policyId/summarize')
   @Roles(GlobalRole.USER, GlobalRole.ADMIN)
@@ -89,13 +89,13 @@ export class AiAssistController {
   ) {
     const result = await this.aiAssistService.summarize(householdId, user.id, policyId);
     if (result === null) {
-      throw new NotFoundException('AI-Zusammenfassung fehlgeschlagen oder AI deaktiviert');
+      throw new NotFoundException('AI summarization failed or AI is disabled');
     }
     return result;
   }
 
   /**
-   * Ruft die letzte Zusammenfassung einer Police inklusive Quelldokument-Informationen ab.
+   * Returns the latest summary of a policy including source document information.
    */
   @Get(':policyId/summary')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
@@ -108,8 +108,8 @@ export class AiAssistController {
   }
 
   /**
-   * Prueft, ob AI fuer dieses Household konfiguriert und aktiv ist.
-   * Leichtgewichtiger Check ohne Policy-Kontext fuer die UI.
+   * Checks whether AI is configured and enabled for this household.
+   * Lightweight check without policy context for the UI.
    */
   @Get('status')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
@@ -120,7 +120,7 @@ export class AiAssistController {
   }
 
   /**
-   * Markiert ein Dokument als von AI-Verarbeitung ausgeschlossen.
+   * Marks a document as excluded from AI processing.
    */
   @Post(':policyId/documents/exclusion')
   @Roles(GlobalRole.USER, GlobalRole.ADMIN)
@@ -140,7 +140,7 @@ export class AiAssistController {
   }
 
   /**
-   * Prueft die Verbindung zum AI-Provider.
+   * Checks the connection to the AI provider.
    */
   @Get('health')
   @Roles(GlobalRole.USER, GlobalRole.ADMIN)

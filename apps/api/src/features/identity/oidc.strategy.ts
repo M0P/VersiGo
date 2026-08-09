@@ -5,16 +5,16 @@ import {
   SettingsResolverService,
   type AppConfig,
 } from '@versigo/foundation';
-// WICHTIG (BugFix-07, Code-Review R3): `AuthService` muss ein VALUE-Import
-// bleiben — mit `emitDecoratorMetadata: true` referenziert `design:paramtypes`
-// die Klasse zur Laufzeit fuer die NestJS-DI. Nicht auf `import type`
-// umstellen (wuerde die DI-Aufloesung beim Bootstrap brechen). Damit ist die
-// Kante `oidc.strategy -> auth.service` zur Laufzeit real und bildet zusammen
-// mit `auth.service.ts`'s Import von `normalizeIssuerUrl` einen zyklischen
-// Modulgraphen, dessen Sicherheit von der Lade-Reihenfolge abhaengt (heute
-// verifiziert: voller API-Boot + 813 Tests gruen). `auth.service.ts` darf
-// daher KEINE Modul-Auswertungszeit-Abhaengigkeit von oidc.strategy-Exports
-// einfuehren (nur Methoden-Level-Nutzung wie normalizeIssuerUrl).
+// IMPORTANT (BugFix-07, code review R3): `AuthService` must remain a VALUE
+// import — with `emitDecoratorMetadata: true`, `design:paramtypes` references
+// the class so it is available at runtime for NestJS DI. Do not switch it to
+// `import type` (would break DI resolution at bootstrap). This makes the edge
+// `oidc.strategy -> auth.service` real at runtime and, together with
+// `auth.service.ts`'s import of `normalizeIssuerUrl`, forms a cyclic module
+// graph whose safety depends on the load order (verified today: full API boot
+// + 813 tests green). `auth.service.ts` must therefore NOT introduce a module
+// evaluation-time dependency on oidc.strategy exports (only method-level
+// usage such as normalizeIssuerUrl).
 import { AuthService, AuthenticatedUser } from './auth.service';
 import { relaxedFetch } from '../../common/connectivity/relaxed-fetch';
 
@@ -31,14 +31,14 @@ import {
   type DiscoveryRequestOptions,
 } from 'openid-client';
 
-// openid-client v6 (gepinnt mit ^6.8.0) stellt die v5-Exporte (Issuer, Client,
-// generators) nicht mehr bereit und nutzt eine komplett neue API:
+// openid-client v6 (pinned with ^6.8.0) no longer provides the v5 exports
+// (Issuer, Client, generators) and uses a completely new API:
 //   discovery()     -> Configuration
 //   buildAuthorizationUrl(config, params)  -> URL
 //   authorizationCodeGrant(config, currentUrl, checks) -> TokenSet (+ claims())
 //   randomState() / randomPKCECodeVerifier() / calculatePKCECodeChallenge()
-// Der state-Check (checks.expectedState) und der PKCE-Code-Austausch werden
-// von authorizationCodeGrant intern durchgefuehrt (siehe openid-client/UPGRADE.md).
+// The state check (checks.expectedState) and the PKCE code exchange are
+// performed internally by authorizationCodeGrant (see openid-client/UPGRADE.md).
 
 export interface OidcCallbackRequest {
   protocol?: string;
@@ -47,26 +47,25 @@ export interface OidcCallbackRequest {
 }
 
 /**
- * Normalisiert eine OIDC-Issuer-URL fuer Vergleich und Speicherung: trimmt
- * und entfernt nachgestellte Slashes. "https://idp.example.com/" und
- * "https://idp.example.com" werden identisch behandelt; ohne diese
- * Normalisierung bestimmt die Trailing-Slash-Varianz, ob eine Bindung
- * (Admin-Eingabe) beim Login (claims.iss) wiederfindbar ist (ADR-007).
+ * Normalizes an OIDC issuer URL for comparison and storage: trims and
+ * removes trailing slashes. "https://idp.example.com/" and
+ * "https://idp.example.com" are treated identically; without this
+ * normalization the trailing-slash variance decides whether a binding
+ * (admin input) is findable again at login (claims.iss) (ADR-007).
  */
 export function normalizeIssuerUrl(issuer: string): string {
   return issuer.trim().replace(/\/+$/, '');
 }
 
-// ADR-007: OIDC ist ein optionaler, an ein lokales Konto gebundener zweiter
-// Login-Weg. Diese Strategie provisioniert keine Konten (kein Upsert): Ein
-// Login ist nur erfolgreich, wenn (issuer, subject) einem aktiven lokalen
-// Konto zugeordnet ist. Die Bindung nimmt ausschliesslich ein Admin vor
-// (POST /admin/users/:id/oidc-binding).
+// ADR-007: OIDC is an optional second login path bound to a local account.
+// This strategy does not provision accounts (no upsert): a login only
+// succeeds when (issuer, subject) is mapped to an active local account.
+// Only an admin performs the binding (POST /admin/users/:id/oidc-binding).
 @Injectable()
 export class OidcStrategy implements OnModuleInit {
   private readonly logger = new Logger(OidcStrategy.name);
   private client: Configuration | null = null;
-  /** BugFix-07: Diagnose-Daten fuer GET /auth/config (oidcReady/oidcError). */
+  /** BugFix-07: diagnostic data for GET /auth/config (oidcReady/oidcError). */
   private initError: string | null = null;
   private initAttempted = false;
 
@@ -78,25 +77,25 @@ export class OidcStrategy implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    // BugFix-05: Capability-Aufloesung ist seit der Resolver-Umstellung
-    // asynchron; OIDC ist restart-Kategorie, der DB-Wert wurde vom
-    // Boot-Preload bereits in process.env uebernommen. Ist die Datenbank
-    // beim Boot nicht erreichbar (Prisma-Verbindung lazy), faellt die
-    // Entscheidung auf den Umgebungs-Snapshot zurueck (Verhalten vor
-    // BugFix-05), damit der Boot nicht abgebrochen wird.
+    // BugFix-05: capability resolution has been async since the resolver
+    // change; OIDC is a restart category, the DB value was already applied
+    // to process.env by the boot preload. If the database is not reachable
+    // at boot (Prisma connection lazy), the decision falls back to the
+    // environment snapshot (behavior before BugFix-05) so the boot is not
+    // aborted.
     let oidcEnabled: boolean;
     try {
       oidcEnabled = await this.capabilities.isEnabled('oidc');
     } catch (error) {
       this.logger.warn(
-        'OIDC-Capability-Aufloesung fehlgeschlagen (DB nicht erreichbar?) – ' +
-          'Fallback auf Umgebungs-Konfiguration: ' +
+        'OIDC capability resolution failed (DB unreachable?) – ' +
+          'fallback to environment configuration: ' +
           `${error instanceof Error ? error.message : String(error)}`,
       );
       oidcEnabled = Boolean(this.config.get('OIDC_ENABLED' as keyof AppConfig));
     }
     if (!oidcEnabled) {
-      this.logger.log('OIDC deaktiviert (OIDC_ENABLED=false)');
+      this.logger.log('OIDC disabled (OIDC_ENABLED=false)');
       return;
     }
     await this.discoverClient();
@@ -107,67 +106,67 @@ export class OidcStrategy implements OnModuleInit {
     try {
       const issuerUrl = this.config.get('OIDC_ISSUER_URL');
       if (!issuerUrl) {
-        throw new Error('OIDC_ISSUER_URL nicht konfiguriert');
+        throw new Error('OIDC_ISSUER_URL not configured');
       }
       const callbackUrl = this.config.get('OIDC_CALLBACK_URL');
       if (!callbackUrl) {
-        throw new Error('OIDC_CALLBACK_URL nicht konfiguriert');
+        throw new Error('OIDC_CALLBACK_URL not configured');
       }
       const clientId = this.config.get('OIDC_CLIENT_ID');
       if (!clientId) {
-        throw new Error('OIDC_CLIENT_ID nicht konfiguriert');
+        throw new Error('OIDC_CLIENT_ID not configured');
       }
-      // BugFix-06 (Teil 2): TLS-/Endpoint-Lockerung fuer lokale IdPs mit
-      // selbst signierten Zertifikaten. Beide Flags sind Admin-Einstellungen
-      // der Kategorie `runtime` (Default false). Ist die Datenbank beim Boot
-      // nicht erreichbar, faellt die Aufloesung wie bei den Capabilities auf
-      // den Umgebungs-Snapshot zurueck (strikt, d.h. Lockerung deaktiviert).
+      // BugFix-06 (part 2): TLS/endpoint relaxation for local IdPs with
+      // self-signed certificates. Both flags are admin settings of the
+      // `runtime` category (default false). If the database is not reachable
+      // at boot, the resolution falls back to the environment snapshot like
+      // the capabilities (strict, i.e. relaxation disabled).
       const flags = await this.resolveConnectivityFlags();
       const options: DiscoveryRequestOptions = {};
       if (flags.allowPrivate) {
-        // Erlaubt http://-Issuer-URLs (typisch fuer IdPs im LAN).
-        // openid-client v6: die Lockerung erfolgt ueber die `execute`-Liste
-        // (Konfigurations-Mutator), NICHT ueber ein Boolean-Feld.
+        // Allows http:// issuer URLs (typical for LAN IdPs).
+        // openid-client v6: the relaxation happens via the `execute` list
+        // (configuration mutator), NOT via a boolean field.
         options.execute = [allowInsecureRequests];
       }
       if (flags.allowSelfSigned) {
-        // Selbst signierte Provider-Zertifikate: Alle OIDC-Requests
-        // (Discovery, Token, Userinfo) laufen dann ueber den TLS-lockernden
-        // relaxedFetch; alle uebrigen App-Requests behalten strikte Pruefung.
-        // `customFetch` ist in openid-client v6 ein Unique-Symbol-Schluessel
-        // (kein String-Feld) – daher die Computed-Property-Syntax.
+        // Self-signed provider certificates: all OIDC requests
+        // (discovery, token, userinfo) run through the TLS-relaxing
+        // relaxedFetch; all other app requests keep strict validation.
+        // `customFetch` is a unique symbol key in openid-client v6
+        // (no string field) – hence the computed property syntax.
         options[customFetch] = relaxedFetch;
       }
-      // Ohne explizites clientAuthentication waehlt die Configuration bei
-      // gesetztem client_secret automatisch ClientSecretPost (vgl. v5:
-      // client_secret im Client-Objekt). Ein public Client ohne Secret
-      // ergibt None() (Client-Credentials-freier Flow).
+      // Without an explicit clientAuthentication the Configuration
+      // automatically picks ClientSecretPost when client_secret is set
+      // (cf. v5: client_secret on the Client object). A public client
+      // without a secret yields None() (flow without client credentials).
       this.client = await discovery(new URL(issuerUrl), clientId, {
         redirect_uris: [callbackUrl],
         client_secret: this.config.get('OIDC_CLIENT_SECRET'),
       }, undefined, options);
       if (Object.keys(options).length > 0) {
         this.logger.log(
-          `OIDC-Client mit Lockerungen konfiguriert (allowInsecure=${flags.allowPrivate}, allowSelfSigned=${flags.allowSelfSigned})`,
+          `OIDC client configured with relaxations (allowInsecure=${flags.allowPrivate}, allowSelfSigned=${flags.allowSelfSigned})`,
         );
       }
-      this.logger.log(`OIDC-Client konfiguriert fuer Issuer ${issuerUrl}`);
+      this.logger.log(`OIDC client configured for issuer ${issuerUrl}`);
       this.initError = null;
     } catch (err) {
       this.initError = err instanceof Error ? err.message : String(err);
-      this.logger.error('OIDC-Client-Initialisierung fehlgeschlagen', this.initError);
+      this.logger.error('OIDC client initialization failed', this.initError);
     }
   }
 
   /**
-   * BugFix-07 (Befund 2): Diagnose fuer die Login-Seite und die
-   * Self-Service-Verknuepfung. Liefert, ob der OIDC-Client tatsaechlich
-   * einsatzbereit ist (Capability aktiv UND Discovery/Client-Setup ok) und
-   * eine fehlertolerante Kurzbeschreibung, warum nicht. `ready === false`
-   * ist der einzige Grund, warum die Login-Seite den OIDC-Button ausblendet –
-   * vor BugFix-07 fehlte diese Unterscheidung, sodass z.B. nach dem
-   * Aktivieren von OIDC ohne Neustart (Restart-Kategorie) oder bei einem
-   * Discovery-Fehler kein erklaerbarer Zustand entstand.
+   * BugFix-07 (finding 2): diagnostics for the login page and the
+   * self-service link flow. Returns whether the OIDC client is actually
+   * ready (capability active AND discovery/client setup ok) and a
+   * fault-tolerant short description of why not. `ready === false` is the
+   * only reason the login page hides the OIDC button – before BugFix-07
+   * this distinction was missing, so e.g. after enabling OIDC without a
+   * restart (restart category) or with a discovery error no explainable
+   * state existed.
    */
   async getStatus(): Promise<{ ready: boolean; error: string | null }> {
     if (!(await this.capabilities.isEnabled('oidc'))) {
@@ -176,27 +175,27 @@ export class OidcStrategy implements OnModuleInit {
     if (this.client !== null) {
       return { ready: true, error: null };
     }
-    // Capability ist aktiv, aber der Client fehlt. `initAttempted` trennt
-    // "Boot noch nicht durchgelaufen" (unwahrscheinlich, aber moeglich)
-    // von "Discovery/Client-Setup fehlgeschlagen".
+    // Capability is active but the client is missing. `initAttempted`
+    // separates "boot not yet completed" (unlikely but possible) from
+    // "discovery/client setup failed".
     return {
       ready: false,
       error: this.initAttempted
-        ? (this.initError ?? 'OIDC-Client-Initialisierung fehlgeschlagen')
-        : 'OIDC-Client wird noch initialisiert',
+        ? (this.initError ?? 'OIDC client initialization failed')
+        : 'OIDC client is still initializing',
     };
   }
 
   async isEnabled(): Promise<boolean> {
-    // BugFix-05: async (Resolver-basierte Capability-Aufloesung).
+    // BugFix-05: async (resolver-based capability resolution).
     return (await this.capabilities.isEnabled('oidc')) && this.client !== null;
   }
 
   /**
-   * Loeest die Konnektivitaets-Lockerungsflags der Kategorie `runtime` auf.
-   * Fallback bei DB-/Resolver-Ausfall: strikte Defaults (false) – eine
-   * fehlgeschlagene Aufloesung darf NIE zu einer ungewollten Lockerung
-   * der TLS-/Endpoint-Pruefung fuehren (Fail-Closed).
+   * Resolves the connectivity relaxation flags of the `runtime` category.
+   * Fallback on DB/resolver failure: strict defaults (false) - a failed
+   * resolution must NEVER lead to an unintended relaxation of the
+   * TLS/endpoint check (fail-closed).
    */
   private async resolveConnectivityFlags(): Promise<{ allowPrivate: boolean; allowSelfSigned: boolean }> {
     try {
@@ -207,8 +206,8 @@ export class OidcStrategy implements OnModuleInit {
       return { allowPrivate: allowPrivate ?? false, allowSelfSigned: allowSelfSigned ?? false };
     } catch (error) {
       this.logger.warn(
-        'Konnektivitaets-Flags nicht aufloesbar (DB nicht erreichbar?) – ' +
-          'OIDC ohne Lockerungen (strikt): ' +
+        'Connectivity flags not resolvable (DB unreachable?) – ' +
+          'OIDC without relaxations (strict): ' +
           `${error instanceof Error ? error.message : String(error)}`,
       );
       return { allowPrivate: false, allowSelfSigned: false };
@@ -216,11 +215,12 @@ export class OidcStrategy implements OnModuleInit {
   }
 
   /**
-   * Baut aus dem eingehenden Express-Request die vollstaendige Callback-URL.
-   * authorizationCodeGrant erwartet in v6 die tatsaechlich aufgerufene
-   * Redirect-URL (inkl. Query-Parameter) statt einer Parameter-Map. Unter
-   * "trust proxy" liefert req.protocol/req.get('host') die x-forwarded-*-Werte.
-   * Liefert null, wenn die URL nicht konstruierbar ist (dann: invalid-callback).
+   * Builds the complete callback URL from the incoming Express request.
+   * authorizationCodeGrant expects in v6 the actually called redirect URL
+   * (incl. query parameters) instead of a parameter map. Under
+   * "trust proxy" makes req.protocol/req.get('host') return the
+   * x-forwarded-* values. Returns null when the URL is not constructible
+   * (then: invalid-callback).
    */
   callbackParams(req: OidcCallbackRequest): URL | null {
     try {
@@ -236,11 +236,11 @@ export class OidcStrategy implements OnModuleInit {
 
   async getAuthorizationUrl(): Promise<{ url: string; codeVerifier: string; state: string }> {
     if (!this.client) {
-      throw new Error('OIDC nicht konfiguriert');
+      throw new Error('OIDC not configured');
     }
     const callbackUrl = this.config.get('OIDC_CALLBACK_URL');
     if (!callbackUrl) {
-      throw new Error('OIDC_CALLBACK_URL nicht konfiguriert');
+      throw new Error('OIDC_CALLBACK_URL not configured');
     }
     const codeVerifier = randomPKCECodeVerifier();
     const codeChallenge = await calculatePKCECodeChallenge(codeVerifier);
@@ -261,26 +261,26 @@ export class OidcStrategy implements OnModuleInit {
     expectedState: string,
   ): Promise<AuthenticatedUser> {
     if (!this.client) {
-      throw new UnauthorizedException('OIDC nicht konfiguriert');
+      throw new UnauthorizedException('OIDC not configured');
     }
 
     const { issuer, subject } = await this.exchangeAndGetClaims(currentUrl, codeVerifier, expectedState);
 
     const user = await this.authService.findByOidcIdentity(normalizeIssuerUrl(issuer), subject);
     if (!user) {
-      // Generischer Fehler: verraet weder Existenz noch Bindungsstatus.
-      throw new UnauthorizedException('OIDC-Anmeldung fehlgeschlagen');
+      // Generic error: reveals neither existence nor binding status.
+      throw new UnauthorizedException('OIDC authentication failed');
     }
 
     return user;
   }
 
   /**
-   * BugFix-07: Fuehrt den PKCE-Code-Austausch durch und extrahiert die
-   * Identitaets-Claims (iss, sub) OHNE Bindungs-Aufloesung. Wird vom
-   * Self-Service-Link-Callback genutzt, der eine noch ungebundene
-   * Identitaet an den angemeldeten Session-User binden muss. Der Ablauf
-   * (state-Check + PKCE) ist identisch zur Login-Validierung.
+   * BugFix-07: performs the PKCE code exchange and extracts the identity
+   * claims (iss, sub) WITHOUT binding resolution. Used by the self-service
+   * link callback, which receives an as-yet-unbound identity and
+   * must bind the identity to the logged-in session user. The flow
+   * (state check + PKCE) is identical to the login validation.
    */
   async exchangeIdentity(
     currentUrl: URL,
@@ -288,7 +288,7 @@ export class OidcStrategy implements OnModuleInit {
     expectedState: string,
   ): Promise<{ issuer: string; subject: string }> {
     if (!this.client) {
-      throw new UnauthorizedException('OIDC nicht konfiguriert');
+      throw new UnauthorizedException('OIDC not configured');
     }
     return this.exchangeAndGetClaims(currentUrl, codeVerifier, expectedState);
   }
@@ -300,26 +300,26 @@ export class OidcStrategy implements OnModuleInit {
   ): Promise<{ issuer: string; subject: string }> {
     let tokenSet: Awaited<ReturnType<typeof authorizationCodeGrant>>;
     try {
-      // authorizationCodeGrant validiert intern den state-Parameter
-      // (checks.expectedState) und fuehrt den PKCE-Code-Austausch durch.
+      // authorizationCodeGrant internally validates the state parameter
+      // (checks.expectedState) and performs the PKCE code exchange.
       tokenSet = await authorizationCodeGrant(this.client!, currentUrl, {
         expectedState,
         pkceCodeVerifier: codeVerifier,
       });
     } catch {
-      // Generischer Fehler: verraet weder Bindung noch Provider-Details.
-      throw new UnauthorizedException('OIDC-Anmeldung fehlgeschlagen');
+      // Generic error: reveals neither binding nor provider details.
+      throw new UnauthorizedException('OIDC authentication failed');
     }
 
     const claims = tokenSet.claims();
     if (!claims?.sub) {
-      throw new UnauthorizedException('OIDC-Token enthaelt keinen sub-Wert');
+      throw new UnauthorizedException('OIDC token does not contain a sub claim');
     }
-    // ADR-007: Kein Platzhalter-Issuer ('unknown') – ohne iss gibt es keine
-    // Bindung. OIDC-spezifikationskonforme Token enthalten iss immer.
+    // ADR-007: no placeholder issuer ('unknown') – without iss there is no
+    // binding. OIDC-spec-compliant tokens always contain iss.
     const issuer = claims.iss;
     if (!issuer) {
-      throw new UnauthorizedException('OIDC-Token enthaelt keinen iss-Wert');
+      throw new UnauthorizedException('OIDC token does not contain an iss claim');
     }
 
     return { issuer, subject: claims.sub };

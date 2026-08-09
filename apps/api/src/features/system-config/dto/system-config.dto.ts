@@ -1,10 +1,10 @@
 import { IsString, MaxLength, MinLength } from 'class-validator';
 
 /**
- * DTO zum Setzen/Aendern eines UI-konfigurierbaren System-Settings.
- * Der Wert ist immer ein String; die Katalog-Validierung (Typ, Min/Max,
- * allowedValues) erfolgt serverseitig in SystemConfigService – die
- * Allowlist gilt ausnahmslos.
+ * DTO for setting/changing a UI-configurable system setting.
+ * The value is always a string; the catalog validation (type, min/max,
+ * allowedValues) happens server-side in SystemConfigService – the
+ * allowlist applies without exception.
  */
 export class UpdateSystemConfigDto {
   @IsString()
@@ -14,8 +14,8 @@ export class UpdateSystemConfigDto {
 }
 
 /**
- * Ergebnis einer sicheren Connectivity-Pruefung fuer eine Integration.
- * Enthaelt niemals Secrets oder Klartext-Konfigurationswerte.
+ * Result of a safe connectivity check for an integration.
+ * Never contains secrets or plaintext configuration values.
  */
 export class ConnectivityTestResultDto {
   success!: boolean;
@@ -24,8 +24,8 @@ export class ConnectivityTestResultDto {
 }
 
 /**
- * Admin-UI-Ansicht eines katalogisierten Settings-Schluessels.
- * Secrets werden maskiert (`secret: true`, `secretSet` statt `effectiveValue`).
+ * Admin-UI view of a catalogued setting key.
+ * Secrets are masked (`secret: true`, `secretSet` instead of `effectiveValue`).
  */
 export class SystemConfigEntryDto {
   key!: string;
@@ -39,9 +39,9 @@ export class SystemConfigEntryDto {
   max!: number | null;
   connectivityTestable!: boolean;
   secret!: boolean;
-  /** Effektiver Wert; bei Secrets immer null (stattdessen secretSet). */
+  /** Effective value; always null for secrets (secretSet instead). */
   effectiveValue!: string | number | boolean | null;
-  /** Nur bei Secrets: ist ein Wert gesetzt (UI oder ENV)? */
+  /** Only for secrets: is a value set (UI or ENV)? */
   secretSet!: boolean | null;
   source!: 'UI' | 'ENV' | 'DEFAULT';
   reason!: string;
@@ -49,10 +49,10 @@ export class SystemConfigEntryDto {
   uiValueInvalid!: boolean;
   restartRequired!: boolean;
   /**
-   * Nur bei restart-Settings: validierter UI-Wert, der erst nach einem
-   * Neustart aktiv wird. `effectiveValue`/`source` beschreiben bis dahin
-   * den tatsaechlich aktiven Wert – der Neustart-Wert wird nie als bereits
-   * aktiv dargestellt.
+   * Only for restart settings: the validated UI value that only becomes
+   * active after a restart. Until then `effectiveValue`/`source` describe
+   * the actually active value – the restart value is never presented as
+   * already active.
    */
   pendingRestartValue!: string | number | boolean | null;
   uiUpdatedAt!: string | null;

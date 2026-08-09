@@ -241,6 +241,23 @@ On first start:
    migrations (the `migration` service), then starts
 3. `web` → starts after the API health check
 
+> **BugFix-11 (uploads volume ownership):** Since BugFix-11 the api/worker
+> images create `/data/uploads` with `appuser` ownership at build time, so
+> fresh named volumes (`uploads-data`) inherit `appuser` ownership on first
+> start (Docker/Podman copy-up preserves the image ownership). Deployments
+> that already created the volume **before** BugFix-11 must fix the ownership
+> once, otherwise document uploads fail with `EACCES`:
+>
+> ```bash
+> # Find the volume path (podman: podman volume inspect versigo_uploads-data --format '{{.Mountpoint}}')
+> podman unshare chown 100:101 <volume>/_data
+> # docker (rootful): chown -R 100:101 <volume>/_data
+> docker compose restart api worker
+> ```
+>
+> The Compose smoke test verifies the uploads directory is writable inside
+> the API container (step 4b).
+
 > **BugFix-07 (Q6):** `docker/start.sh` no longer runs `prisma migrate deploy`
 > itself — the api/worker runtime images do not contain the Prisma CLI. The
 > Compose `migration` service is the **canonical** migration path; the start

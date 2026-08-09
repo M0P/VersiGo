@@ -298,6 +298,25 @@ echo "$READY" | grep -q '"database":"up"' || { echo "FAILED: database is not up"
 echo "   Database status: up"
 echo "   PASS"
 
+# 4b. Uploads directory writable inside the API container (BugFix-11).
+# Fresh named volumes mounted at /data/uploads used to be created as
+# root:root by the container runtime, so appuser could not write there
+# (EACCES on POST .../documents). The image now creates /data/uploads with
+# appuser ownership; this probe proves it end-to-end with a touch+rm pair.
+echo "4b. Testing uploads directory writable inside the API container..."
+UPLOADS_PROBE=$($COMPOSE exec -T api sh -c 'probe="/data/uploads/.smoke-probe-$(date +%s)"; if touch "$probe" 2>/dev/null; then rm -f "$probe"; echo "writable"; else echo "NOT_WRITABLE"; fi' 2>/dev/null) || {
+  echo "FAILED: could not run uploads probe in API container"
+  printf '%s\n' "$UPLOADS_PROBE"
+  exit 1
+}
+echo "   Uploads probe: $UPLOADS_PROBE"
+if [ "$UPLOADS_PROBE" != "writable" ]; then
+  echo "FAILED: /data/uploads is not writable by appuser inside the API container"
+  $COMPOSE exec -T api ls -la /data/uploads || true
+  exit 1
+fi
+echo "   PASS"
+
 # 5. Local admin bootstrap + login (if admin credentials are configured)
 ADMIN_USERNAME="${LOCAL_ADMIN_USERNAME:-}"
 ADMIN_PASSWORD="${LOCAL_ADMIN_PASSWORD:-}"

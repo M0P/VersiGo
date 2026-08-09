@@ -5,9 +5,9 @@ import { AuditService } from './audit.service';
 import { ListAuditEventsQueryDto } from './audit.dto';
 
 /**
- * Audit-Event-API (AP-19). Nur globale ADMINs.
- * - `GET /admin/audit/events` – gefilterte, paginierte Liste (ohne diffJson-Inhalte)
- * - `GET /admin/audit/events/:id` – Detail inkl. redigiertem diffJson
+ * Audit event API (AP-19). Global ADMINs only.
+ * - `GET /admin/audit/events` – filtered, paginated list (without diffJson contents)
+ * - `GET /admin/audit/events/:id` – detail incl. redacted diffJson
  */
 @Controller('admin/audit')
 @Roles(GlobalRole.ADMIN)

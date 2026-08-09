@@ -5,9 +5,9 @@ import '../styles/globals.css';
 import { Providers } from './providers';
 import { isSupportedLanguage, DEFAULT_LANGUAGE, type Language } from '../i18n';
 
-// BugFix-07 (Q7b): Branding ueber /branding/ – Defaults in
-// apps/web/public/branding/, ueberschreibbar ueber den Repo-Ordner
-// branding/ (Rebuild erforderlich, siehe Dockerfile).
+// BugFix-07 (Q7b): branding via /branding/ – defaults in
+// apps/web/public/branding/, overridable via the repo folder
+// branding/ (rebuild required, see Dockerfile).
 export const metadata: Metadata = {
   title: {
     default: 'VersiGo',
@@ -73,11 +73,11 @@ const THEME_BOOTSTRAP_SCRIPT = `(function () {
 export default async function RootLayout({
   children,
 }: RootLayoutProps): Promise<ReactElement> {
-  // Die Sprache wird serverseitig aus dem Cookie aufgeloest (nur fuer
-  // persistente Konten gesetzt). Damit rendern Server-HTML und erste
-  // Client-Hydration in derselben Sprache – kein Hydration-Mismatch.
-  // READ_ONLY hat keinen Cookie und startet mit dem globalen Default en;
-  // die Sitzungssprache kommt nach der Hydration vom /user/language-Endpunkt.
+  // The language is resolved server-side from the cookie (only set for
+  // persistent accounts). Thus server HTML and the first client hydration
+  // render in the same language – no hydration mismatch.
+  // READ_ONLY has no cookie and starts with the global default en;
+  // the session language arrives after hydration from the /user/language endpoint.
   const cookieStore = await cookies();
   const cookieValue = cookieStore.get('versigo:locale')?.value;
   const initialLanguage: Language = isSupportedLanguage(cookieValue)

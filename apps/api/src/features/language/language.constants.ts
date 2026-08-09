@@ -1,10 +1,10 @@
 /**
- * AP-21: Sprachcode-Konstanten und Normalisierung.
+ * AP-21: language code constants and normalization.
  *
- * `en` und `de` sind die einzigen produktiv unterstuetzten Sprachen.
- * Nicht unterstuetzte Werte (z. B. Legacy-Werte wie "de-DE", "fr-FR" oder
- * beliebige Eingaben) fallen sicher auf Englisch zurueck und werden niemals
- * unvalidiert gespeichert.
+ * `en` and `de` are the only productively supported languages.
+ * Unsupported values (e.g. legacy values like "de-DE", "fr-FR" or
+ * arbitrary input) safely fall back to English and are never stored
+ * unvalidated.
  */
 export const SUPPORTED_LANGUAGES = ['en', 'de'] as const;
 
@@ -17,19 +17,18 @@ export function isSupportedLanguage(value: string | null | undefined): value is 
 }
 
 /**
- * Normalisiert einen Sprachwert auf einen unterstuetzten Sprachcode.
- * Alles, was nicht exakt 'en' oder 'de' ist, faellt sicher auf Englisch
- * zurueck (verbindlicher Default).
+ * Normalizes a language value to a supported language code.
+ * Everything that is not exactly 'en' or 'de' safely falls back to
+ * English (binding default).
  */
 export function normalizeLanguage(value: string | null | undefined): LanguageCode {
   return isSupportedLanguage(value) ? value : DEFAULT_LANGUAGE;
 }
 
 /**
- * Leitet die erste unterstuetzte Sprache aus einem Accept-Language-Header
- * ab. Es wird die q-Wert-Prioritaet des Browsers beachtet; fehlt ein
- * unterstuetzter Eintrag, wird null geliefert (Aufrufer entscheidet ueber
- * den Fallback).
+ * Derives the first supported language from an Accept-Language header
+ * priority. The browser's q-value priority is respected; if no supported
+ * entry exists, null is returned (the caller decides the fallback).
  */
 export function languageFromAcceptLanguage(
   header: string | null | undefined,

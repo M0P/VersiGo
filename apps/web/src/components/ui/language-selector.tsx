@@ -9,13 +9,13 @@ import { Select, FormField } from './form-field';
 import { Alert } from './alert';
 
 /**
- * AP-21: Sprachwahl fuer ALLE authentifizierten Rollen (READ_ONLY
- * eingeschlossen).
+ * AP-21: language selection for ALL authenticated roles (READ_ONLY
+ * included).
  *
- * - USER/ADMIN: Aenderung wird dauerhaft im Konto gespeichert.
- * - READ_ONLY:  Aenderung gilt ausschliesslich fuer die aktuelle
- *   Browser-Sitzung (session-only, keine Persistenz, kein Zugriff auf
- *   andere Einstellungen) – der Hinweis macht das transparent.
+ * - USER/ADMIN: the change is stored persistently in the account.
+ * - READ_ONLY:  the change applies exclusively to the current
+ *   browser session (session-only, no persistence, no access to
+ *   other settings) – the note makes this transparent.
  */
 export function LanguageSelector({ showReadOnlyNote = false }: { showReadOnlyNote?: boolean }): ReactElement {
   const { language, setLanguage, t, persistence } = useI18n();

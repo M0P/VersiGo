@@ -1,20 +1,20 @@
 /**
- * Plugin-Rahmen fuer optionale Portal-Connectoren (AP-18).
+ * Plugin framework for optional portal connectors (AP-18).
  *
- * Der Kernumfang (Deeplinks und Zugangshinweise) ist kein Plugin und haengt
- * ausschliesslich am Portal-Katalog. Optionale Connectoren (z. B. Mailbox-
- * oder Dokumentenabruf) werden als Plugins modelliert, die in der
- * PortalConnectorRegistry registriert sind.
+ * The core scope (deep links and access hints) is not a plugin and
+ * depends exclusively on the portal catalog. Optional connectors (e.g.
+ * mailbox or document retrieval) are modeled as plugins registered in
+ * the PortalConnectorRegistry.
  *
- * Resilienz-Regel (Akzeptanzkriterium): Ein nicht verfuegbares Plugin
- * (deaktiviert, unbekannt oder fehlerhaft) beeintraechtigt den Portal-Link
- * nicht. Der Portal-Link mit Deeplink und Zugangshinweisen bleibt immer
- * nutzbar; nur die optionale Plugin-Funktion entfaellt kontrolliert.
+ * Resilience rule (acceptance criterion): an unavailable plugin
+ * (disabled, unknown or faulty) does not affect the portal link. The
+ * portal link with deep link and access hints always stays usable; only
+ * the optional plugin function is omitted in a controlled way.
  */
 
 export type PortalConnectorCapability = 'deepLink' | 'mailboxSync' | 'documentRetrieval';
 
-/** Zugangsdaten fuer den Portal-Zugriff (werden nur intern entschluesselt). */
+/** Credentials for portal access (only decrypted internally). */
 export interface PortalConnectorCredentials {
   portalUsername?: string;
   portalPassword?: string;
@@ -31,7 +31,7 @@ export interface PortalConnectorSyncContext {
   linkId: string;
   policyId: string;
   providerKey: string;
-  /** Entschluesselte Zugangsdaten – ausschliesslich fuer den Plugin-Aufruf. */
+  /** Decrypted credentials – exclusively for the plugin call. */
   credentials: PortalConnectorCredentials;
 }
 
@@ -42,22 +42,22 @@ export interface PortalConnectorSyncResult {
 }
 
 export interface PortalConnectorPlugin {
-  /** Eindeutiger Plugin-Schluessel (z. B. 'mailbox-sync-browser-automation'). */
+  /** Unique plugin key (e.g. 'mailbox-sync-browser-automation'). */
   key: string;
   displayName: string;
   description: string;
   capabilities: PortalConnectorCapability[];
-  /** true, wenn das Plugin experimentell ist und nicht als Kernfunktion gilt. */
+  /** true when the plugin is experimental and not considered core. */
   experimental: boolean;
   /**
-   * false, solange das Plugin deaktiviert ist (feature degradation).
-   * Deaktivierte Plugins liefern keine Sync-/Abruf-Funktionen.
+   * false while the plugin is disabled (feature degradation).
+   * Disabled plugins provide no sync/retrieval functions.
    */
   isAvailable(): boolean;
-  /** Health-Check; deaktivierte Plugins melden kontrolliert "nicht verfuegbar". */
+  /** Health check; disabled plugins report "unavailable" in a controlled way. */
   healthCheck(): Promise<PortalConnectorHealth>;
-  /** Experimenteller Mailbox-Abruf – nur bei verfuegbaren Plugins. */
+  /** Experimental mailbox retrieval - only for available plugins. */
   syncMailbox?(context: PortalConnectorSyncContext): Promise<PortalConnectorSyncResult>;
-  /** Experimenteller Dokumentenabruf – nur bei verfuegbaren Plugins. */
+  /** Experimental document retrieval - only for available plugins. */
   fetchDocuments?(context: PortalConnectorSyncContext): Promise<PortalConnectorSyncResult>;
 }

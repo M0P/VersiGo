@@ -23,12 +23,12 @@ const mockUser: AuthenticatedUser = {
 };
 
 describe('ProfileController', () => {
-  it('fordert auf Controller-Ebene die USER-Rolle (oder hoeher) an', () => {
+  it('requires the USER role (or higher) at the controller level', () => {
     const roles = Reflect.getMetadata(ROLES_KEY, ProfileController);
     expect(roles).toContain(GlobalRole.USER);
   });
 
-  it('get delegiert mit der eigenen User-ID an den Service', async () => {
+  it('get delegates the own user ID to the service', async () => {
     const service = createMockService();
     const controller = new ProfileController(service as never);
     service.getProfile.mockResolvedValue({ id: 'user-1', displayName: 'Alice' });
@@ -39,7 +39,7 @@ describe('ProfileController', () => {
     expect(service.getProfile).toHaveBeenCalledWith('user-1');
   });
 
-  it('update delegiert mit der eigenen User-ID und dem DTO an den Service', async () => {
+  it('update delegates the own user ID and the DTO to the service', async () => {
     const service = createMockService();
     const controller = new ProfileController(service as never);
     service.updateProfile.mockResolvedValue({ id: 'user-1', displayName: 'Alice B.' });

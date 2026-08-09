@@ -3,7 +3,7 @@ import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
 
 /**
- * Persoenliches Profil (AP-17): eigene Profilfelder fuer USER/ADMIN.
+ * Personal profile (AP-17): own profile fields for USER/ADMIN.
  */
 @Module({
   controllers: [ProfileController],

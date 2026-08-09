@@ -7,10 +7,10 @@ import { MonitoringController } from './monitoring.controller';
 import { MonitoringService } from './monitoring.service';
 
 /**
- * Monitoring & Health (AP-19). Nur ADMIN-Routen.
- * Importiert AiAssistModule (Queue + AiAssistService), PaperlessNgxModule
- * (PAPERLESS_ADAPTER) und PortalConnectorsModule (Plugin-Health) fuer die
- * Integrationsauskunft.
+ * Monitoring & health (AP-19). ADMIN routes only.
+ * Imports AiAssistModule (queue + AiAssistService), PaperlessNgxModule
+ * (PAPERLESS_ADAPTER) and PortalConnectorsModule (plugin health) for the
+ * integration report.
  */
 @Module({
   imports: [

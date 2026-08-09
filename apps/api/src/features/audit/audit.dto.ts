@@ -2,9 +2,9 @@ import { IsString, Length, IsOptional, IsInt, Min, Max, IsISO8601 } from 'class-
 import { Type } from 'class-transformer';
 
 /**
- * Filter fuer die Audit-Event-Liste (AP-19).
- * Zeitfilter sind ISO-8601-Zeitstempel (z. B. 2026-08-01T12:00:00Z);
- * die Filter sind optional und begrenzt, um grosse Listen zu vermeiden.
+ * Filters for the audit event list (AP-19).
+ * Time filters are ISO-8601 timestamps (e.g. 2026-08-01T12:00:00Z);
+ * the filters are optional and limited to avoid large lists.
  */
 export class ListAuditEventsQueryDto {
   @IsOptional()

@@ -4,10 +4,9 @@ import { EncryptionModule } from '../encryption/encryption.module';
 import { SettingsResolverService } from './settings-resolver.service';
 
 /**
- * Stellt die zentrale Settings-Aufloesung (AP-17) fuer API und Worker
- * bereit. Der Resolver haengt an den globalen Database-/Encryption-
- * Foundations; die Module werden hier explizit importiert, um die
- * Abhaengigkeit sichtbar zu machen.
+ * Provides the central settings resolution (AP-17) for API and worker.
+ * The resolver depends on the global Database/Encryption foundations;
+ * the modules are imported explicitly here to make the dependency visible.
  */
 @Global()
 @Module({

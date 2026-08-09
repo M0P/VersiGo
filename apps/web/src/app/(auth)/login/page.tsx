@@ -25,11 +25,10 @@ type LoginError = {
 };
 
 /**
- * Normalisiert den redirectTo-Query-Parameter der Middleware zu einem
- * sicheren internen Pfad (Open-Redirect-Schutz): Nur Pfade, die mit einem
- * einzelnen "/" beginnen, werden akzeptiert; scheme-relativ ("//host"),
- * Backslash-Varianten ("/\\host"), externe Schemata und ungueltiges
- * Prozent-Encoding fallen auf "/" zurueck.
+ * Normalizes the middleware's redirectTo query parameter to a safe internal
+ * path (open-redirect protection): only paths starting with a single "/" are
+ * accepted; scheme-relative ("//host"), backslash variants ("/\\host"),
+ * external schemes and invalid percent-encoding fall back to "/".
  */
 function safeRedirectPath(value: string | null): string {
   if (!value) return '/';
@@ -58,8 +57,8 @@ export default function LoginPage(): ReactElement {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [configError, setConfigError] = useState(false);
-  // Ziel nach erfolgreichem Login: von der Middleware gesetzter redirectTo-
-  // Query-Parameter (sanitisiert) oder "/".
+  // Target after a successful login: the redirectTo query parameter set by
+  // the middleware (sanitized) or "/".
   const [redirectTo] = useState<string>(() =>
     typeof window === 'undefined'
       ? '/'
@@ -98,7 +97,7 @@ export default function LoginPage(): ReactElement {
       });
 
       if (res.ok) {
-        // Originales Ziel der Middleware ehren (sanitisiert, sonst "/").
+        // Honor the middleware's original target (sanitized, otherwise "/").
         window.location.href = redirectTo;
         return;
       }
@@ -120,9 +119,8 @@ export default function LoginPage(): ReactElement {
         setFieldErrors(newFieldErrors);
         setError({ message: data.message || t('auth.validationError'), status: res.status, fieldErrors: newFieldErrors });
       } else {
-        // AP-21: Die rohe (deutsche) API-Fehlermeldung wird NICHT angezeigt;
-        // der HTTP-Status wird auf einen lokalisierten Katalog-Schluessel
-        // abgebildet (en/de).
+        // AP-21: the raw (German) API error message is NOT displayed; the
+        // HTTP status is mapped to a localized catalog key (en/de).
         setError({ message: localizeAuthError(t, res.status, 'login'), status: res.status });
       }
     } catch {
@@ -161,10 +159,10 @@ export default function LoginPage(): ReactElement {
 
   const hasAnyAuth = config.oidcConfigured || config.localEnabled;
 
-  // BugFix-07 (Befund 2): OIDC ist als Feature aktiviert, aber der Client
-  // ist nicht einsatzbereit (Discovery fehlgeschlagen oder Dienste-Neustart
-  // nach dem Aktivieren fehlt). Die Login-Seite blendet den Button dann aus
-  // und erklaert den Zustand statt eines stillen 501 beim Klick.
+  // BugFix-07 (finding 2): OIDC is enabled as a feature, but the client
+  // is not operational (discovery failed or a service restart after
+  // enabling is missing). The login page then hides the button
+  // and explains the state instead of a silent 501 on click.
   const oidcBroken = config.oidcConfigured && !config.oidcReady;
 
   if (!hasAnyAuth) {

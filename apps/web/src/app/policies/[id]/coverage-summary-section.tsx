@@ -46,21 +46,21 @@ type ViewState =
   | { status: 'generate-error'; message: string };
 
 /**
- * AI-Leistungszusammenfassung mit Quellenbezug, Status und Disclaimer.
+ * AI benefit summary with source references, status and disclaimer.
  *
- * Bekannte Grenzen:
- * - Markdown-Rendering unterstuetzt nur #, ##, - und Absaetze.
- *   Andere Markdown-Elemente (**, `, num. Listen, Links) werden als
- *   Klartext dargestellt. Bei Bedarf kann eine sandboxed Markdown-
- *   Bibliothek nach Maintenance-Pruefung ergaenzt werden.
- * - API_BASE wird derzeit in jeder Komponente dupliziert (hausweit).
- * - householdId ist aktuell hart auf "default" gesetzt, da die
- *   Web-App noch keine echte Session-Auswertung fuer den
- *   Household-Kontext implementiert hat (hausweites Muster).
+ * Known limitations:
+ * - Markdown rendering supports only #, ##, - and paragraphs.
+ *   Other markdown elements (**, `, numbered lists, links) are rendered as
+ *   plain text. If needed, a sandboxed markdown library can be added after
+ *   a maintenance review.
+ * - API_BASE is currently duplicated in every component (house-wide).
+ * - householdId is currently hardcoded to "default" because the
+ *   web app has not yet implemented a real session evaluation for the
+ *   household context (house-wide pattern).
  *
- * Hinweis: Diese Zusammenfassung wird maschinell erstellt und dient
- * lediglich der schnellen Uebersicht. Sie stellt keine Rechtsberatung dar
- * und ersetzt nicht die Pruefung der originaeren Vertragsunterlagen.
+ * Note: this summary is machine-generated and serves
+ * only as a quick overview. It does not constitute legal advice
+ * and does not replace the review of the original contract documents.
  */
 export default function CoverageSummarySection({ householdId, policyId }: Props): ReactElement {
   const { t, language } = useI18n();

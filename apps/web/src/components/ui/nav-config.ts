@@ -4,9 +4,9 @@ import type { IconName } from './icons';
  * Shared navigation configuration for the app shell.
  * Each section groups related routes.
  *
- * `label` enthaelt seit AP-21 i18n-Schluessel (nav.*); die Uebersetzung
- * erfolgt in der AppShell (useI18n). So bleibt die Konfiguration eine
- * reine, testbare Datenstruktur.
+ * `label` contains i18n keys since AP-21 (nav.*); the translation
+ * happens in the AppShell (useI18n). Thus the configuration stays a
+ * pure, testable data structure.
  */
 export type NavItem = {
   href: string;
@@ -26,26 +26,26 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: '/', label: 'nav.dashboard', icon: 'home' },
       { href: '/policies', label: 'nav.policies', icon: 'policies' },
       { href: '/household/costs', label: 'nav.costs', icon: 'costs' },
-      // AP-20: Freigaben-Funktion ist ueber die UI erreichbar
-      // (household-gescopte Freigaben anderer Familienmitglieder).
+      // AP-20: the sharing feature is reachable via the UI
+      // (household-scoped shares of other family members).
       { href: '/household/shares', label: 'nav.shares', icon: 'sharing' },
     ],
   },
   {
     label: 'nav.administration',
     items: [
-      // AP-17: /settings ist die persoenliche Profilseite ("Mein Profil").
-      // Die zentralen Systemeinstellungen liegen unter /admin/settings
-      // und sind (serverseitig durchgesetzt) nur fuer ADMIN sichtbar.
+      // AP-17: /settings is the personal profile page ("my profile").
+      // The central system settings live under /admin/settings
+      // and are visible only to ADMIN (enforced server-side).
       { href: '/settings', label: 'nav.myProfile', icon: 'settings' },
       { href: '/admin', label: 'nav.admin', icon: 'admin' },
-      // BugFix-07 (Q1): Die Feature-Verwaltung (KI, OIDC, Paperless, Storage,
-      // Familien-Freigaben) ist in /admin/settings integriert; /admin/features
-      // leitet dorthin um.
+      // BugFix-07 (Q1): the feature management (AI, OIDC, Paperless, storage,
+      // family sharing) is integrated in /admin/settings; /admin/features
+      // redirects there.
       { href: '/admin/settings', label: 'nav.adminSettings', icon: 'settings' },
-      // BugFix-02: Admin-Nutzerverwaltung
+      // BugFix-02: admin user management
       { href: '/admin/users', label: 'nav.adminUsers', icon: 'users' },
-      // BugFix-04: Audit-Log + Monitoring (vorher nur API, jetzt UI)
+      // BugFix-04: audit log + monitoring (previously API-only, now UI)
       { href: '/admin/audit', label: 'nav.audit', icon: 'audit' },
       { href: '/admin/monitoring', label: 'nav.monitoring', icon: 'monitoring' },
     ],

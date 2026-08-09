@@ -39,7 +39,7 @@ describe('FamilySharingController', () => {
   const householdId = 'household-1';
   const shareId = 'share-1';
 
-  it('create delegiert an Service und gibt Ergebnis zurueck', async () => {
+  it('create delegates to the service and returns the result', async () => {
     const service = createMockService();
     const controller = new FamilySharingController(service as never);
     const expected = { id: shareId, permission: ObjectSharePermission.READ };
@@ -61,7 +61,7 @@ describe('FamilySharingController', () => {
     });
   });
 
-  it('findAll delegiert an Service', async () => {
+  it('findAll delegates to the service', async () => {
     const service = createMockService();
     const controller = new FamilySharingController(service as never);
     service.findAll.mockResolvedValue([{ id: shareId }]);
@@ -72,7 +72,7 @@ describe('FamilySharingController', () => {
     expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser);
   });
 
-  it('findIncoming delegiert an Service', async () => {
+  it('findIncoming delegates to the service', async () => {
     const service = createMockService();
     const controller = new FamilySharingController(service as never);
     service.findIncoming.mockResolvedValue([{ id: shareId }]);
@@ -83,7 +83,7 @@ describe('FamilySharingController', () => {
     expect(service.findIncoming).toHaveBeenCalledWith(householdId, mockUser.id);
   });
 
-  it('findOutgoing delegiert an Service', async () => {
+  it('findOutgoing delegates to the service', async () => {
     const service = createMockService();
     const controller = new FamilySharingController(service as never);
     service.findOutgoing.mockResolvedValue([{ id: shareId }]);
@@ -94,7 +94,7 @@ describe('FamilySharingController', () => {
     expect(service.findOutgoing).toHaveBeenCalledWith(householdId, mockUser.id);
   });
 
-  it('findOne delegiert an Service', async () => {
+  it('findOne delegates to the service', async () => {
     const service = createMockService();
     const controller = new FamilySharingController(service as never);
     service.findOne.mockResolvedValue({ id: shareId });
@@ -105,7 +105,7 @@ describe('FamilySharingController', () => {
     expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser, shareId);
   });
 
-  it('update delegiert an Service', async () => {
+  it('update delegates to the service', async () => {
     const service = createMockService();
     const controller = new FamilySharingController(service as never);
     service.update.mockResolvedValue({ id: shareId, permission: ObjectSharePermission.WRITE });
@@ -120,7 +120,7 @@ describe('FamilySharingController', () => {
     });
   });
 
-  it('remove delegiert an Service', async () => {
+  it('remove delegates to the service', async () => {
     const service = createMockService();
     const controller = new FamilySharingController(service as never);
     service.remove.mockResolvedValue({ success: true });

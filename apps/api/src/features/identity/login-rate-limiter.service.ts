@@ -10,8 +10,8 @@ import { AppConfigService } from '@versigo/foundation';
  * Uses Redis INCR + EXPIRE for atomic TTL-based counters.
  *
  * Key format: {scope}:attempts:{ipAddress}
- * Scope "login" (Default) und "register" nutzen getrennte Zaehler, damit
- * sich die Endpunkte nicht gegenseitig ausbremsen.
+ * Scope "login" (default) and "register" use separate counters, so
+ * the endpoints do not throttle each other.
  * TTL is configurable via LOCAL_AUTH_RATE_LIMIT_WINDOW_MS.
  * Max attempts per window is configurable via LOCAL_AUTH_MAX_ATTEMPTS.
  */

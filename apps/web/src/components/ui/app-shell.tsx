@@ -9,7 +9,7 @@ import { useI18n } from '../../i18n';
 import { Icon } from './icons';
 import type { NavSection } from './nav-config';
 
-import { getApiBaseUrl } from '@/lib/runtime-config';
+import { getApiBaseUrl, getAppVersion } from '@/lib/runtime-config';
 
 const API_BASE = getApiBaseUrl();
 
@@ -19,9 +19,9 @@ type AppShellProps = {
   /** If true, the main content area uses full width. */
   wide?: boolean;
   /**
-   * Bereits geladener User (z. B. vom Page-Level). Wenn gesetzt (auch null),
-   * loest AppShell keinen eigenen /auth/me-Request aus; ohne den Prop laedt
-   * AppShell den User selbst (ein Fetch pro Seitenaufruf, AP-16).
+   * Already loaded user (e.g. provided by the page level). When set (even to
+   * null), AppShell does not trigger its own /auth/me request; without the
+   * prop, AppShell loads the user itself (one fetch per page view, AP-16).
    */
   user?: CurrentUser | null;
 };
@@ -36,25 +36,32 @@ type AppShellProps = {
 export function AppShell({ children, navSections, wide = false, user: userProp }: AppShellProps): ReactElement {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [familySharingEnabled, setFamilySharingEnabled] = useState(true);
+  // BugFix-11 (R7): the runtime version is only available client-side
+  // (injected /runtime-config.js); starting from 'unknown' keeps SSR and
+  // hydration in sync before the effect applies the real value.
+  const [appVersion, setAppVersion] = useState('unknown');
   const pathname = usePathname();
   const { toggleTheme, theme } = useTheme();
   const { t } = useI18n();
   const hasExternalUser = userProp !== undefined;
-  // Kein zweiter /auth/me-Request, wenn der Aufrufer den User bereits kennt.
+  // No second /auth/me request when the caller already knows the user.
   const { user: hookUser } = useCurrentUser({ enabled: !hasExternalUser });
   const user = userProp !== undefined ? userProp : hookUser;
 
   const closeSidebar = () => setSidebarOpen(false);
 
-  // BugFix-05 (Befund 6): Familien-Freigaben sind ein Feature-Schalter
-  // (FAMILY_SHARING_ENABLED, Default true). Ist der Schalter deaktiviert,
-  // blendet die UI den Nav-Eintrag /household/shares aus. Die Capability
-  // wird ueber den oeffentlichen /ready-Endpunkt geliefert (Resolver-
-  // basiert, UI > ENV > DEFAULT). Der anfaengliche Default true verhindert
-  // Flackern, solange der Request laeuft; bei Fehlern bleibt der Eintrag
-  // sichtbar (Bestandsverhalten). Der Refetch bei jedem Routenwechsel macht
-  // eine Umschaltung des Features waehrend der laufenden Session sichtbar
-  // (ohne Voll-Reload); die serverseitige Durchsetzung liefert dabei 403.
+  useEffect(() => {
+    setAppVersion(getAppVersion());
+  }, []);
+
+  // BugFix-05 (finding 6): family sharing is a feature flag
+  // (FAMILY_SHARING_ENABLED, default true). When the flag is disabled, the UI
+  // hides the /household/shares nav entry. The capability is delivered via the
+  // public /ready endpoint (resolver-based, UI > ENV > DEFAULT). The initial
+  // default of true prevents flickering while the request runs; on errors the
+  // entry stays visible (existing behavior). Refetching on every route change
+  // makes feature toggles visible during the running session (without a full
+  // reload); server-side enforcement returns 403 in that case.
   useEffect(() => {
     let cancelled = false;
     fetch(`${API_BASE}/ready`, { credentials: 'include' })
@@ -73,15 +80,15 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
     };
   }, [pathname]);
 
-  // AP-20 (UI-Completeness): Abmelden ist in jeder angemeldeten Ansicht
-  // direkt erreichbar – Icon-Schaltflaeche in der Mobil-Topbar und
-  // beschrifteter Eintrag am unteren Rand der Sidebar.
+  // AP-20 (UI completeness): logout is reachable from every authenticated
+  // view – an icon button in the mobile top bar and a labeled entry at the
+  // bottom of the sidebar.
   const handleLogout = async () => {
     try {
       await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
     } catch {
-      // Netzwerkfehler beim Logout-Request darf die Abmeldung nicht
-      // blockieren; der Redirect fuehrt ohnehin auf die Login-Seite.
+      // A network error during the logout request must not block the
+      // sign-out; the redirect leads to the login page anyway.
     } finally {
       window.location.href = '/login';
     }
@@ -104,13 +111,13 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
     </svg>
   );
 
-  // AP-16: Die Admin-Navigation ist nur fuer ADMIN sichtbar. READ_ONLY und
-  // USER sehen den Admin-Eintrag nicht (die Durchsetzung erfolgt serverseitig;
-  // dies ist nur eine UX-Massnahme). Solange der User noch nicht geladen ist
-  // (oder keine gueltige Session besteht), wird der Eintrag ebenfalls
-  // ausgeblendet, um kein Flackern eines unberechtigten Links zu zeigen.
-  // BugFix-05 (Befund 6): Bei deaktivierten Familien-Freigaben wird der
-  // Eintrag /household/shares zusaetzlich ausgeblendet.
+  // AP-16: the admin navigation is only visible to ADMIN. READ_ONLY and USER
+  // do not see the admin entry (enforcement happens server-side; this is only
+  // a UX measure). While the user is not loaded yet (or no valid session
+  // exists), the entry is hidden too, to avoid flickering of an unauthorized
+  // link.
+  // BugFix-05 (finding 6): with family sharing disabled, the
+  // /household/shares entry is additionally hidden.
   const isAdmin = user?.role === 'ADMIN';
   const visibleSections: NavSection[] = navSections
     .map((section) => ({
@@ -257,6 +264,10 @@ export function AppShell({ children, navSections, wide = false, user: userProp }
       {/* Main content */}
       <main className={`app-main ${wide ? 'app-main-wide' : ''}`}>
         {children}
+        {/* Footer: minimal version line (BugFix-11/R7) */}
+        <footer className="app-footer">
+          <span>VersiGo {appVersion}</span>
+        </footer>
       </main>
     </div>
   );

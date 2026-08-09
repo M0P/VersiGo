@@ -23,10 +23,12 @@ function createMockSettings(values: MockSettingsValues = {}) {
   } as unknown as SettingsResolverService;
 }
 
-function createMockHttpService() {
+type MockHttpService = HttpService & { get: ReturnType<typeof vi.fn> };
+
+function createMockHttpService(): MockHttpService {
   return {
     get: vi.fn(),
-  } as unknown as HttpService;
+  } as unknown as MockHttpService;
 }
 
 function configuredValues(overrides: MockSettingsValues = {}): MockSettingsValues {
@@ -38,8 +40,45 @@ function configuredValues(overrides: MockSettingsValues = {}): MockSettingsValue
   };
 }
 
+/** AxiosError shaped like the user's Paperless 3.x 406 rejection. */
+function notAcceptableError(): AxiosError {
+  return new AxiosError(
+    'Request failed with status code 406',
+    'ERR_BAD_REQUEST',
+    undefined,
+    undefined,
+    {
+      data: { detail: 'Invalid version in "Accept" header.' },
+      status: 406,
+      statusText: 'Not Acceptable',
+      headers: {},
+      config: {},
+    } as AxiosResponse,
+  );
+}
+
+function searchResultPayload(payload: Record<string, unknown> = {}) {
+  return {
+    data: {
+      results: [
+        {
+          id: 10,
+          title: 'Police Haftpflicht',
+          tags: [1],
+          correspondent: 5,
+          document_type: null,
+          notes: null,
+          created: '2024-01-01T00:00:00Z',
+          modified: '2024-01-01T00:00:00Z',
+          ...payload,
+        },
+      ],
+    },
+  };
+}
+
 describe('PaperlessNgxService', () => {
-  let mockHttp: ReturnType<typeof createMockHttpService>;
+  let mockHttp: MockHttpService;
   let mockSettings: ReturnType<typeof createMockSettings>;
   let service: PaperlessNgxService;
 
@@ -50,7 +89,7 @@ describe('PaperlessNgxService', () => {
   });
 
   describe('healthCheck', () => {
-    it('gibt true zurueck bei erfolgreicher API-Antwort', async () => {
+    it('returns true on a successful API response', async () => {
       mockHttp.get = vi.fn().mockReturnValue(of({ status: 200, data: {} }));
       const result = await service.healthCheck();
       expect(result).toBe(true);
@@ -62,15 +101,15 @@ describe('PaperlessNgxService', () => {
       );
     });
 
-    it('gibt false zurueck bei Fehler', async () => {
+    it('returns false on error', async () => {
       mockHttp.get = vi.fn().mockReturnValue(
-        throwError(() => new AxiosError('Netzwerkfehler', 'ECONNREFUSED')),
+        throwError(() => new AxiosError('Network error', 'ECONNREFUSED')),
       );
       const result = await service.healthCheck();
       expect(result).toBe(false);
     });
 
-    it('gibt false zurueck wenn deaktiviert', async () => {
+    it('returns false when disabled', async () => {
       const disabledService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
@@ -80,7 +119,7 @@ describe('PaperlessNgxService', () => {
       expect(mockHttp.get).not.toHaveBeenCalled();
     });
 
-    it('gibt false zurueck wenn Konfiguration unvollstaendig ist', async () => {
+    it('returns false when the configuration is incomplete', async () => {
       const incompleteService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_API_TOKEN: undefined })),
@@ -92,7 +131,7 @@ describe('PaperlessNgxService', () => {
   });
 
   describe('getDeepLink', () => {
-    it('gibt Deep-Link-URL zurueck bei vorhandenem Dokument', async () => {
+    it('returns the deep-link URL for an existing document', async () => {
       mockHttp.get = vi.fn().mockReturnValue(
         of({
           data: { id: 42, title: 'Testdokument.pdf' },
@@ -103,7 +142,7 @@ describe('PaperlessNgxService', () => {
       expect(result).toBe('http://paperless:8000/documents/42/');
     });
 
-    it('gibt null zurueck bei fehlendem Dokument', async () => {
+    it('returns null for a missing document', async () => {
       mockHttp.get = vi.fn().mockReturnValue(
         throwError(() => new AxiosError('Not Found', 'ERR_BAD_REQUEST', undefined, undefined, { data: {}, status: 404, statusText: 'Not Found', headers: {}, config: {} } as AxiosResponse)),
       );
@@ -112,7 +151,7 @@ describe('PaperlessNgxService', () => {
       expect(result).toBeNull();
     });
 
-    it('gibt null zurueck wenn deaktiviert', async () => {
+    it('returns null when disabled', async () => {
       const disabledService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
@@ -124,7 +163,7 @@ describe('PaperlessNgxService', () => {
   });
 
   describe('getDocumentMetadata', () => {
-    it('gibt Metadaten zurueck bei erfolgreichem Abruf', async () => {
+    it('returns metadata on a successful fetch', async () => {
       mockHttp.get = vi.fn().mockImplementation((url: string) => {
         if (url === 'http://paperless:8000/api/documents/42/') {
           return of({
@@ -166,7 +205,7 @@ describe('PaperlessNgxService', () => {
       expect(result!.createdAt).toBe('2024-01-15T10:00:00Z');
     });
 
-    it('gibt null zurueck bei API-Fehler', async () => {
+    it('returns null on API error', async () => {
       mockHttp.get = vi.fn().mockReturnValue(
         throwError(() => new AxiosError('Server Error', 'ERR_BAD_RESPONSE')),
       );
@@ -175,7 +214,7 @@ describe('PaperlessNgxService', () => {
       expect(result).toBeNull();
     });
 
-    it('gibt null zurueck wenn deaktiviert', async () => {
+    it('returns null when disabled', async () => {
       const disabledService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
@@ -186,7 +225,7 @@ describe('PaperlessNgxService', () => {
   });
 
   describe('syncDocument', () => {
-    it('gibt Erfolg zurueck bei vorhandenem Paperless-Dokument', async () => {
+    it('returns success for an existing Paperless document', async () => {
       mockHttp.get = vi.fn().mockReturnValue(
         of({
           data: { id: 42, title: 'Test.pdf' },
@@ -199,38 +238,32 @@ describe('PaperlessNgxService', () => {
       expect(result.deepLink).toBe('http://paperless:8000/documents/42/');
     });
 
-    it('gibt Fehler zurueck bei nicht gefundenem Dokument', async () => {
+    it('returns an error for a missing document', async () => {
       mockHttp.get = vi.fn().mockReturnValue(
         throwError(() => new AxiosError('Not Found', 'ERR_BAD_REQUEST', undefined, undefined, { data: {}, status: 404, statusText: 'Not Found', headers: {}, config: {} } as AxiosResponse)),
       );
 
       const result = await service.syncDocument(999);
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Dokument in Paperless nicht gefunden');
+      expect(result.error).toBe('Document not found in Paperless');
     });
 
-    it('gibt Fehler zurueck bei deaktiviertem Paperless', async () => {
+    it('returns an error when Paperless is disabled', async () => {
       const disabledService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
       );
       const result = await disabledService.syncDocument(42);
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Paperless nicht konfiguriert');
+      expect(result.error).toBe('Paperless is not configured');
     });
   });
 
   describe('searchDocuments', () => {
-    it('gibt Suchergebnisse zurueck', async () => {
+    it('returns search results', async () => {
       mockHttp.get = vi.fn().mockImplementation((url: string) => {
         if (url.includes('/documents/?query=')) {
-          return of({
-            data: {
-              results: [
-                { id: 10, title: 'Police Haftpflicht', tags: [1], correspondent: 5, document_type: null, notes: null, created: '2024-01-01T00:00:00Z', modified: '2024-01-01T00:00:00Z' },
-              ],
-            },
-          });
+          return of(searchResultPayload());
         }
         if (url.includes('/tags/1/')) {
           return of({ data: { id: 1, name: 'haftpflicht' } });
@@ -249,7 +282,7 @@ describe('PaperlessNgxService', () => {
       expect(results[0].deepLink).toBe('http://paperless:8000/documents/10/');
     });
 
-    it('gibt leeres Array zurueck bei Fehler', async () => {
+    it('returns an empty array on error', async () => {
       mockHttp.get = vi.fn().mockReturnValue(
         throwError(() => new AxiosError('Service Unavailable', 'ECONNREFUSED')),
       );
@@ -258,7 +291,7 @@ describe('PaperlessNgxService', () => {
       expect(results).toEqual([]);
     });
 
-    it('gibt leeres Array zurueck wenn deaktiviert', async () => {
+    it('returns an empty array when disabled', async () => {
       const disabledService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
@@ -268,8 +301,179 @@ describe('PaperlessNgxService', () => {
     });
   });
 
-  describe('Laufzeit-Aufloesung (AP-17)', () => {
-    it('liest Konfiguration pro Aufruf ueber SettingsResolverService', async () => {
+  describe('API-dialect auto-negotiation (BugFix-11)', () => {
+    it('falls back to legacy when the server rejects the versioned header (406): search uses unversioned Accept + q=', async () => {
+      mockHttp.get = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => notAcceptableError()))
+        .mockImplementation((url: string) => {
+          if (url.includes('/documents/?q=')) {
+            return of(searchResultPayload());
+          }
+          if (url.includes('/tags/1/')) {
+            return of({ data: { id: 1, name: 'haftpflicht' } });
+          }
+          if (url.includes('/correspondents/5/')) {
+            return of({ data: { id: 5, name: 'HUK' } });
+          }
+          return of({ data: {} });
+        });
+
+      const results = await service.searchDocuments('haftpflicht');
+      expect(results).toHaveLength(1);
+      expect(results[0].title).toBe('Police Haftpflicht');
+
+      // Search must use the legacy param `q` and the unversioned Accept header.
+      expect(mockHttp.get).toHaveBeenCalledWith(
+        'http://paperless:8000/api/documents/?q=haftpflicht',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Accept: 'application/json' }),
+        }),
+      );
+      // The v2 param `query` must NOT be used on a legacy server.
+      expect(mockHttp.get).not.toHaveBeenCalledWith(
+        'http://paperless:8000/api/documents/?query=haftpflicht',
+        expect.anything(),
+      );
+    });
+
+    it('stays on v2 when the server accepts the versioned header', async () => {
+      mockHttp.get = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/documents/?query=')) {
+          return of(searchResultPayload());
+        }
+        if (url.includes('/tags/1/')) {
+          return of({ data: { id: 1, name: 'haftpflicht' } });
+        }
+        if (url.includes('/correspondents/5/')) {
+          return of({ data: { id: 5, name: 'HUK' } });
+        }
+        return of({ data: {} });
+      });
+
+      const results = await service.searchDocuments('haftpflicht');
+      expect(results).toHaveLength(1);
+
+      // Probe answered 200 -> v2 stays, search uses `query` + versioned Accept.
+      expect(mockHttp.get).toHaveBeenCalledWith(
+        'http://paperless:8000/api/documents/?query=haftpflicht',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Accept: 'application/json;version=2' }),
+        }),
+      );
+    });
+
+    it('healthCheck uses the negotiated dialect header', async () => {
+      mockHttp.get = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => notAcceptableError()))
+        .mockReturnValue(of({ status: 200, data: {} }));
+
+      const result = await service.healthCheck();
+      expect(result).toBe(true);
+
+      // healthCheck GET /api/ must carry the unversioned Accept after fallback.
+      expect(mockHttp.get).toHaveBeenCalledWith(
+        'http://paperless:8000/api/',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Accept: 'application/json' }),
+        }),
+      );
+    });
+
+    it('caches the dialect per configuration and re-probes after a config change', async () => {
+      const probeUrl = 'http://paperless:8000/api/documents/?page_size=1';
+      mockHttp.get = vi
+        .fn()
+        .mockReturnValue(throwError(() => notAcceptableError()));
+
+      // First use -> exactly one probe.
+      await service.searchDocuments('a');
+      expect(mockHttp.get.mock.calls.filter(([url]) => url === probeUrl)).toHaveLength(1);
+
+      // Same configuration -> cached, no additional probe.
+      mockHttp.get.mockClear();
+      await service.searchDocuments('b');
+      expect(mockHttp.get.mock.calls.filter(([url]) => url === probeUrl)).toHaveLength(0);
+
+      // Configuration change (new baseUrl) -> re-probe.
+      const changedService = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_URL: 'http://paperless2:8000' })),
+      );
+      await changedService.searchDocuments('c');
+      expect(
+        mockHttp.get.mock.calls.filter(([url]) => url === 'http://paperless2:8000/api/documents/?page_size=1'),
+      ).toHaveLength(1);
+    });
+
+    it('keeps v2 on a 401/403 probe response (wrong token/permission, not a dialect issue)', async () => {
+      const unauthorized = new AxiosError(
+        'Unauthorized',
+        'ERR_BAD_REQUEST',
+        undefined,
+        undefined,
+        { data: {}, status: 401, statusText: 'Unauthorized', headers: {}, config: {} } as AxiosResponse,
+      );
+      mockHttp.get = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => unauthorized))
+        .mockImplementation((url: string) => {
+          if (url.includes('/documents/?query=')) {
+            return of(searchResultPayload());
+          }
+          return of({ data: {} });
+        });
+
+      const results = await service.searchDocuments('test');
+      expect(results).toHaveLength(1);
+      expect(mockHttp.get).toHaveBeenCalledWith(
+        'http://paperless:8000/api/documents/?query=test',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Accept: 'application/json;version=2' }),
+        }),
+      );
+    });
+
+    it('does not cache the dialect when the probe fails transiently – the next call re-probes', async () => {
+      const probeUrl = 'http://paperless:8000/api/documents/?page_size=1';
+      const networkError = new AxiosError('Network error', 'ECONNREFUSED');
+      mockHttp.get = vi
+        .fn()
+        .mockReturnValue(throwError(() => networkError));
+
+      // First call: probe fails (network error) -> v2 used for the call, NOT cached.
+      await service.searchDocuments('a');
+      expect(mockHttp.get.mock.calls.filter(([url]) => url === probeUrl)).toHaveLength(1);
+
+      // Second call: no cache entry -> probe runs again.
+      await service.searchDocuments('b');
+      expect(mockHttp.get.mock.calls.filter(([url]) => url === probeUrl)).toHaveLength(2);
+
+      // The failed probe never pinned the dialect to v2: once the server
+      // answers 406, a later call switches to legacy (unversioned Accept + q=).
+      mockHttp.get = vi
+        .fn()
+        .mockReturnValueOnce(throwError(() => notAcceptableError()))
+        .mockImplementation((url: string) => {
+          if (url.includes('/documents/?q=')) {
+            return of(searchResultPayload());
+          }
+          return of({ data: {} });
+        });
+      const results = await service.searchDocuments('c');
+      expect(results).toHaveLength(1);
+      expect(mockHttp.get).toHaveBeenCalledWith(
+        'http://paperless:8000/api/documents/?q=c',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Accept: 'application/json' }),
+        }),
+      );
+    });
+  });
+
+  describe('Runtime resolution (AP-17)', () => {
+    it('reads the configuration per call through SettingsResolverService', async () => {
       mockHttp.get = vi.fn().mockReturnValue(of({ status: 200, data: {} }));
       await service.healthCheck();
       expect(mockSettings.getEffectiveBoolean).toHaveBeenCalledWith('PAPERLESS_ENABLED');
@@ -277,7 +481,7 @@ describe('PaperlessNgxService', () => {
       expect(mockSettings.getEffectiveString).toHaveBeenCalledWith('PAPERLESS_API_TOKEN');
     });
 
-    it('normalisiert eine trailing Slash in PAPERLESS_URL', async () => {
+    it('normalizes a trailing slash in PAPERLESS_URL', async () => {
       const trailingService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_URL: 'http://paperless:8000/' })),
@@ -292,7 +496,7 @@ describe('PaperlessNgxService', () => {
     });
   });
 
-  describe('HTTPS-Warnung (Laufzeit)', () => {
+  describe('HTTPS warning (runtime)', () => {
     let warnSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
@@ -303,15 +507,15 @@ describe('PaperlessNgxService', () => {
       warnSpy?.mockRestore();
     });
 
-    it('warnt bei PAPERLESS_URL ohne HTTPS', async () => {
+    it('warns when PAPERLESS_URL is not HTTPS', async () => {
       const httpService = new PaperlessNgxService(mockHttp, mockSettings);
       mockHttp.get = vi.fn().mockReturnValue(of({ status: 200, data: {} }));
       await httpService.healthCheck();
 
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('kein HTTPS'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('does not use HTTPS'));
     });
 
-    it('warnt nicht bei PAPERLESS_URL mit HTTPS', async () => {
+    it('does not warn when PAPERLESS_URL uses HTTPS', async () => {
       const httpsService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_URL: 'https://paperless.example.com' })),
@@ -319,10 +523,10 @@ describe('PaperlessNgxService', () => {
       mockHttp.get = vi.fn().mockReturnValue(of({ status: 200, data: {} }));
       await httpsService.healthCheck();
 
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('kein HTTPS'));
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('does not use HTTPS'));
     });
 
-    it('warnt nicht bei deaktiviertem Paperless', async () => {
+    it('does not warn when Paperless is disabled', async () => {
       const disabledService = new PaperlessNgxService(
         mockHttp,
         createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
@@ -330,7 +534,7 @@ describe('PaperlessNgxService', () => {
       const result = await disabledService.healthCheck();
       expect(result).toBe(false);
 
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('kein HTTPS'));
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('does not use HTTPS'));
     });
   });
 });

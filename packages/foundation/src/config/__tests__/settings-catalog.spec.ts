@@ -11,16 +11,16 @@ import { parseAppConfig } from '../app-config.schema';
 import type { SettingDefinition } from '../settings-catalog';
 
 describe('settings-catalog', () => {
-  it('hat eine versionierte Katalog-Version', () => {
+  it('has a versioned catalog version', () => {
     expect(SETTINGS_CATALOG_VERSION).toBeGreaterThanOrEqual(1);
   });
 
-  it('besitzt eindeutige Schluessel ohne Duplikate', () => {
+  it('has unique keys without duplicates', () => {
     const keys = SETTINGS_CATALOG.map((d) => d.key);
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('katalogisiert jeden Schluessel des AppConfig-Schemas', () => {
+  it('catalogues every AppConfig schema key', () => {
     const parsedKeys = Object.keys(
       parseAppConfig({
         DATABASE_URL: 'postgresql://u:p@localhost:5432/versigo',
@@ -31,11 +31,11 @@ describe('settings-catalog', () => {
     );
     expect(parsedKeys.length).toBeGreaterThan(20);
     for (const schemaKey of parsedKeys) {
-      expect(getSettingDefinition(schemaKey), `Schema-Schluessel ${schemaKey} fehlt im Katalog`).toBeDefined();
+      expect(getSettingDefinition(schemaKey), `AppConfig schema key ${schemaKey} missing in catalog`).toBeDefined();
     }
   });
 
-  it('ordnet jeden Schluessel genau einer Kategorie zu', () => {
+  it('assigns every key to exactly one category', () => {
     const validCategories = new Set(['runtime', 'restart', 'secret', 'bootstrap']);
     for (const definition of SETTINGS_CATALOG) {
       expect(validCategories.has(definition.category)).toBe(true);
@@ -47,12 +47,12 @@ describe('settings-catalog', () => {
     expect(secrets.length).toBeGreaterThanOrEqual(2);
     for (const secret of secrets) {
       expect(isSecretKey(secret.key)).toBe(true);
-      // Secrets haben weder Default noch erlaubte Werte (kein Rate-Raten).
+      // Secrets have neither a default nor allowed values (no guessing).
       expect(secret.defaultValue).toBeUndefined();
     }
   });
 
-  it('liefert UI-konfigurierbare Schluessel ohne bootstrap-Werte', () => {
+  it('returns UI-configurable keys without bootstrap values', () => {
     const uiKeys = getUiConfigurableKeys();
     expect(uiKeys).toContain('AI_ENABLED');
     expect(uiKeys).toContain('PAPERLESS_URL');
@@ -66,25 +66,25 @@ describe('settings-catalog', () => {
     expect(uiKeys).not.toContain('SESSION_SECRET');
   });
 
-  it('listet Neustart-Schluessel separat auf', () => {
+  it('lists restart keys separately', () => {
     const restartKeys = getRestartRequiredKeys();
     expect(restartKeys).toContain('STORAGE_ENABLED');
     expect(restartKeys).toContain('LOCAL_AUTH_MAX_ATTEMPTS');
     expect(restartKeys).toContain('LOCAL_AUTH_RATE_LIMIT_WINDOW_MS');
-    // BugFix-05: OIDC-Feature-Schalter wird beim naechsten Start aktiv.
+    // BugFix-05: the OIDC feature switch becomes active on the next start.
     expect(restartKeys).toContain('OIDC_ENABLED');
   });
 
-  it('bietet fuer jeden UI-konfigurierbaren Schluessel eine Beschreibung', () => {
+  it('provides a description for every UI-configurable key', () => {
     for (const definition of SETTINGS_CATALOG) {
-      expect(definition.description.length, `${definition.key} ohne Beschreibung`).toBeGreaterThan(20);
+      expect(definition.description.length, `${definition.key} without description`).toBeGreaterThan(20);
       if (definition.category !== 'bootstrap') {
         expect(definition.permission).toBe('ADMIN');
       }
     }
   });
 
-  it('sichert Infrastruktur-/Bootstrap-Schluessel als nicht editierbar', () => {
+  it('secures infrastructure/bootstrap keys as non-editable', () => {
     const bootstrap = SETTINGS_CATALOG.filter((d) => d.category === 'bootstrap');
     expect(bootstrap.map((d) => d.key)).toEqual(
       expect.arrayContaining([
@@ -96,17 +96,17 @@ describe('settings-catalog', () => {
         'S3_SECRET_KEY',
       ]),
     );
-    // BugFix-05: OIDC ist nicht mehr bootstrap (Client-Secret ist ein
-    // UI-setzbares Secret, kein Infrastruktur-Secret).
+    // BugFix-05: OIDC is no longer bootstrap (the client secret is a
+    // UI-settable secret, not an infrastructure secret).
     expect(bootstrap.map((d) => d.key)).not.toContain('OIDC_CLIENT_SECRET');
     expect(bootstrap.map((d) => d.key)).not.toContain('OIDC_ENABLED');
   });
 
-  it('liefert unbekannte Schluessel als undefined', () => {
+  it('returns unknown keys as undefined', () => {
     expect(getSettingDefinition('DOES_NOT_EXIST')).toBeUndefined();
   });
 
-  it('definiert jeden UI-konfigurierbaren Schluessel typsicher (Typ vorhanden)', () => {
+  it('defines every UI-configurable key type-safe (type present)', () => {
     const uiEntries = SETTINGS_CATALOG.filter((d) => d.category !== 'bootstrap') as SettingDefinition[];
     for (const entry of uiEntries) {
       expect(['boolean', 'number', 'string']).toContain(entry.type);

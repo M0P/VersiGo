@@ -86,7 +86,7 @@ describe('DocumentsController', () => {
   const policyId = '33333333-3333-4333-3333-333333333333';
   const docId = '44444444-4444-4444-4444-444444444444';
 
-  it('upload delegiert an Service und gibt Ergebnis zurueck', async () => {
+  it('upload delegates to the service and returns the result', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     const expected = { id: docId, fileName: 'test.pdf' };
@@ -98,8 +98,8 @@ describe('DocumentsController', () => {
     expect(service.upload).toHaveBeenCalledWith(householdId, mockUser.id, policyId, mockFile, { category: 'vertrag' });
   });
 
-  // BugFix-07 (Q3): POST /paperless bindet ein Paperless-Dokument.
-  it('linkPaperless delegiert an Service', async () => {
+  // BugFix-07 (Q3): POST /paperless links a Paperless document.
+  it('linkPaperless delegates to the service', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     const expected = { id: 'link-1', storageType: 'PAPERLESS_LINK', storageRef: '42' };
@@ -111,7 +111,7 @@ describe('DocumentsController', () => {
     expect(service.linkPaperlessDocument).toHaveBeenCalledWith(householdId, mockUser.id, policyId, 42);
   });
 
-  it('findAll delegiert an Service', async () => {
+  it('findAll delegates to the service', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     service.findAll.mockResolvedValue([{ id: docId }]);
@@ -122,7 +122,7 @@ describe('DocumentsController', () => {
     expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
-  it('findOne delegiert an Service', async () => {
+  it('findOne delegates to the service', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     service.findOne.mockResolvedValue({ id: docId });
@@ -133,7 +133,7 @@ describe('DocumentsController', () => {
     expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser, policyId, docId);
   });
 
-  it('updateMetadata delegiert an Service', async () => {
+  it('updateMetadata delegates to the service', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     service.updateMetadata.mockResolvedValue({ id: docId, category: 'neu' });
@@ -144,7 +144,7 @@ describe('DocumentsController', () => {
     expect(service.updateMetadata).toHaveBeenCalledWith(householdId, mockUser.id, policyId, docId, { category: 'neu' });
   });
 
-  it('remove delegiert an Service', async () => {
+  it('remove delegates to the service', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     service.remove.mockResolvedValue({ success: true });
@@ -155,7 +155,7 @@ describe('DocumentsController', () => {
     expect(service.remove).toHaveBeenCalledWith(householdId, mockUser.id, policyId, docId);
   });
 
-  it('download setzt Content-Disposition auf attachment', async () => {
+  it('download sets Content-Disposition to attachment', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     service.getDocumentAndPath.mockResolvedValue({
@@ -174,7 +174,7 @@ describe('DocumentsController', () => {
     );
   });
 
-  it('preview setzt Content-Disposition auf inline', async () => {
+  it('preview sets Content-Disposition to inline', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     service.getDocumentAndPath.mockResolvedValue({
@@ -192,10 +192,10 @@ describe('DocumentsController', () => {
     );
   });
 
-  it('download leitet NotFoundException von Service weiter', async () => {
+  it('download propagates NotFoundException from the service', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
-    service.getDocumentAndPath.mockRejectedValue(new NotFoundException('Dokument nicht gefunden'));
+    service.getDocumentAndPath.mockRejectedValue(new NotFoundException('Document not found'));
     const res = createMockRes();
 
     await expect(
@@ -203,7 +203,7 @@ describe('DocumentsController', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('download erzeugt ReadStream und piped an Response', async () => {
+  it('download creates a ReadStream and pipes it to the response', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     service.getDocumentAndPath.mockResolvedValue({
@@ -221,7 +221,7 @@ describe('DocumentsController', () => {
     );
   });
 
-  it('streamFile gibt 500 bei fehlgeschlagenem stat', async () => {
+  it('streamFile returns 500 when stat fails', async () => {
     const service = createMockService();
     const controller = new DocumentsController(service as never);
     const fsMock = await import('fs');

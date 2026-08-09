@@ -1,17 +1,17 @@
 import type { NextConfig } from 'next';
 
 /**
- * Entwicklungsspezifische Origin-Whitelist fuer Next.js Dev-Server
- * (HMR/WebSocket und Dev-Anfragen).
+ * Development-specific origin whitelist for the Next.js dev server
+ * (HMR/WebSocket and dev requests).
  *
- * Standardmaessig sind nur lokale Origins freigeschaltet. Soll die
- * App aus einem lokalen Netzwerk (z. B. ueber die LAN-IP des
- * Entwicklungsrechners) erreicht werden, kann die Liste ueber
- * NEXT_ALLOWED_DEV_ORIGINS (kommagetrennt, jeweils "host" oder
- * "host:port") erweitert werden – siehe .env.example.
+ * By default only local origins are enabled. If the app should be
+ * reachable from a local network (e.g. via the LAN IP of the
+ * development machine), the list can be extended via
+ * NEXT_ALLOWED_DEV_ORIGINS (comma-separated, each "host" or
+ * "host:port") – see .env.example.
  *
- * Die Einstellung greift ausschliesslich im Dev-Modus; in Produktion
- * bleibt die Origin-Pruefung unveraendert restriktiv.
+ * The setting applies exclusively in dev mode; in production
+ * the origin check remains restrictive and unchanged.
  */
 
 const DEFAULT_ALLOWED_DEV_ORIGINS = ['localhost:3000', '127.0.0.1:3000'];

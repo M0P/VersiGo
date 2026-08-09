@@ -1,13 +1,12 @@
 /**
- * AP-21: i18n-Kern – typsichere Uebersetzungslogik.
+ * AP-21: i18n core – type-safe translation logic.
  *
- * - Die englische Katalogdatei (en.ts) ist die Quelle der Wahrheit fuer den
- *   Schluesselbaum; die deutsche Katalogdatei (de.ts) wird per TypeScript
- *   auf denselben Baum gezwungen (Parity auf Typebene, Laufzeit-Parity
- *   testet zusaetzlich die konkreten Werte).
- * - `t()` ist eine einfache, reine Funktion (kein React nötig) und
- *   dadurch in Unit-Tests und Nicht-UI-Modulen nutzbar.
- * - Interpolation: `{platzhalter}` im Text wird durch den Parameter ersetzt.
+ * - The English catalog (en.ts) is the source of truth for the key tree; the
+ *   German catalog (de.ts) is forced onto the same tree via TypeScript
+ *   (type-level parity; runtime parity additionally tests the concrete values).
+ * - `t()` is a simple pure function (no React needed) and can therefore be
+ *   used in unit tests and non-UI modules.
+ * - Interpolation: `{placeholder}` in the text is replaced by the parameter.
  */
 
 import { en, type Messages } from './locales/en';
@@ -15,14 +14,14 @@ import { de } from './locales/de';
 
 export type { Messages } from './locales/en';
 
-/** Produktiv unterstuetzte Sprachen (verbindlich: en ist globaler Default). */
+/** Productively supported languages (binding: en is the global default). */
 export const SUPPORTED_LANGUAGES = ['en', 'de'] as const;
 
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
 export const DEFAULT_LANGUAGE: Language = 'en';
 
-/** Name des Cookies, in dem die (persistente) Sprache der Oberflaeche liegt. */
+/** Name of the cookie that holds the (persistent) UI language. */
 export const LANGUAGE_COOKIE = 'versigo:locale';
 
 export function isSupportedLanguage(value: string | null | undefined): value is Language {
@@ -34,9 +33,9 @@ export function normalizeLanguage(value: string | null | undefined): Language {
 }
 
 /**
- * Berechnet die Pfadtypen eines verschachtelten Katalogs, z. B.
- * `'nav.dashboard'`. Wird fuer die typsichere `t()`-Signatur genutzt:
- * unbekannte Schluessel sind bereits zur Compile-Zeit ein Fehler.
+ * Computes the path types of a nested catalog, e.g. `'nav.dashboard'`.
+ * Used for the type-safe `t()` signature: unknown keys are already a
+ * compile-time error.
  */
 export type MessagePath<T> = T extends object
   ? {
@@ -65,19 +64,19 @@ function interpolate(template: string, params?: MessageParams): string {
 }
 
 /**
- * Erzeugt eine Uebersetzungsfunktion fuer die angegebene Sprache.
- * Fallback-Kette: gewaehlte Sprache -> Englisch -> roher Schluessel.
- * Damit ist sichergestellt, dass auch bei einer fehlenden Uebersetzung
- * niemals ein leerer Text oder ein Crash entsteht.
+ * Creates a translation function for the given language.
+ * Fallback chain: selected language -> English -> raw key.
+ * This guarantees that even a missing translation never produces empty
+ * text or a crash.
  */
 /**
- * Uebersetzungsfunktion.
+ * Translation function.
  *
- * Statische Schluessel (Literale) werden gegen den Katalog geprueft
- * (Compile-Fehler bei Tippfehlern). Dynamische Schluessel, die erst zur
- * Laufzeit entstehen (z. B. `policies.statuses.${status}` mit einem vom
- * Server gelieferten Enum-Wert), sind ueber den String-Fallback moeglich –
- * der Ruckfall auf den rohen Schluessel verhindert dabei leere Ausgaben.
+ * Static keys (literals) are checked against the catalog
+ * (compile error on typos). Dynamic keys that only arise at runtime
+ * (e.g. `policies.statuses.${status}` with a server-provided enum value)
+ * are possible via the string fallback – the fallback to the raw key
+ * prevents empty output.
  */
 export type Translator = (
   path: MessagePath<Messages> | (string & {}),

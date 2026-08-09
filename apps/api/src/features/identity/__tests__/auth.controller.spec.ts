@@ -123,7 +123,7 @@ function createController(overrides?: Record<string, any>): AuthController {
 }
 
 describe('AuthController', () => {
-  it('/auth/me liefert den authentifizierten User aus dem Request-Kontext zurueck', () => {
+  it('/auth/me returns the authenticated user from the request context', () => {
     const controller = createController();
     const user: AuthenticatedUser = {
       id: 'user-1',
@@ -136,7 +136,7 @@ describe('AuthController', () => {
     expect(controller.me(user)).toEqual(user);
   });
 
-  it('/auth/callback rotiert die Session vor dem Setzen der userId (Session-Fixation-Schutz)', async () => {
+  it('/auth/callback rotates the session before setting the userId (session fixation protection)', async () => {
     const oidc = createMockOidc();
     const controller = createController({ oidc });
     const regenerate = vi.fn((cb: () => void) => cb());
@@ -170,7 +170,7 @@ describe('AuthController', () => {
     expect(res.redirect).toHaveBeenCalledWith('/');
   });
 
-  it('/auth/logout zerstoert die Session und loescht das Cookie', () => {
+  it('/auth/logout destroys the session and clears the cookie', () => {
     const controller = createController();
     const regenerate = vi.fn((cb: () => void) => cb());
     const destroy = vi.fn((cb: () => void) => cb());
@@ -193,7 +193,7 @@ describe('AuthController', () => {
   });
 
   describe('GET /auth/login (OIDC redirect)', () => {
-    it('leitet zur OIDC-Provider-URL weiter und speichert codeVerifier/state in der Session', async () => {
+    it('redirects to the OIDC provider URL and stores codeVerifier/state in the session', async () => {
       const oidc = createMockOidc();
       oidc.isEnabled.mockResolvedValue(true);
       const controller = createController({ oidc });
@@ -213,13 +213,12 @@ describe('AuthController', () => {
       expect(res.redirect).toHaveBeenCalledWith('https://provider.example.com/auth');
       expect(req.session.oidcCodeVerifier).toBe('verifier');
       expect(req.session.oidcState).toBe('state');
-      // BugFix-07 (Code-Review, R2): Stale oidcLinkMode aus einem abgebrochenen
-      // Self-Service-Link-Flow darf den Login-Callback nicht in den Link-Modus
-      // versetzen.
+      // BugFix-07 (code review, R2): a stale oidcLinkMode from an aborted
+      // self-service link flow must not put the login callback into link mode.
       expect(req.session.oidcLinkMode).toBeUndefined();
     });
 
-    it('gibt 501 wenn OIDC deaktiviert ist (bleibt unabhaengig von lokaler Auth)', async () => {
+    it('returns 501 when OIDC is disabled (independent of local auth)', async () => {
       const oidc = createMockOidc();
       oidc.isEnabled.mockResolvedValue(false);
       const controller = createController({ oidc });
@@ -240,7 +239,7 @@ describe('AuthController', () => {
   });
 
   describe('GET /auth/config', () => {
-    it('gibt verfuegbare Authentifizierungsmethoden zurueck', async () => {
+    it('returns the available authentication methods', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockImplementation(async (key: string) => key === 'local');
       const oidc = createMockOidc();
@@ -258,7 +257,7 @@ describe('AuthController', () => {
       });
     });
 
-    it('zeigt beide Methoden wenn aktiviert', async () => {
+    it('shows both methods when enabled', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const oidc = createMockOidc();
@@ -276,11 +275,11 @@ describe('AuthController', () => {
       });
     });
 
-    it('meldet OIDC als deaktiviert, wenn die Strategie trotz Capability nicht bereit ist (Discovery fehlgeschlagen)', async () => {
+    it('reports OIDC as disabled when the strategy is not ready despite the capability (discovery failed)', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockImplementation(async (key: string) => key === 'oidc');
       const oidc = createMockOidc();
-      oidc.getStatus.mockResolvedValue({ ready: false, error: 'Discovery fehlgeschlagen' });
+      oidc.getStatus.mockResolvedValue({ ready: false, error: 'Discovery failed' });
       const controller = createController({ capabilities, oidc });
 
       const result = await controller.getAuthConfig();
@@ -288,33 +287,33 @@ describe('AuthController', () => {
         oidcEnabled: false,
         oidcReady: false,
         oidcConfigured: true,
-        oidcError: 'OIDC ist nicht verfuegbar (Details im Server-Log)',
+        oidcError: 'OIDC is unavailable (see server log)',
         localEnabled: false,
         registrationEnabled: false,
       });
     });
 
-    it('BugFix-07: meldet oidcReady=true NUR wenn der Client tatsaechlich bereit ist', async () => {
+    it('BugFix-07: reports oidcReady=true ONLY when the client is actually ready', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockImplementation(async (key: string) => key === 'oidc');
       const oidc = createMockOidc();
-      // Capability aktiv, Client aber nicht initialisiert (z.B. Neustart
-      // fehlt nach Aktivieren von OIDC) => Button darf NICHT erscheinen.
-      oidc.getStatus.mockResolvedValue({ ready: false, error: 'OIDC_ISSUER_URL fehlt' });
+      // Capability active but client not initialized (e.g. restart
+      // missing after enabling OIDC) => the button must NOT appear.
+      oidc.getStatus.mockResolvedValue({ ready: false, error: 'OIDC_ISSUER_URL missing' });
       const controller = createController({ capabilities, oidc });
 
       const result = await controller.getAuthConfig();
       expect(result.oidcEnabled).toBe(false);
       expect(result.oidcReady).toBe(false);
       expect(result.oidcConfigured).toBe(true);
-      // BugFix-07 (Code-Review): Oeffentlicher Endpunkt leakt keine internen
-      // Diagnose-Details mehr, nur noch einen generischen Hinweis.
-      expect(result.oidcError).toBe('OIDC ist nicht verfuegbar (Details im Server-Log)');
+      // BugFix-07 (code review): the public endpoint no longer leaks
+      // internal diagnostics, only a generic hint.
+      expect(result.oidcError).toBe('OIDC is unavailable (see server log)');
     });
   });
 
-  describe('Self-Service-OIDC-Verknuepfung (BugFix-07)', () => {
-    it('GET /auth/oidc/link liefert den Bindungsstatus', async () => {
+  describe('Self-service OIDC linking (BugFix-07)', () => {
+    it('GET /auth/oidc/link returns the binding status', async () => {
       const authService = createMockAuthService();
       authService.getOidcBinding.mockResolvedValue({
         oidcIssuer: 'https://provider.example.com',
@@ -333,14 +332,14 @@ describe('AuthController', () => {
       });
     });
 
-    it('GET /auth/oidc/link meldet linked=false ohne Bindung', async () => {
+    it('GET /auth/oidc/link reports linked=false without a binding', async () => {
       const controller = createController();
       const result = await controller.getOidcLink(mockUser);
       expect(result.linked).toBe(false);
       expect(result.oidcIssuer).toBeNull();
     });
 
-    it('POST /auth/oidc/link setzt den Link-Modus und liefert die Provider-URL', async () => {
+    it('POST /auth/oidc/link sets link mode and returns the provider URL', async () => {
       const oidc = createMockOidc();
       const controller = createController({ oidc });
       const session: SessionLike & { oidcLinkMode?: boolean } = {
@@ -359,9 +358,9 @@ describe('AuthController', () => {
       expect(session.oidcLinkMode).toBe(true);
     });
 
-    it('POST /auth/oidc/link gibt 501, wenn OIDC nicht einsatzbereit ist', async () => {
+    it('POST /auth/oidc/link returns 501 when OIDC is not ready', async () => {
       const oidc = createMockOidc();
-      oidc.getStatus.mockResolvedValue({ ready: false, error: 'Discovery fehlgeschlagen' });
+      oidc.getStatus.mockResolvedValue({ ready: false, error: 'Discovery failed' });
       const controller = createController({ oidc });
       const req = { session: {} } as unknown as RequestLike;
 
@@ -370,14 +369,14 @@ describe('AuthController', () => {
       });
     });
 
-    it('DELETE /auth/oidc/link loest die Bindung des angemeldeten Users', async () => {
+    it('DELETE /auth/oidc/link removes the binding of the signed-in user', async () => {
       const authService = createMockAuthService();
       const controller = createController({ authService });
       await controller.unlinkOidc(mockUser);
       expect(authService.unbindOidcIdentityForUser).toHaveBeenCalledWith('user-1');
     });
 
-    it('Callback im Link-Modus bindet die Identitaet an den Session-User (ohne Session-Rotation)', async () => {
+    it('callback in link mode binds the identity to the session user (without session rotation)', async () => {
       const oidc = createMockOidc();
       const authService = createMockAuthService();
       const controller = createController({ oidc, authService });
@@ -408,13 +407,13 @@ describe('AuthController', () => {
         'https://provider.example.com',
         'sub-1',
       );
-      // Keine Session-Rotation im Link-Modus (User bleibt eingeloggt).
+      // No session rotation in link mode (the user stays signed in).
       expect(regenerate).not.toHaveBeenCalled();
       expect(res.redirect).toHaveBeenCalledWith('/settings?oidc=linked');
       expect(session.oidcLinkMode).toBeUndefined();
     });
 
-    it('Callback im Link-Modus ohne Session-User lehnt ab (kein Binden an Unbekannte)', async () => {
+    it('callback in link mode without a session user rejects (no binding to unknown users)', async () => {
       const oidc = createMockOidc();
       const authService = createMockAuthService();
       const controller = createController({ oidc, authService });
@@ -438,11 +437,11 @@ describe('AuthController', () => {
       expect(res.redirect).toHaveBeenCalledWith('/auth/login?error=not-authenticated');
     });
 
-    it('Callback im Link-Modus leitet bei Konflikt (Identitaet anderweitig gebunden) zu /settings?error=oidc-link-conflict', async () => {
+    it('callback in link mode redirects on conflict (identity bound elsewhere) to /settings?error=oidc-link-conflict', async () => {
       const oidc = createMockOidc();
       const authService = createMockAuthService();
       authService.bindOidcIdentityForUser.mockRejectedValue(
-        new ConflictException('Diese OIDC-Identitaet ist bereits an ein anderes Konto gebunden'),
+        new ConflictException('This OIDC identity is already bound to another account'),
       );
       const controller = createController({ oidc, authService });
       const session = {
@@ -473,7 +472,7 @@ describe('AuthController', () => {
       session: { regenerate: vi.fn() },
     };
 
-    it('registriert einen lokalen Account und meldet PENDING_APPROVAL', async () => {
+    it('registers a local account and reports PENDING_APPROVAL', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
@@ -499,7 +498,7 @@ describe('AuthController', () => {
       expect(result).toEqual({ status: 'PENDING_APPROVAL' });
     });
 
-    it('gibt 501 wenn lokale Registrierung nicht konfiguriert ist', async () => {
+    it('returns 501 when local registration is not configured', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(false);
       const authService = createMockAuthService();
@@ -518,7 +517,7 @@ describe('AuthController', () => {
       expect(authService.registerLocalAccount).not.toHaveBeenCalled();
     });
 
-    it('gibt 429 wenn die IP registrierungs-limitiert ist (Scope register)', async () => {
+    it('returns 429 when the IP is registration-limited (scope register)', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
@@ -540,12 +539,12 @@ describe('AuthController', () => {
       expect(authService.registerLocalAccount).not.toHaveBeenCalled();
     });
 
-    it('zaehlt fehlgeschlagene Registrierungen (409) im Scope register', async () => {
+    it('counts failed registrations (409) in the scope register', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
       authService.registerLocalAccount.mockRejectedValue(
-        new ConflictException('Benutzername ist bereits vergeben'),
+        new ConflictException('Username is already taken'),
       );
       const rateLimiter = createMockRateLimiter();
       const controller = createController({ capabilities, authService, rateLimiter });
@@ -565,7 +564,7 @@ describe('AuthController', () => {
   });
 
   describe('POST /auth/local/login', () => {
-    it('gibt 501 wenn lokale Auth deaktiviert ist', async () => {
+    it('returns 501 when local auth is disabled', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(false);
       const controller = createController({ capabilities });
@@ -579,7 +578,7 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(501);
     });
 
-    it('gibt 429 wenn IP rate-limitiert ist', async () => {
+    it('returns 429 when the IP is rate-limited', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const rateLimiter = createMockRateLimiter();
@@ -595,7 +594,7 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(429);
     });
 
-    it('gibt 400 bei fehlenden Feldern', async () => {
+    it('returns 400 on missing fields', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const controller = createController({ capabilities });
@@ -609,7 +608,7 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(400);
     });
 
-    it('gibt 401 bei ungueltigen Anmeldedaten (generic)', async () => {
+    it('returns 401 on invalid credentials (generic)', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
@@ -625,7 +624,7 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(401);
     });
 
-    it('gibt 200 und User bei erfolgreichem Login', async () => {
+    it('returns 200 and the user on successful login', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();
@@ -645,7 +644,7 @@ describe('AuthController', () => {
       expect(rateLimiter.resetAttempts).toHaveBeenCalledWith('1.2.3.4');
     });
 
-    it('zaehlt fehlgeschlagene Versuche im Rate-Limiter', async () => {
+    it('counts failed attempts in the rate limiter', async () => {
       const capabilities = createMockCapabilities();
       capabilities.isEnabled.mockResolvedValue(true);
       const authService = createMockAuthService();

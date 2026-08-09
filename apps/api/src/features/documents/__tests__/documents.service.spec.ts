@@ -38,7 +38,7 @@ function createMockConfig() {
 
 type MockDb = ReturnType<typeof createMockDb>;
 
-// BugFix-07 (Q3): Mock des PAPERLESS_ADAPTERs.
+// BugFix-07 (Q3): mock of the PAPERLESS_ADAPTER.
 function createMockPaperless() {
   return {
     getDeepLink: vi.fn().mockResolvedValue('https://paperless.example.com/documents/42/'),
@@ -88,7 +88,7 @@ describe('DocumentsService', () => {
   });
 
   describe('upload', () => {
-    it('laedt ein Dokument hoch und protokolliert Audit', async () => {
+    it('uploads a document and logs an audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue(null);
@@ -123,7 +123,7 @@ describe('DocumentsService', () => {
       );
     });
 
-    it('verweigert Upload ohne Household-Mitgliedschaft', async () => {
+    it('refuses upload without household membership', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -131,7 +131,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Upload bei fehlender Policy', async () => {
+    it('refuses upload when the policy is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue(null);
 
@@ -140,7 +140,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('verweigert Upload bei nicht erlaubtem MIME-Type', async () => {
+    it('refuses upload for a disallowed MIME type', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
 
@@ -151,7 +151,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('verweigert Upload bei existierender Prüfsumme', async () => {
+    it('refuses upload when the checksum already exists', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue({ id: 'existing', policyId, checksum: 'abc' });
@@ -161,7 +161,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('verweigert Upload bei zu grosser Datei', async () => {
+    it('refuses upload for a file that is too large', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
 
@@ -172,7 +172,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('verweigert Upload bei zu langem Dateinamen', async () => {
+    it('refuses upload for a filename that is too long', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
 
@@ -183,7 +183,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('raeumt bei fehlgeschlagenem storeFile auf', async () => {
+    it('cleans up when storeFile fails', async () => {
       const { writeFile } = await import('fs/promises');
       (writeFile as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Disk full'));
 
@@ -207,7 +207,7 @@ describe('DocumentsService', () => {
   });
 
   describe('findAll', () => {
-    it('gibt alle nicht-archivierten Dokumente einer Policy zurueck', async () => {
+    it('returns all non-archived documents of a policy', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findMany.mockResolvedValue([
@@ -223,8 +223,8 @@ describe('DocumentsService', () => {
       );
     });
 
-    // BugFix-07 (Q3): PAPERLESS_LINK-Dokumente erhalten einen Deep-Link.
-    it('ergaenzt den Paperless-Deep-Link fuer PAPERLESS_LINK-Dokumente', async () => {
+    // BugFix-07 (Q3): PAPERLESS_LINK documents get a deep link.
+    it('adds the Paperless deep link for PAPERLESS_LINK documents', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findMany.mockResolvedValue([
@@ -240,7 +240,7 @@ describe('DocumentsService', () => {
   });
 
   describe('linkPaperlessDocument (BugFix-07, Q3)', () => {
-    it('bindet ein Paperless-Dokument als PAPERLESS_LINK und auditiert', async () => {
+    it('links a Paperless document as PAPERLESS_LINK and audits', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       const paperless = createMockPaperless();
@@ -296,7 +296,7 @@ describe('DocumentsService', () => {
       );
     });
 
-    it('dedupliziert: erneutes Verbinden liefert den bestehenden Eintrag', async () => {
+    it('deduplicates: linking again returns the existing entry', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       const paperless = createMockPaperless();
@@ -316,7 +316,7 @@ describe('DocumentsService', () => {
       expect(mockDb.policyDocument.create).not.toHaveBeenCalled();
     });
 
-    it('wirft NotFoundException, wenn das Dokument in Paperless fehlt', async () => {
+    it('throws NotFoundException when the document is missing in Paperless', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       const paperless = createMockPaperless();
@@ -334,7 +334,7 @@ describe('DocumentsService', () => {
       expect(mockDb.policyDocument.create).not.toHaveBeenCalled();
     });
 
-    it('BugFix-07 (Code-Review): P2002-Race zwischen parallelen Links wird idempotent aufgeloest', async () => {
+    it('BugFix-07 (code review): a P2002 race between parallel links is resolved idempotently', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       const paperless = createMockPaperless();
@@ -354,13 +354,13 @@ describe('DocumentsService', () => {
         paperless,
       );
 
-      // Check-then-Insert: Erster Check (innerhalb der Transaktion) findet
-      // nichts; der parallele Request gewinnt das Rennen und verursacht beim
-      // create einen P2002 (partieller Unique-Index aus der Migration
+      // Check-then-insert: the first check (inside the transaction) finds
+      // nothing; the parallel request wins the race and causes a P2002 on
+      // create (partial unique index from the migration
       // 20260806140000_bugfix07_paperless_link_dedupe).
       const existing = { id: 'link-1', policyId, storageType: 'PAPERLESS_LINK', storageRef: '42' };
       mockDb.policyDocument.findFirst
-        .mockResolvedValueOnce(null) // Transaktions-Check: nichts vorhanden
+        .mockResolvedValueOnce(null) // transaction check: nothing present
         .mockResolvedValueOnce(existing); // P2002-Rueckgriff: Sieger gefunden
       mockDb.policyDocument.create.mockRejectedValue({ code: 'P2002' });
 
@@ -373,13 +373,13 @@ describe('DocumentsService', () => {
 
       expect(result).toEqual(existing);
       expect(mockDb.policyDocument.create).toHaveBeenCalledTimes(1);
-      // Kein zweites CREATE/Audit fuer den verlierenden Writer.
+      // No second CREATE/audit for the losing writer.
       expect(mockDb.auditEvent.create).not.toHaveBeenCalled();
     });
   });
 
   describe('findOne', () => {
-    it('wirft NotFoundException bei fehlendem Dokument', async () => {
+    it('throws NotFoundException when the document is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue(null);
@@ -389,7 +389,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('gibt ein Dokument zurueck', async () => {
+    it('returns a document', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue({ id: docId, policyId, fileName: 'test.pdf' });
@@ -401,7 +401,7 @@ describe('DocumentsService', () => {
   });
 
   describe('updateMetadata', () => {
-    it('aktualisiert Metadaten und protokolliert Audit', async () => {
+    it('updates metadata and logs an audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'ADMIN' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue({ id: docId, policyId, archivedAt: null });
@@ -417,7 +417,7 @@ describe('DocumentsService', () => {
       );
     });
 
-    it('wirft NotFoundException bei archiviertem Dokument', async () => {
+    it('throws NotFoundException for an archived document', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'ADMIN' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue(null);
@@ -429,7 +429,7 @@ describe('DocumentsService', () => {
   });
 
   describe('remove', () => {
-    it('archiviert ein Dokument, loescht Datei von Platte und protokolliert Audit', async () => {
+    it('archives a document, deletes the file from disk and logs an audit', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue({ id: docId, policyId, archivedAt: null });
@@ -453,7 +453,7 @@ describe('DocumentsService', () => {
       );
     });
 
-    it('wirft NotFoundException bei fehlendem Dokument', async () => {
+    it('throws NotFoundException when the document is missing', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue(null);
@@ -465,7 +465,7 @@ describe('DocumentsService', () => {
   });
 
   describe('Household-Isolation', () => {
-    it('verweigert Zugriff ohne Mitgliedschaft bei findAll', async () => {
+    it('refuses access without membership in findAll', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -473,7 +473,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Zugriff ohne Mitgliedschaft bei findOne', async () => {
+    it('refuses access without membership in findOne', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -481,7 +481,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Zugriff ohne Mitgliedschaft bei updateMetadata', async () => {
+    it('refuses access without membership in updateMetadata', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -489,7 +489,7 @@ describe('DocumentsService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('verweigert Zugriff ohne Mitgliedschaft bei remove', async () => {
+    it('refuses access without membership in remove', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue(null);
 
       await expect(

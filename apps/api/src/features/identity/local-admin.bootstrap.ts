@@ -5,38 +5,37 @@ import { PasswordHashingService } from './password-hashing.service';
 import { normalizeIdentifier } from './auth.service';
 
 /**
- * Fixe ID des Beta-Referenz-Households. Die Web-UI adressiert household-
- * gescopte Endpunkte durchgaengig ueber /households/default/..., daher muss
- * das Household genau diese ID tragen (kein UUID).
+ * Fixed ID of the beta reference household. The web UI addresses
+ * household-scoped endpoints consistently via /households/default/...,
+ * so the household must carry exactly this ID (not a UUID).
  */
 export const DEFAULT_HOUSEHOLD_ID = 'default';
 
 /**
- * Idempotenter Bootstrap fuer den initialen lokalen Administrator.
+ * Idempotent bootstrap for the initial local administrator.
  *
- * Laueft, wenn die lokale Authentifizierung aktiv ist und LOCAL_ADMIN_USERNAME
- * sowie LOCAL_ADMIN_PASSWORD explizit gesetzt sind. Beim ersten Start auf
- * leerer Datenbank wird genau ein Admin aus diesen Variablen angelegt;
- * weitere Starts legen kein Duplikat an und ueberschreiben das Passwort
- * eines bereits existierenden Kontos nicht.
+ * Runs when local authentication is enabled and LOCAL_ADMIN_USERNAME and
+ * LOCAL_ADMIN_PASSWORD are explicitly set. On first start against an
+ * empty database exactly one admin is created from these variables;
+ * further starts do not create a duplicate and do not overwrite the
+ * password of an existing account.
  *
- * In Produktion ist LOCAL_AUTH_ENABLED per Default false
+ * In production LOCAL_AUTH_ENABLED defaults to false
  * (app-config.schema.ts: `LOCAL_AUTH_ENABLED ?? NODE_ENV !== 'production'`),
- * daher ist `true` dort immer eine ausdrueckliche Konfiguration: Es wird
- * nie ein Default-Admin automatisch angelegt, sondern nur ein explizit
- * konfigurierter initialer Administrator (AP-20 P5). Zusaetzlich wird in
- * Produktion das .env.example-Platzhalter-Passwort abgelehnt.
+ * so `true` there is always an explicit configuration: a default admin is
+ * never created automatically, only an explicitly configured initial
+ * administrator (AP-20 P5). In production the .env.example placeholder
+ * password is also rejected.
  *
- * ADR-007: Der User erhaelt die globale Rolle ADMIN und den Status ACTIVE.
- * Der ehemalige OIDC-Platzhalter-Issuer "local" entfaellt (Bindungen nur
- * noch ueber echte OIDC-Provider, siehe ADR-007).
+ * ADR-007: the user gets the global role ADMIN and status ACTIVE. The
+ * former OIDC placeholder issuer "local" is gone (bindings only via real
+ * OIDC providers, see ADR-007).
  *
- * AP-20: Neben dem Admin wird das Beta-Referenz-Household mit der fixen
- * ID "default" angelegt (die Web-UI verwendet durchgaengig
- * /households/default/...) und der Admin erhaelt eine Mitgliedschaft.
- * Erst dadurch sind die household-gescopten Fachfunktionen (Policen,
- * Kosten, Freigaben, AI) ueber die UI erreichbar. Beide Schritte sind
- * idempotent (Upsert).
+ * AP-20: in addition to the admin, the beta reference household with the
+ * fixed ID "default" is created (the web UI consistently uses
+ * /households/default/...) and the admin receives a membership. Only then
+ * are the household-scoped business functions (policies, costs, shares,
+ * AI) reachable via the UI. Both steps are idempotent (upsert).
  */
 @Injectable()
 export class LocalAdminBootstrapService {
@@ -49,19 +48,18 @@ export class LocalAdminBootstrapService {
   ) {}
 
   /**
-   * Fuehrt den Bootstrap aus, falls die Voraussetzungen erfuellt sind.
-   * Wirft nie: Erwartbare Duplikate (P2002 auf der UNIQUE-Constraint)
-   * werden gewarnt, andere Laufzeitfehler (z. B. nicht erreichbare DB)
-   * auf ERROR-Stufe protokolliert – beides blockiert den Anwendungsstart
-   * nicht (Fail-Fast betrifft nur fehlende Authentifizierungsmethoden
-   * im IdentityModule).
+   * Runs the bootstrap if the prerequisites are met. Never throws:
+   * expected duplicates (P2002 on the UNIQUE constraint) are logged as
+   * warnings, other runtime errors (e.g. unreachable DB) at ERROR level –
+   * neither blocks the application start (fail-fast only applies to
+   * missing authentication methods in the IdentityModule).
    */
   async bootstrap(): Promise<void> {
-    // Defense-in-Depth: Der Aufrufer (IdentityModule) ruft den Bootstrap
-    // nur bei aktiver lokaler Auth auf; die Pruefung hier schuetzt auch
-    // gegen versehentliche Aufrufe aus anderen Kontexten. In Produktion
-    // ist LOCAL_AUTH_ENABLED per Default false – true bedeutet dort immer
-    // eine ausdrueckliche Konfiguration (kein automatischer Default-Admin).
+    // Defense-in-depth: the caller (IdentityModule) only invokes the
+    // bootstrap when local auth is active; the check here also protects
+    // against accidental calls from other contexts. In production
+    // LOCAL_AUTH_ENABLED defaults to false – true there always means an
+    // explicit configuration (no automatic default admin).
     if (!this.config.get('LOCAL_AUTH_ENABLED')) {
       return;
     }
@@ -71,24 +69,24 @@ export class LocalAdminBootstrapService {
 
     if (!username || !password) {
       this.logger.warn(
-        'LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD nicht gesetzt – ' +
-          'es wird kein initialer lokaler Administrator angelegt.',
+        'LOCAL_ADMIN_USERNAME/LOCAL_ADMIN_PASSWORD not set – ' +
+          'no initial local administrator will be created.',
       );
       return;
     }
 
-    // AP-20 (P5): In Produktion darf niemals mit dem bekannten
-    // .env.example-Platzhalter-Passwort bootstrapped werden. Wird der
-    // Platzhalter dort erkannt, wird der Bootstrap verweigert (kein
-    // Admin, kein Default-Household) und der Fehler klar protokolliert.
+    // AP-20 (P5): in production the known .env.example placeholder
+    // password must never be used for bootstrapping. If the placeholder
+    // is detected, the bootstrap is refused (no admin, no default
+    // household) and the error is logged clearly.
     if (
       this.config.isProduction &&
       password === 'CHANGE_ME_FOR_LOCAL_DEVELOPMENT'
     ) {
       this.logger.error(
-        'LOCAL_ADMIN_PASSWORD entspricht dem .env.example-Platzhalter. ' +
-          'In Produktion wird kein initialer Administrator angelegt – ' +
-          'bitte ein eigenes, starkes Passwort setzen.',
+        'LOCAL_ADMIN_PASSWORD matches the .env.example placeholder. ' +
+          'No initial administrator will be created in production – ' +
+          'please set your own strong password.',
       );
       return;
     }
@@ -96,8 +94,8 @@ export class LocalAdminBootstrapService {
     const identifier = normalizeIdentifier(username);
 
     try {
-      // Phase 1: Bestehenden Admin ermitteln (idempotent, ein bestehendes
-      // Passwort wird bei erneutem Start nie ueberschrieben).
+      // Phase 1: find an existing admin (idempotent; an existing
+      // password is never overwritten on a later start).
       const existing = await this.db.user.findUnique({
         where: { username: identifier },
         select: { id: true, role: true, status: true },
@@ -105,13 +103,13 @@ export class LocalAdminBootstrapService {
 
       if (existing) {
         this.logger.log(
-          'Initialer lokaler Administrator existiert bereits – Bootstrap wird uebersprungen.',
+          'Initial local administrator already exists – skipping bootstrap.',
         );
         await this.repairDefaultHouseholdFor(existing);
         return;
       }
 
-      // Phase 2: Admin neu anlegen (Check-then-Insert mit P2002-Race-Absicherung).
+      // Phase 2: create the admin (check-then-insert with P2002 race protection).
       const passwordHash = await this.passwordHashing.hash(password);
 
       let userId: string | undefined;
@@ -149,10 +147,10 @@ export class LocalAdminBootstrapService {
         });
         createdAdmin = true;
       } catch (error) {
-        // P2002 (UNIQUE-Constraint) ist erwartbar: Der Benutzername ist
-        // zwischenzeitlich vergeben worden, weil ein paralleles Replica den
-        // Admin zeitgleich angelegt hat (Check-then-Insert-Race). In dem
-        // Fall wird der vorhandene Administrator weiterverwendet.
+        // P2002 (UNIQUE constraint) is expected: the username was taken
+        // in the meantime because a parallel replica created the admin
+        // simultaneously (check-then-insert race). In that case the
+        // existing administrator is reused.
         if ((error as { code?: string }).code !== 'P2002') {
           throw error;
         }
@@ -166,14 +164,14 @@ export class LocalAdminBootstrapService {
           raced.status === UserStatus.ACTIVE
         ) {
           this.logger.warn(
-            `Benutzername "${identifier}" wurde parallel angelegt – ` +
-              'vorhandener lokaler Administrator wird weiterverwendet.',
+            `Username "${identifier}" was created in parallel – ` +
+              'reusing the existing local administrator.',
           );
           userId = raced.id;
         } else {
           this.logger.warn(
-            `Bootstrap uebersprungen: Benutzername "${identifier}" ist bereits ` +
-              'vergeben, aber es wurde kein aktiver Administrator gefunden.',
+            `Bootstrap skipped: username "${identifier}" is already taken, ` +
+              'but no active administrator was found.',
           );
           return;
         }
@@ -183,52 +181,51 @@ export class LocalAdminBootstrapService {
         return;
       }
 
-      // Phase 3: Beta-Referenz-Household + Mitgliedschaft sicherstellen.
-      // Schlaegt nur dieser Schritt fehl, ist der Admin bereits vorhanden –
-      // das wird separat protokolliert (kein irrefuehrendes "Bootstrap
-      // fehlgeschlagen", obwohl der Admin erfolgreich angelegt wurde).
+      // Phase 3: ensure the beta reference household + membership.
+      // If only this step fails, the admin already exists – this is logged
+      // separately (no misleading "bootstrap failed" although the admin
+      // was created successfully).
       try {
         await this.ensureDefaultHousehold(userId);
       } catch (error) {
         this.logger.error(
-          `Administrator (${identifier}) ist vorhanden, aber das Beta-Referenz-` +
-            `Household "${DEFAULT_HOUSEHOLD_ID}" samt Mitgliedschaft konnte ` +
-            `nicht sichergestellt werden: ` +
+          `Administrator (${identifier}) exists, but the beta reference ` +
+            `household "${DEFAULT_HOUSEHOLD_ID}" including the membership ` +
+            `could not be ensured: ` +
             `${error instanceof Error ? error.message : String(error)}. ` +
-            'Ein Neustart wiederholt den Schritt.',
+            'A restart repeats the step.',
         );
         return;
       }
 
       if (createdAdmin) {
         this.logger.log(
-          `Initialer lokaler Administrator angelegt (${identifier}). ` +
-            'Passwort wird nur als Hash gespeichert.',
+          `Initial local administrator created (${identifier}). ` +
+            'The password is only stored as a hash.',
         );
       }
     } catch (error) {
-      // Andere Fehler (z. B. DB nicht erreichbar) werden auf ERROR-Stufe
-      // protokolliert, blockieren den Start aber nicht – ein Container-
-      // bzw. Prozess-Restart wiederholt den Bootstrap.
+      // Other errors (e.g. unreachable DB) are logged at ERROR level but
+      // do not block the start – a container or process restart repeats
+      // the bootstrap.
       this.logger.error(
-        `Initialer Admin-Bootstrap fehlgeschlagen: ` +
+        `Initial admin bootstrap failed: ` +
           `${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
 
   /**
-   * Reparaturpfad (AP-20): Existiert der konfigurierte lokale Administrator
-   * bereits (z. B. nach einem Upgrade einer Installation mit Bestands-Admin),
-   * wird sichergestellt, dass er Mitglied im Beta-Referenz-Household ist –
-   * ohne das Passwort anzufassen. Ohne diesen Schritt bliebe die
-   * household-gescopte UI (Policen, Kosten, Freigaben, AI) bei Upgrades
-   * dauerhaft unbenutzbar.
+   * Repair path (AP-20): if the configured local administrator already
+   * exists (e.g. after upgrading an installation with an existing admin),
+   * it is ensured that they are a member of the beta reference household –
+   * without touching the password. Without this step the household-scoped
+   * UI (policies, costs, shares, AI) would remain permanently unusable
+   * after upgrades.
    *
-   * Eine Default-Household-Mitgliedschaft wird ausschliesslich einem aktiven
-   * ADMIN zuerkannt: Ein bestehender Nutzer, der lediglich dem Benutzernamen
-   * nach zum LOCAL_ADMIN_USERNAME passt, aber eine abweichende Rolle oder
-   * einen abweichenden Status hat, erhaelt keine Mitgliedschaft.
+   * A default household membership is only granted to an active ADMIN: an
+   * existing user who merely matches LOCAL_ADMIN_USERNAME by username but
+   * has a different role or status receives no membership.
    */
   private async repairDefaultHouseholdFor(user: {
     id: string;
@@ -237,9 +234,9 @@ export class LocalAdminBootstrapService {
   }): Promise<void> {
     if (user.role !== GlobalRole.ADMIN || user.status !== UserStatus.ACTIVE) {
       this.logger.warn(
-        `Bestehender Nutzer passt zu LOCAL_ADMIN_USERNAME, ist aber kein ` +
-          `aktiver Administrator (role=${user.role}, status=${user.status}) – ` +
-          'es wird keine Mitgliedschaft im Beta-Referenz-Household vergeben.',
+        `Existing user matches LOCAL_ADMIN_USERNAME but is not an active ` +
+          `administrator (role=${user.role}, status=${user.status}) – ` +
+          'no membership in the beta reference household is granted.',
       );
       return;
     }
@@ -247,13 +244,12 @@ export class LocalAdminBootstrapService {
   }
 
   /**
-   * AP-20: Beta-Referenz-Household "default" idempotent sicherstellen und
-   * den uebergebenen User als Mitglied aufnehmen. Wird sowohl im Erst-
-   * Anlage-Pfad als auch als Reparaturpfad aufgerufen (wenn der Admin
-   * bereits existiert, z. B. nach einem Upgrade von einer Installation
-   * mit Bestands-Admin). Ohne diese Mitgliedschaft wuerden alle
-   * /households/default/...-Aufrufe der UI an der HouseholdMembershipGuard
-   * scheitern.
+   * AP-20: ensure the beta reference household "default" idempotently and
+   * add the given user as a member. Called both in the initial creation
+   * path and as a repair path (when the admin already exists, e.g. after
+   * upgrading an installation with an existing admin). Without this
+   * membership all /households/default/... UI calls would fail at the
+   * HouseholdMembershipGuard.
    */
   private async ensureDefaultHousehold(userId: string): Promise<void> {
     await this.db.$transaction(async (tx) => {
@@ -277,9 +273,9 @@ export class LocalAdminBootstrapService {
         });
       }
 
-      // Mitgliedschaft idempotent sicherstellen. Wird sie dabei neu angelegt
-      // (z. B. Reparaturpfad bei Bestands-Admin oder Bestands-Household),
-      // wird auch das im Audit-Log festgehalten.
+      // Ensure the membership idempotently. If it is newly created here
+      // (e.g. repair path with an existing admin or household), this is
+      // also recorded in the audit log.
       const existingMembership = await tx.householdMembership.findUnique({
         where: {
           householdId_userId: {

@@ -14,7 +14,7 @@ function buildConfig(): AppConfigService {
 }
 
 describe('RedisHealthService', () => {
-  it('meldet isHealthy=false, wenn ping fehlschlaegt', async () => {
+  it('reports isHealthy=false when ping fails', async () => {
     const service = new RedisHealthService(buildConfig());
     vi.spyOn(service as unknown as { client: { ping: () => Promise<string> } }, 'client', 'get')
       .mockReturnValue({

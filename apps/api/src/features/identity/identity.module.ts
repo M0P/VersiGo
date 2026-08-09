@@ -39,12 +39,13 @@ export class IdentityModule implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    // BugFix-05: Capability-Aufloesung laeuft seit der Resolver-Umstellung
-    // asynchron (UI > ENV > DEFAULT). Ist die Datenbank beim Boot nicht
-    // erreichbar (Prisma-Verbindung lazy, $connect() prueft nicht), faellt
-    // die Identitaets-Konfiguration auf den Umgebungs-Snapshot zurueck
-    // (Verhalten vor BugFix-05): Die API startet dann trotz DB-Ausfall und
-    // der Health-Endpunkt meldet db: down, statt den Boot zu verhindern.
+    // BugFix-05: capability resolution has run asynchronously since the
+    // resolver migration (UI > ENV > DEFAULT). If the database is not
+    // reachable at boot (Prisma connection is lazy, $connect() does not
+    // check), the identity configuration falls back to the environment
+    // snapshot (behavior before BugFix-05): the API still starts despite a
+    // DB outage and the health endpoint reports db: down instead of
+    // preventing the boot.
     let oidcEnabled: boolean;
     let localEnabled: boolean;
     try {
@@ -54,8 +55,8 @@ export class IdentityModule implements OnModuleInit {
       ]);
     } catch (error) {
       this.logger.warn(
-        'Capability-Aufloesung beim Boot fehlgeschlagen (DB nicht erreichbar?) – ' +
-          'Fallback auf Umgebungs-Konfiguration: ' +
+        'Capability resolution at boot failed (DB unreachable?) – ' +
+          'fallback to environment configuration: ' +
           `${error instanceof Error ? error.message : String(error)}`,
       );
       oidcEnabled = Boolean(this.config.get('OIDC_ENABLED' as keyof AppConfig));
@@ -67,7 +68,7 @@ export class IdentityModule implements OnModuleInit {
         'KEINE AUTHENTIFIZIERUNGSMETHODE KONFIGURIERT. ' +
         'Setze mindestens eine der folgenden Umgebungsvariablen: ' +
         'OIDC_ENABLED=true oder LOCAL_AUTH_ENABLED=true. ' +
-        'Die Anwendung wird ohne Authentifizierung nicht gestartet.',
+        'The application will not start without authentication.',
       );
       throw new Error(
         'No authentication method configured. Set OIDC_ENABLED=true or LOCAL_AUTH_ENABLED=true.',

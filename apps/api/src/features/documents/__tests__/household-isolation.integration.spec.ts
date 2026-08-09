@@ -91,12 +91,12 @@ describe('Documents Household-Isolation (Integration)', () => {
       mockDb as never,
       createMockConfig() as never,
       new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
-      // BugFix-07 (Q3): Paperless-Adapter – hier nur als Dummy noetig.
+      // BugFix-07 (Q3): Paperless adapter – only needed as a dummy here.
       { getDeepLink: vi.fn(), getDocumentMetadata: vi.fn(), syncDocument: vi.fn(), searchDocuments: vi.fn(), healthCheck: vi.fn() } as never,
     );
   });
 
-  it('User A laedt Dokument in Household A hoch (erlaubt)', async () => {
+  it('user A uploads a document in household A (allowed)', async () => {
     setupMemberships([{ userId: userA.id, householdId: householdA, role: 'OWNER' }]);
     mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyInA, householdId: householdA });
     mockDb.policyDocument.findFirst.mockResolvedValue(null);
@@ -113,7 +113,7 @@ describe('Documents Household-Isolation (Integration)', () => {
     expect(result!.fileName).toBe('test.pdf');
   });
 
-  it('User A kann kein Dokument in Household B hochladen (Isolation)', async () => {
+  it('user A cannot upload a document in household B (isolation)', async () => {
     setupMemberships([
       { userId: userA.id, householdId: householdA, role: 'OWNER' },
     ]);
@@ -123,7 +123,7 @@ describe('Documents Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine Dokumente in Household A sehen (Isolation)', async () => {
+  it('user B cannot see documents in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -133,7 +133,7 @@ describe('Documents Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann kein einzelnes Dokument in Household A sehen (Isolation)', async () => {
+  it('user B cannot see a single document in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -143,7 +143,7 @@ describe('Documents Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keine Metadaten in Household A aktualisieren (Isolation)', async () => {
+  it('user B cannot update metadata in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -153,7 +153,7 @@ describe('Documents Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann kein Dokument in Household A loeschen (Isolation)', async () => {
+  it('user B cannot delete a document in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);
@@ -163,7 +163,7 @@ describe('Documents Household-Isolation (Integration)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('User B kann keinen Dateipfad in Household A aufloesen (Isolation)', async () => {
+  it('user B cannot resolve a file path in household A (isolation)', async () => {
     setupMemberships([
       { userId: userB.id, householdId: householdB, role: 'OWNER' },
     ]);

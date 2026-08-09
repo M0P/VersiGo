@@ -52,7 +52,7 @@ describe('PolicyRegistryController', () => {
   const householdId = 'household-1';
   const policyId = 'policy-1';
 
-  it('create delegiert an Service und gibt Ergebnis zurueck', async () => {
+  it('create delegates to the service and returns the result', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     const expected = { id: policyId, insurerName: 'Test AG' };
@@ -74,7 +74,7 @@ describe('PolicyRegistryController', () => {
     });
   });
 
-  it('findAll delegiert an Service', async () => {
+  it('findAll delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     service.findAll.mockResolvedValue([{ id: policyId }]);
@@ -85,7 +85,7 @@ describe('PolicyRegistryController', () => {
     expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser);
   });
 
-  it('findOne delegiert an Service', async () => {
+  it('findOne delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     service.findOne.mockResolvedValue({ id: policyId });
@@ -96,7 +96,7 @@ describe('PolicyRegistryController', () => {
     expect(service.findOne).toHaveBeenCalledWith(householdId, mockUser, policyId);
   });
 
-  it('update delegiert an Service', async () => {
+  it('update delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     service.update.mockResolvedValue({ id: policyId, insurerName: 'Neue AG' });
@@ -111,7 +111,7 @@ describe('PolicyRegistryController', () => {
     });
   });
 
-  it('remove delegiert an Service', async () => {
+  it('remove delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     service.remove.mockResolvedValue({ success: true });
@@ -122,7 +122,7 @@ describe('PolicyRegistryController', () => {
     expect(service.remove).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 
-  it('addCoveredPerson delegiert an Service', async () => {
+  it('addCoveredPerson delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     service.addCoveredPerson.mockResolvedValue({ id: 'cp-1', personName: 'Maria' });
@@ -135,7 +135,7 @@ describe('PolicyRegistryController', () => {
     expect(result.personName).toBe('Maria');
   });
 
-  it('createPortalLink delegiert an Service', async () => {
+  it('createPortalLink delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     service.createPortalLink.mockResolvedValue({ id: 'pl-1', providerKey: 'test' });
@@ -147,7 +147,7 @@ describe('PolicyRegistryController', () => {
     expect(result.providerKey).toBe('test');
   });
 
-  it('findPinned delegiert an Service', async () => {
+  it('findPinned delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     service.findPinned.mockResolvedValue([{ id: policyId, pinnedAt: new Date().toISOString() }]);
@@ -158,7 +158,7 @@ describe('PolicyRegistryController', () => {
     expect(service.findPinned).toHaveBeenCalledWith(householdId, mockUser);
   });
 
-  it('pin delegiert an Service', async () => {
+  it('pin delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     const pinned = { id: policyId, pinnedAt: new Date().toISOString() };
@@ -170,7 +170,7 @@ describe('PolicyRegistryController', () => {
     expect(service.pin).toHaveBeenCalledWith(householdId, mockUser.id, policyId);
   });
 
-  it('unpin delegiert an Service', async () => {
+  it('unpin delegates to the service', async () => {
     const service = createMockService();
     const controller = new PolicyRegistryController(service as never);
     service.unpin.mockResolvedValue({ id: policyId, pinnedAt: null });

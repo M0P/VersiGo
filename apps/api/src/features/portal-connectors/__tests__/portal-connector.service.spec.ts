@@ -33,7 +33,7 @@ describe('PortalConnectorService', () => {
   });
 
   describe('resolveDeepLink', () => {
-    it('manueller portalUrl hat Vorrang vor dem Katalog', () => {
+    it('a manual portalUrl takes precedence over the catalog', () => {
       const url = service.resolveDeepLink(
         { portalUrl: 'https://mein-portal.example.com/login', providerKey: 'huk-coburg' },
         'HUK-123',
@@ -41,7 +41,7 @@ describe('PortalConnectorService', () => {
       expect(url).toBe('https://mein-portal.example.com/login');
     });
 
-    it('nutzt die Katalog-Vorlage ohne Platzhalter direkt', () => {
+    it('uses the catalog template without placeholders directly', () => {
       const url = service.resolveDeepLink(
         { portalUrl: null, providerKey: 'huk-coburg' },
         'HUK-123',
@@ -49,10 +49,10 @@ describe('PortalConnectorService', () => {
       expect(url).toBe('https://meine.huk.de/');
     });
 
-    it('ersetzt {contractNumber} in Vorlagen URL-encodiert (pure Funktion)', () => {
-      // resolveDeepLinkTemplate wird direkt geprueft, da aktuell kein
-      // Katalog-Eintrag einen Platzhalter verwendet (bewusst: Deeplinks
-      // sind Login-URLs; Platzhalter-Support ist generisch vorbereitet).
+    it('replaces {contractNumber} in templates URL-encoded (pure function)', () => {
+      // resolveDeepLinkTemplate is tested directly since no catalog entry
+      // currently uses a placeholder (deliberately: deep links are login
+      // URLs; placeholder support is prepared generically).
       const template = resolveDeepLinkTemplate(
         'https://example.com/portal/{contractNumber}',
         'HUK 123/45',
@@ -60,12 +60,12 @@ describe('PortalConnectorService', () => {
       expect(template).toBe('https://example.com/portal/HUK%20123%2F45');
     });
 
-    it('liefert null bei Platzhalter-Vorlage ohne Vertragsnummer', () => {
+    it('returns null for a placeholder template without a contract number', () => {
       const url = resolveDeepLinkTemplate('https://example.com/{contractNumber}', null);
       expect(url).toBeNull();
     });
 
-    it('liefert null ohne Katalog-Eintrag und ohne manuelle URL', () => {
+    it('returns null without a catalog entry and without a manual URL', () => {
       const url = service.resolveDeepLink(
         { portalUrl: null, providerKey: 'unbekannt' },
         'ABC-1',
@@ -73,7 +73,7 @@ describe('PortalConnectorService', () => {
       expect(url).toBeNull();
     });
 
-    it('lehnt manuelle portalUrl mit nicht-http(s)-Schema ab (kein javascript:/data:-Ziel)', () => {
+    it('rejects a manual portalUrl with a non-http(s) scheme (no javascript:/data: target)', () => {
       const url = service.resolveDeepLink(
         { portalUrl: 'javascript:alert(1)', providerKey: 'huk-coburg' },
         'HUK-123',
@@ -81,9 +81,9 @@ describe('PortalConnectorService', () => {
       expect(url).toBe('https://meine.huk.de/');
     });
 
-    it('faellt bei unparsbarer manueller portalUrl auf die Katalog-Vorlage zurueck', () => {
+    it('falls back to the catalog template for an unparsable manual portalUrl', () => {
       const url = service.resolveDeepLink(
-        { portalUrl: 'kein url', providerKey: 'huk-coburg' },
+        { portalUrl: 'not a url', providerKey: 'huk-coburg' },
         'HUK-123',
       );
       expect(url).toBe('https://meine.huk.de/');
@@ -91,7 +91,7 @@ describe('PortalConnectorService', () => {
   });
 
   describe('enrichPortalLink', () => {
-    it('streift credentialsEncrypted ab und setzt credentialsSet', () => {
+    it('strips credentialsEncrypted and sets credentialsSet', () => {
       const enriched = service.enrichPortalLink(
         makeLink({ credentialsEncrypted: 'enc:ciphertext' }) as never,
         'HUK-123',
@@ -104,7 +104,7 @@ describe('PortalConnectorService', () => {
       expect(enriched.catalog?.displayName).toBe('HUK-COBURG');
     });
 
-    it('liefert fuer deaktivierten Connector eine Connector-Sicht mit available=false', () => {
+    it('returns a connector view with available=false for a disabled connector', () => {
       const enriched = service.enrichPortalLink(
         makeLink({ connectorKey: 'mailbox-sync-browser-automation' }) as never,
         'HUK-123',
@@ -116,7 +116,7 @@ describe('PortalConnectorService', () => {
       expect(enriched.connector?.experimental).toBe(true);
     });
 
-    it('liefert fuer unbekannten Connector keine Connector-Sicht', () => {
+    it('returns no connector view for an unknown connector', () => {
       const enriched = service.enrichPortalLink(
         makeLink({ connectorKey: 'unbekannt' }) as never,
         'HUK-123',
@@ -126,12 +126,12 @@ describe('PortalConnectorService', () => {
       expect(enriched.deepLinkUrl).toBe('https://meine.huk.de/');
     });
 
-    it('nutzt den Zugangshinweis des Katalogs, wenn keiner am Link gesetzt ist', () => {
+    it('uses the catalog access hint when none is set on the link', () => {
       const enriched = service.enrichPortalLink(makeLink() as never, 'HUK-123') as EnrichedPortalLink;
       expect(enriched.accessHint?.length).toBeGreaterThan(0);
     });
 
-    it('gibt portalUrl nur fuer http(s)-URLs aus (kein javascript:/data:-Link-Ziel)', () => {
+    it('only exposes portalUrl for http(s) URLs (no javascript:/data: link target)', () => {
       const safe = service.enrichPortalLink(
         makeLink({ portalUrl: 'https://mein-portal.example.com/login' }) as never,
         'HUK-123',
@@ -146,13 +146,13 @@ describe('PortalConnectorService', () => {
       expect(unsafe.deepLinkUrl).toBe('https://meine.huk.de/');
 
       const unparsable = service.enrichPortalLink(
-        makeLink({ portalUrl: 'kein url' }) as never,
+        makeLink({ portalUrl: 'not a url' }) as never,
         'HUK-123',
       ) as EnrichedPortalLink;
       expect(unparsable.portalUrl).toBeNull();
     });
 
-    it('normalisiert und trimmt portalUrl wie deepLinkUrl (einheitliches http(s)-Ziel)', () => {
+    it('normalizes and trims portalUrl like deepLinkUrl (uniform http(s) target)', () => {
       const padded = service.enrichPortalLink(
         makeLink({ portalUrl: '  https://mein-portal.example.com/login  ' }) as never,
         'HUK-123',
@@ -162,8 +162,8 @@ describe('PortalConnectorService', () => {
     });
   });
 
-  describe('Katalog und Plugins', () => {
-    it('listet den Katalog und findet Eintraege', () => {
+  describe('catalog and plugins', () => {
+    it('lists the catalog and finds entries', () => {
       expect(service.catalogVersion()).toBe(1);
       const catalog = service.listCatalog();
       expect(catalog.length).toBeGreaterThan(0);
@@ -171,14 +171,14 @@ describe('PortalConnectorService', () => {
       expect(service.getCatalogEntry('unbekannt')).toBeNull();
     });
 
-    it('listet Plugins mit Verfuegbarkeit (experimentell, deaktiviert)', () => {
+    it('lists plugins with availability (experimental, disabled)', () => {
       const plugins = service.listPlugins();
       expect(plugins).toHaveLength(1);
       expect(plugins[0].experimental).toBe(true);
       expect(plugins[0].available).toBe(false);
     });
 
-    it('Health-Check degradiert kontrolliert fuer deaktivierte und unbekannte Plugins', async () => {
+    it('health check degrades in a controlled way for disabled and unknown plugins', async () => {
       const disabled = await service.getPluginHealth('mailbox-sync-browser-automation');
       expect(disabled.available).toBe(false);
       expect(disabled.healthy).toBe(false);
@@ -189,12 +189,12 @@ describe('PortalConnectorService', () => {
       expect(unknown.reason).toContain('nicht registriert');
     });
 
-    it('faengt einen werfenden Health-Check ab und meldet kontrollierten Degradations-Status', async () => {
+    it('catches a throwing health check and reports a controlled degradation status', async () => {
       const registry = new PortalConnectorRegistry();
       registry.register({
         key: 'throwing-plugin',
         displayName: 'Werfendes Plugin',
-        description: 'Test-Plugin, dessen Health-Check wirft.',
+        description: 'Test plugin whose health check throws.',
         capabilities: ['deepLink'],
         experimental: true,
         isAvailable: () => false,

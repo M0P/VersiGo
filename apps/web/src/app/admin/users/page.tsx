@@ -45,11 +45,11 @@ const STATUS_LABEL: Record<UserStatus, MessagePath<Messages>> = {
 };
 
 /**
- * AP-16: Admin-Nutzerverwaltung. Liste, Freischaltung, Ablehnung, Sperrung,
- * Entsperrung und Rollenzuweisung. Gefaehrliche Aktionen (Ablehnung,
- * Sperrung, Herabstufung) verlangen eine Bestaetigung. Der letzte aktive
- * Admin kann weder gesperrt noch herabgestuft werden (serverseitig
- * durchgesetzt; die UI zeigt die Fehlermeldung der API).
+ * AP-16: admin user management. List, approval, rejection, suspension,
+ * unsuspension and role assignment. Dangerous actions (rejection,
+ * suspension, demotion) require confirmation. The last active
+ * admin can neither be suspended nor demoted (enforced server-side;
+ * the UI shows the API's error message).
  */
 export default function AdminUsersPage(): ReactElement {
   const { t } = useI18n();

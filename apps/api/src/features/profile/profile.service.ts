@@ -3,14 +3,13 @@ import { DatabaseService } from '@versigo/foundation';
 import { UpdateProfileDto, ProfileResponseDto } from './dto/profile.dto';
 
 /**
- * Persoenliches Profil (AP-17).
+ * Personal profile (AP-17).
  *
- * USER und ADMIN aendern ausschliesslich EIGENE Profilwerte (Anzeigename,
- * Locale). Aenderungen sind auf den aktuellen Nutzer begrenzt und koennen
- * weder Household- noch Systemkonfiguration ueberschreiben. Sensible
- * Zugangsdaten, Rollen, Freigaben oder Systemwerte sind hier nicht
- * editierbar. READ_ONLY wird bereits durch den Controller-RoleGuard
- * (Rollen-Hierarchie) ausgeschlossen.
+ * USER and ADMIN change exclusively THEIR OWN profile values (display
+ * name, locale). Changes are limited to the current user and cannot
+ * overwrite household or system configuration. Sensible credentials,
+ * roles, shares or system values are not editable here. READ_ONLY is
+ * already blocked by the controller RoleGuard (role hierarchy).
  */
 @Injectable()
 export class ProfileService {
@@ -18,23 +17,23 @@ export class ProfileService {
 
   constructor(private readonly db: DatabaseService) {}
 
-  /** Liefert das eigene Profil des angemeldeten Nutzers. */
+  /** Returns the own profile of the signed-in user. */
   async getProfile(userId: string): Promise<ProfileResponseDto> {
     const user = await this.db.user.findUnique({ where: { id: userId } });
     if (!user) {
-      throw new NotFoundException('Profil nicht gefunden');
+      throw new NotFoundException('Profile not found');
     }
     return this.toProfile(user);
   }
 
   /**
-   * Aendert ausschliesslich die uebergebenen Profilfelder des aktuellen
-   * Nutzers. Der Username ist unveraenderbar (Anmelde-Identifier).
+   * Changes exclusively the passed profile fields of the current user.
+   * The username is immutable (login identifier).
    */
   async updateProfile(userId: string, dto: UpdateProfileDto): Promise<ProfileResponseDto> {
     const existing = await this.db.user.findUnique({ where: { id: userId } });
     if (!existing) {
-      throw new NotFoundException('Profil nicht gefunden');
+      throw new NotFoundException('Profile not found');
     }
 
     const data: { displayName?: string; locale?: string } = {};
@@ -46,17 +45,17 @@ export class ProfileService {
     }
 
     if (Object.keys(data).length === 0) {
-      // Nichts zu aendern – kein Schreibzugriff, kein Audit.
+      // Nothing to change - no write access, no audit.
       return this.toProfile(existing);
     }
 
     const user = await this.db.user.update({ where: { id: userId }, data });
 
-    // Audit nur mit Feldnamen (keine Werte) – datenschutzfreundlich und
-    // ohne Klartext-PII in der revisionssicheren Historie.
+    // Audit with field names only (no values) - privacy-friendly and
+    // without plain-text PII in the auditable history.
     await this.audit(userId, Object.keys(data));
 
-    this.logger.log(`Profil von User ${userId} aktualisiert: ${Object.keys(data).join(', ')}`);
+    this.logger.log(`Profile of user ${userId} updated: ${Object.keys(data).join(', ')}`);
     return this.toProfile(user);
   }
 
@@ -91,7 +90,7 @@ export class ProfileService {
         },
       });
     } catch (error) {
-      this.logger.warn(`Audit-Eintrag fehlgeschlagen: ${(error as Error).message}`);
+      this.logger.warn(`Audit entry failed: ${(error as Error).message}`);
     }
   }
 }

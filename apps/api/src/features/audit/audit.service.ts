@@ -11,7 +11,7 @@ export interface AuditEventListItem {
   entityId: string;
   action: string;
   createdAt: string;
-  /** true, wenn ein Diff hinterlegt ist – der Inhalt wird in der Liste NIE ausgegeben. */
+  /** true when a diff is stored – its content is NEVER returned in the list. */
   hasDiff: boolean;
 }
 
@@ -20,13 +20,13 @@ export interface AuditEventDetail extends AuditEventListItem {
 }
 
 /**
- * Audit-Event-Zugriff (AP-19).
+ * Audit event access (AP-19).
  *
- * Die Liste liefert bewusst KEINE diffJson-Inhalte mit: Diffs koennen
- * personenbezogene Metadaten enthalten (z. B. Dateinamen). Die Detail-
- * Abfrage ist ausschliesslich fuer globale ADMINs gedacht (Controller-Rolle)
- * und gibt den redigierten Diff zurueck (bestehende Audit-Redaction-Policy:
- * Secrets/Werte werden bereits beim Schreiben nicht in Diffs gespeichert).
+ * The list deliberately does NOT include diffJson content: diffs can
+ * contain personal metadata (e.g. file names). The detail query is
+ * intended exclusively for global ADMINs (controller role) and returns
+ * the redacted diff (existing audit redaction policy: secrets/values are
+ * not stored in diffs at write time).
  */
 @Injectable()
 export class AuditService {
@@ -99,7 +99,7 @@ export class AuditService {
     });
 
     if (!event) {
-      throw new NotFoundException('Audit-Event nicht gefunden');
+      throw new NotFoundException('Audit event not found');
     }
 
     return {
@@ -116,9 +116,9 @@ export class AuditService {
   }
 
   /**
-   * Zentraler Audit-Eintrag fuer neue Feature-Aktionen (fail-soft: Ein
-   * fehlgeschlagener Audit-Eintrag blockiert die Fachaktion nicht, wird
-   * aber geloggt – konsistent zur bisherigen Praxis in den Features).
+   * Central audit entry for new feature actions (fail-soft: a failed
+   * audit entry does not block the business action; it is
+   * but logged – consistent with previous practice in the features).
    */
   async record(params: {
     actorUserId: string;
@@ -139,7 +139,7 @@ export class AuditService {
       });
     } catch (error) {
       this.logger.warn(
-        `Audit-Eintrag fehlgeschlagen (${params.action}): ${(error as Error).message}`,
+        `Audit entry failed (${params.action}): ${(error as Error).message}`,
       );
     }
   }

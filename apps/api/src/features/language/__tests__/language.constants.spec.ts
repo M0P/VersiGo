@@ -8,12 +8,12 @@ import {
 } from '../language.constants';
 
 describe('language.constants', () => {
-  it('unterstuetzt exakt en und de', () => {
+  it('supports exactly en and de', () => {
     expect([...SUPPORTED_LANGUAGES]).toEqual(['en', 'de']);
     expect(DEFAULT_LANGUAGE).toBe('en');
   });
 
-  it('isSupportedLanguage akzeptiert nur en und de', () => {
+  it('isSupportedLanguage accepts only en and de', () => {
     expect(isSupportedLanguage('en')).toBe(true);
     expect(isSupportedLanguage('de')).toBe(true);
     expect(isSupportedLanguage('de-DE')).toBe(false);
@@ -23,7 +23,7 @@ describe('language.constants', () => {
     expect(isSupportedLanguage(undefined)).toBe(false);
   });
 
-  it('normalizeLanguage faellt fuer alles ausser en/de sicher auf en zurueck', () => {
+  it('normalizeLanguage safely falls back to en for anything but en/de', () => {
     expect(normalizeLanguage('en')).toBe('en');
     expect(normalizeLanguage('de')).toBe('de');
     expect(normalizeLanguage('de-DE')).toBe('en');
@@ -36,13 +36,13 @@ describe('language.constants', () => {
   });
 
   describe('languageFromAcceptLanguage', () => {
-    it('liefert null bei fehlendem Header', () => {
+    it('returns null when the header is missing', () => {
       expect(languageFromAcceptLanguage(undefined)).toBeNull();
       expect(languageFromAcceptLanguage(null)).toBeNull();
       expect(languageFromAcceptLanguage('')).toBeNull();
     });
 
-    it('liefert null, wenn keine unterstuetzte Sprache im Header steht', () => {
+    it('returns null when the header contains no supported language', () => {
       expect(languageFromAcceptLanguage('fr-FR,fr;q=0.9,es;q=0.8')).toBeNull();
     });
 
@@ -51,18 +51,18 @@ describe('language.constants', () => {
       expect(languageFromAcceptLanguage('de-DE,de;q=0.9')).toBe('de');
     });
 
-    it('beachtet die q-Wert-Prioritaet des Browsers', () => {
+    it('respects the browser q-value priority', () => {
       expect(languageFromAcceptLanguage('de-DE,de;q=0.9,en;q=0.8')).toBe('de');
       expect(languageFromAcceptLanguage('en-US,en;q=0.9,de;q=0.8')).toBe('en');
       expect(languageFromAcceptLanguage('de;q=0.5,en;q=1')).toBe('en');
     });
 
-    it('ignoriert nicht unterstuetzte Eintraege bei der Prioritaetsauswahl', () => {
+    it('ignores unsupported entries during priority selection', () => {
       expect(languageFromAcceptLanguage('fr;q=1,de;q=0.5')).toBe('de');
       expect(languageFromAcceptLanguage('fr;q=1,de-DE;q=0.5,en;q=0.4')).toBe('de');
     });
 
-    it('normalisiert regionale Varianten auf den Sprachcode', () => {
+    it('normalizes regional variants to the language code', () => {
       expect(languageFromAcceptLanguage('de-AT,de;q=0.9')).toBe('de');
       expect(languageFromAcceptLanguage('en-GB,en;q=0.9')).toBe('en');
     });

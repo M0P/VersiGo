@@ -8,11 +8,11 @@ import { InlineSpinner } from '../../../components/ui/loading';
 import { useI18n } from '../../../i18n';
 
 /**
- * AP-16: Seite fuer Konten im Status PENDING_APPROVAL. Ein noch nicht
- * freigeschaltetes Konto kann sich nicht anmelden (der API-Login liefert
- * generische Fehler); diese Seite erklaert den Freischaltungsprozess.
- * Die Statuspruefung fragt /auth/me ab – sobald das Konto aktiv ist,
- * wird zur Startseite weitergeleitet.
+ * AP-16: page for accounts with status PENDING_APPROVAL. An account that
+ * has not yet been approved cannot log in (the API login returns generic
+ * errors); this page explains the approval process.
+ * The status check queries /auth/me – as soon as the account is active,
+ * it redirects to the home page.
  */
 import { getApiBaseUrl } from '@/lib/runtime-config';
 

@@ -26,8 +26,8 @@ function createUser(role: GlobalRole): AuthenticatedUser {
 }
 
 describe('LanguageService', () => {
-  describe('resolveLanguage fuer READ_ONLY', () => {
-    it('nutzt die in der Sitzung gewaehlte Sprache vor der Browserpraeferenz', async () => {
+  describe('resolveLanguage for READ_ONLY', () => {
+    it('uses the language selected in the session over the browser preference', async () => {
       const db = createMockDb();
       const service = new LanguageService(db as never);
       const session: LanguageSessionData = { language: 'de' };
@@ -42,7 +42,7 @@ describe('LanguageService', () => {
       expect(db.user.findUnique).not.toHaveBeenCalled();
     });
 
-    it('nutzt die Browserpraeferenz, wenn keine Sprache in der Sitzung liegt', async () => {
+    it('uses the browser preference when the session holds no language', async () => {
       const db = createMockDb();
       const service = new LanguageService(db as never);
 
@@ -55,7 +55,7 @@ describe('LanguageService', () => {
       expect(result).toEqual({ language: 'de', persistence: 'session' });
     });
 
-    it('faellt ohne Sitzungs- und Browserpraeferenz auf Englisch zurueck', async () => {
+    it('falls back to English without a session or browser preference', async () => {
       const db = createMockDb();
       const service = new LanguageService(db as never);
 
@@ -68,7 +68,7 @@ describe('LanguageService', () => {
       expect(result).toEqual({ language: 'en', persistence: 'session' });
     });
 
-    it('behandelt ungueltige Sitzungswerte als unbekannt (Fallback Browser/Englisch)', async () => {
+    it('treats invalid session values as unknown (browser/English fallback)', async () => {
       const db = createMockDb();
       const service = new LanguageService(db as never);
 
@@ -87,7 +87,7 @@ describe('LanguageService', () => {
       expect(withBrowser).toEqual({ language: 'de', persistence: 'session' });
     });
 
-    it('liest fuer READ_ONLY niemals die Datenbank', async () => {
+    it('never reads the database for READ_ONLY', async () => {
       const db = createMockDb();
       const service = new LanguageService(db as never);
 
@@ -98,8 +98,8 @@ describe('LanguageService', () => {
     });
   });
 
-  describe('resolveLanguage fuer USER/ADMIN', () => {
-    it('nutzt die gespeicherte Kontoeinstellung', async () => {
+  describe('resolveLanguage for USER/ADMIN', () => {
+    it('uses the stored account preference', async () => {
       const db = createMockDb();
       db.user.findUnique.mockResolvedValue({ id: 'user-1', locale: 'de' } as UserRecord);
       const service = new LanguageService(db as never);
@@ -113,7 +113,7 @@ describe('LanguageService', () => {
       expect(result).toEqual({ language: 'de', persistence: 'persistent' });
     });
 
-    it('nutzt die Browserpraeferenz, wenn keine Einstellung gespeichert ist', async () => {
+    it('uses the browser preference when no preference is stored', async () => {
       const db = createMockDb();
       db.user.findUnique.mockResolvedValue({ id: 'user-1', locale: null } as UserRecord);
       const service = new LanguageService(db as never);
@@ -127,7 +127,7 @@ describe('LanguageService', () => {
       expect(result).toEqual({ language: 'de', persistence: 'persistent' });
     });
 
-    it('faellt auf Englisch zurueck, wenn weder gespeichert noch Browser praeferiert', async () => {
+    it('falls back to English when neither a stored preference nor the browser prefers one', async () => {
       const db = createMockDb();
       db.user.findUnique.mockResolvedValue({ id: 'user-1', locale: null } as UserRecord);
       const service = new LanguageService(db as never);
@@ -141,7 +141,7 @@ describe('LanguageService', () => {
       expect(result).toEqual({ language: 'en', persistence: 'persistent' });
     });
 
-    it('normalisiert gespeicherte Legacy-Werte sicher auf Englisch', async () => {
+    it('safely normalizes stored legacy values to English', async () => {
       const db = createMockDb();
       db.user.findUnique.mockResolvedValue({ id: 'user-1', locale: 'de-DE' } as UserRecord);
       const service = new LanguageService(db as never);
@@ -152,8 +152,8 @@ describe('LanguageService', () => {
     });
   });
 
-  describe('setLanguage fuer READ_ONLY', () => {
-    it('speichert die Sprache ausschliesslich in der Sitzung, nie in der Datenbank', async () => {
+  describe('setLanguage for READ_ONLY', () => {
+    it('stores the language only in the session, never in the database', async () => {
       const db = createMockDb();
       const service = new LanguageService(db as never);
       const session: LanguageSessionData = {};
@@ -170,7 +170,7 @@ describe('LanguageService', () => {
       expect(db.user.findUnique).not.toHaveBeenCalled();
     });
 
-    it('lehnt ungueltige Sprachwerte ab und persistiert nichts', async () => {
+    it('rejects invalid language values and persists nothing', async () => {
       const db = createMockDb();
       const service = new LanguageService(db as never);
       const session: LanguageSessionData = {};
@@ -184,8 +184,8 @@ describe('LanguageService', () => {
     });
   });
 
-  describe('setLanguage fuer USER/ADMIN', () => {
-    it('speichert die Sprache dauerhaft in users.locale', async () => {
+  describe('setLanguage for USER/ADMIN', () => {
+    it('persists the language in users.locale', async () => {
       const db = createMockDb();
       db.user.update.mockResolvedValue({ id: 'user-1', locale: 'de' } as UserRecord);
       const service = new LanguageService(db as never);
@@ -203,7 +203,7 @@ describe('LanguageService', () => {
       });
     });
 
-    it('schreibt nichts in die Sitzung fuer USER/ADMIN', async () => {
+    it('writes nothing to the session for USER/ADMIN', async () => {
       const db = createMockDb();
       db.user.update.mockResolvedValue({ id: 'user-1', locale: 'en' } as UserRecord);
       const service = new LanguageService(db as never);
@@ -214,7 +214,7 @@ describe('LanguageService', () => {
       expect(session.language).toBeUndefined();
     });
 
-    it('lehnt ungueltige Sprachwerte ab und schreibt nicht in die Datenbank', async () => {
+    it('rejects invalid language values and writes nothing to the database', async () => {
       const db = createMockDb();
       const service = new LanguageService(db as never);
 

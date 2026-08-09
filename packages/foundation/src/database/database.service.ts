@@ -3,10 +3,10 @@ import { PrismaClient } from '@prisma/client';
 import { AppConfigService } from '../config';
 
 /**
- * Zentraler, geteilter Datenbankzugriff fuer API und Worker.
- * Enthaelt ausschliesslich technische Zugriffslogik, keine Fachlogik.
- * Feature-Slices greifen ueber diesen Service auf den Prisma-Client zu,
- * duerfen jedoch keine fachlichen Query-Helfer hier ablegen.
+ * Central, shared database access for API and worker.
+ * Contains only technical access logic, no domain logic.
+ * Feature slices access the Prisma client through this service,
+ * but must not place domain query helpers here.
  */
 @Injectable()
 export class DatabaseService extends PrismaClient implements OnModuleInit, OnModuleDestroy {

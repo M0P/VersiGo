@@ -39,7 +39,7 @@ describe('ProfileService', () => {
   });
 
   describe('getProfile', () => {
-    it('liefert das eigene Profil', async () => {
+    it('returns the own profile', async () => {
       const { service } = createService();
       const profile = await service.getProfile('user-1');
 
@@ -49,7 +49,7 @@ describe('ProfileService', () => {
       expect(profile.role).toBe(GlobalRole.USER);
     });
 
-    it('wirft NotFoundException bei unbekanntem Nutzer', async () => {
+    it('throws NotFoundException for an unknown user', async () => {
       const { db, service } = createService();
       db.user.findUnique.mockResolvedValue(null);
 
@@ -58,7 +58,7 @@ describe('ProfileService', () => {
   });
 
   describe('updateProfile', () => {
-    it('aendert nur die uebergebenen Felder und auditiert nur Feldnamen', async () => {
+    it('only changes the passed fields and only audits field names', async () => {
       const { db, service } = createService();
 
       const profile = await service.updateProfile('user-1', { displayName: ' Alice B. ' });
@@ -80,7 +80,7 @@ describe('ProfileService', () => {
       );
     });
 
-    it('aendert locale zusammen mit displayName', async () => {
+    it('changes locale together with displayName', async () => {
       const { db, service } = createService();
 
       await service.updateProfile('user-1', { displayName: 'Alice', locale: 'de' });
@@ -92,7 +92,7 @@ describe('ProfileService', () => {
       );
     });
 
-    it('auditiert nicht, wenn nichts zu aendern ist', async () => {
+    it('does not audit when nothing changes', async () => {
       const { db, service } = createService();
 
       await service.updateProfile('user-1', {});
@@ -101,7 +101,7 @@ describe('ProfileService', () => {
       expect(db.auditEvent.create).not.toHaveBeenCalled();
     });
 
-    it('wirft NotFoundException bei unbekanntem Nutzer', async () => {
+    it('throws NotFoundException for an unknown user', async () => {
       const { db, service } = createService();
       db.user.findUnique.mockResolvedValue(null);
 

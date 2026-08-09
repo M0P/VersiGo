@@ -3,9 +3,9 @@ import { AuditController } from './audit.controller';
 import { AuditService } from './audit.service';
 
 /**
- * Audit & Activity (AP-19): lesbarer Audit-Zugriff fuer ADMINs.
- * Das Schreiben von Audit-Events erfolgt weiterhin direkt ueber die
- * bestehenden Feature-Services; neue Aktionen nutzen `AuditService.record`.
+ * Audit & activity (AP-19): read-only audit access for ADMINs.
+ * Writing audit events still happens directly via the
+ * existing feature services; new actions use `AuditService.record`.
  */
 @Module({
   controllers: [AuditController],
