@@ -57,6 +57,11 @@ WORKDIR /app
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
+# BugFix-15: curl for the shell-based compose healthchecks (the previous
+# `node -e` healthchecks were unreliable and curl was missing from the
+# published images).
+RUN apk add --no-cache curl
+
 ENV NODE_ENV=production
 
 # Next.js standalone binds to process.env.HOSTNAME || '0.0.0.0'.

@@ -280,6 +280,7 @@ example values and security relevance:
 | **AI** | `AI_ENABLED`, `AI_PROVIDER`, `AI_OLLAMA_*`, `AI_OPENAI_COMPAT_*` | No | API, Worker | `AI_ENABLED=false` (opt-in) | API key only on explicit activation; data flows only then |
 | **Paperless** | `PAPERLESS_ENABLED`, `PAPERLESS_URL`, `PAPERLESS_API_TOKEN` | No | API | `PAPERLESS_ENABLED=false` (opt-in) | Token only on activation; data leaves only then |
 | **Worker health** | `WORKER_HEALTH_PORT`, `WORKER_HEARTBEAT_*` | No | Worker | `3100` (internal only) | Port not bound to the host |
+| **Healthcheck** | `API_HEALTHCHECK_PORT` | No | API | `3001` (internal only) | curl-based Compose healthcheck port (BugFix-15); default = container-internal API port; not bound to the host |
 
 **Secure defaults:** all secrets have placeholders (`change-me`) in
 `.env.example`. In production you **must** generate your own values

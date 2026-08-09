@@ -85,6 +85,7 @@ LOCAL_ADMIN_PASSWORD=change-me
 | `GET /health` | Liveness | Gibt `{"status":"ok"}` zurück |
 | `GET /ready` | Readiness | Prüft DB, Redis und Capabilities; gibt `{"status":"ready","database":"up","redis":"up","capabilities":{...}}` zurück; zusätzlich `worker`-Feld (`up`/`down`/`unknown`) aus dem Heartbeat (AP-19, informativ) |
 | `GET :3100/health` (Worker) | Liveness | Worker-Liveness-Server auf `WORKER_HEALTH_PORT` (Standard 3100, nur intern); Grundlage des Compose-Healthchecks |
+| `GET :3001/health` (API, intern) | Liveness | Grundlage des Compose-Healthchecks; Port folgt `API_HEALTHCHECK_PORT` (Standard 3001, nur intern; BugFix-15, curl-basiert) |
 
 ### Admin-API (AP-19)
 

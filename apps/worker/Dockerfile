@@ -103,7 +103,10 @@ RUN --mount=type=cache,id=versigo-pnpm-store-worker,target=/pnpm/store \
 
 # ---- Runner Stage ----
 FROM node:24-alpine AS runner
-RUN apk add --no-cache postgresql16-client
+# BugFix-15: curl for the shell-based compose healthchecks (the previous
+# `node -e` healthchecks were unreliable and curl was missing from the
+# published images).
+RUN apk add --no-cache curl postgresql16-client
 WORKDIR /app
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
