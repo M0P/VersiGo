@@ -1,4 +1,9 @@
 # VersiGo – production/development stack
+# Public URLs (single source of truth): NEXT_PUBLIC_API_BASE_URL,
+# CORS_ORIGINS and OIDC_CALLBACK_URL are derived from VERSIGO_HOST plus
+# APP_PORT/WEB_PORT (see .env). They only need to be set explicitly when the
+# stack is served through a TLS-terminating reverse proxy that uses a
+# different public URL (e.g. https://app.example.com).
 name: versigo
 
 services:
@@ -97,7 +102,7 @@ services:
       # controlled internal installation).
       COOKIE_SECURE: "${COOKIE_SECURE:-}"
       # AP-16: Allowed browser origins for CORS (comma-separated list).
-      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://${VERSIGO_HOST:-localhost}:${WEB_PORT:-3000}}"
       # Auth flags are only passed through when set; the default
       # resolution (local auth active in dev mode) is done by the app.
       LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
@@ -110,7 +115,7 @@ services:
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      OIDC_CALLBACK_URL: ${OIDC_CALLBACK_URL:-}
+      OIDC_CALLBACK_URL: "${OIDC_CALLBACK_URL:-http://${VERSIGO_HOST:-localhost}:${APP_PORT:-3001}/auth/callback}"
       AI_ENABLED: "${AI_ENABLED:-false}"
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
       PAPERLESS_ENABLED: "${PAPERLESS_ENABLED:-false}"
@@ -215,7 +220,7 @@ services:
       PORT: "3000"
       # API base URL for the browser - injected at container startup via entrypoint
       # This allows fully dynamic port configuration without rebuilding the web image
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-http://${VERSIGO_HOST:-localhost}:${APP_PORT:-3001}}"
       # BugFix-11 (R7): runtime app version, shown in the UI footer
       NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-1.0.0-beta.1}
     ports:

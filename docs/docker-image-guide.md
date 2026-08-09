@@ -200,11 +200,22 @@ git clone <repo> versigo && cd versigo
 cp .env.example .env
 # adjust .env (mandatory):
 #   1. NODE_ENV=production        <- central, see note below
-#   2. DATABASE_URL, REDIS_URL, SESSION_SECRET, SETTINGS_ENCRYPTION_KEY
-#   3. Auth configuration (LOCAL_AUTH_ENABLED / OIDC_ENABLED)
+#   2. VERSIGO_HOST, APP_PORT, WEB_PORT  <- public host + ports (single source,
+#      see note below)
+#   3. DATABASE_URL, REDIS_URL, SESSION_SECRET, SETTINGS_ENCRYPTION_KEY
+#   4. Auth configuration (LOCAL_AUTH_ENABLED / OIDC_ENABLED)
 docker compose up --build -d
 ```
 
+> **Public URLs – single source of truth:** `NEXT_PUBLIC_API_BASE_URL`,
+> `CORS_ORIGINS` and `OIDC_CALLBACK_URL` are derived in the Compose files
+> from `VERSIGO_HOST` (default `localhost`) plus `APP_PORT`/`WEB_PORT`
+> (e.g. `VERSIGO_HOST=192.168.24.8`, `APP_PORT=2669` → the web app calls the
+> API at `http://192.168.24.8:2669` automatically). Only set the three
+> derived variables explicitly when the stack is served through a
+> TLS-terminating reverse proxy that uses a different public URL
+> (e.g. `https://app.example.com`) or when multiple origins must be allowed.
+>
 > **Important (AP-20, `NODE_ENV=production`):** `.env.example` sets
 > `NODE_ENV=development` (local development mode). For
 > beta/production operation **`NODE_ENV=production` must be set explicitly**
@@ -215,10 +226,14 @@ docker compose up --build -d
 > production path (step 12).
 >
 > `COOKIE_SECURE` (secure flag of the session cookie) defaults to
-> `true` in production. Only deployments that serve the API deliberately
-> over plain HTTP (TLS-terminating reverse proxy or
-> a controlled internal installation without TLS) set `COOKIE_SECURE=false`
-> explicitly – in all other cases leave it unset.
+> `true` in production. **If the stack is accessed over plain HTTP (no TLS),
+> set `COOKIE_SECURE=false` explicitly.** Symptom if you forget it: the login
+> POST succeeds (no error is shown) but the browser silently refuses to
+> store the Secure session cookie, so every follow-up request is
+> unauthenticated and you are redirected straight back to the login page.
+> Only deployments served deliberately over plain HTTP (TLS-terminating
+> reverse proxy or a controlled internal installation without TLS) set
+> `COOKIE_SECURE=false` explicitly – in all other cases leave it unset.
 >
 > The initial administrator is **never created automatically**. For the
 > first start, `LOCAL_AUTH_ENABLED=true` and your own strong
@@ -395,3 +410,5 @@ podman run --rm --entrypoint sh versigo-migration:latest -c \
 | Build fails with `no space left on device` | `podman system prune -a -f`, then rebuild |
 | `pnpm install --prod` creates an empty `node_modules` | pnpm-11.17.0 regression → the Dockerfiles use `pnpm deploy --prod --legacy` |
 | `pg_isready` fails | `postgresql16-client` must be installed in the runner (Alpine APK) |
+| Login succeeds (no error) but you are redirected back to the login page | Production + plain HTTP: the session cookie has the `Secure` flag (`COOKIE_SECURE` defaults to `true` in production) and the browser drops it. Fix: set `COOKIE_SECURE=false` in `.env` and recreate the API container (`docker compose up -d api`). If the login POST itself returns 401, the `.env` `LOCAL_ADMIN_PASSWORD` differs from the one used at first bootstrap – either use the original value or reset the DB (`docker compose down -v`) |
+| Stack/service reported as `unhealthy` | Check which service and why: `docker compose ps -a`, `docker inspect <container> --format '{{json .State.Health}}'` (look at the last `Output` of the failing check), `docker compose logs <service> \| tail -50`. Known benign cases: the one-shot `migration` container shows as `exited (0)` by design; during the initial image pull (`pull_policy: always`) services show as `starting` and only become `healthy` after `start_period`. `unhealthy` only sticks when the healthcheck command itself fails 5 times in a row |

@@ -10,6 +10,12 @@
 #
 # The image tag can be pinned via VERSIGO_IMAGE_TAG (default: latest),
 # e.g.  VERSIGO_IMAGE_TAG=1.2.3 docker compose -f docker-compose.dockerhub.yml up -d
+#
+# Public URLs (single source of truth): NEXT_PUBLIC_API_BASE_URL,
+# CORS_ORIGINS and OIDC_CALLBACK_URL are derived from VERSIGO_HOST plus
+# APP_PORT/WEB_PORT (see .env). They only need to be set explicitly when the
+# stack is served through a TLS-terminating reverse proxy that uses a
+# different public URL (e.g. https://app.example.com).
 name: versigo
 
 services:
@@ -89,7 +95,7 @@ services:
       DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH:-/data/uploads}
       TRUST_PROXY: "${TRUST_PROXY:-false}"
       COOKIE_SECURE: "${COOKIE_SECURE:-}"
-      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://${VERSIGO_HOST:-localhost}:${WEB_PORT:-3000}}"
       LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-}"
       LOCAL_AUTH_MAX_ATTEMPTS: "${LOCAL_AUTH_MAX_ATTEMPTS:-5}"
       LOCAL_AUTH_RATE_LIMIT_WINDOW_MS: "${LOCAL_AUTH_RATE_LIMIT_WINDOW_MS:-900000}"
@@ -99,7 +105,7 @@ services:
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      OIDC_CALLBACK_URL: ${OIDC_CALLBACK_URL:-}
+      OIDC_CALLBACK_URL: "${OIDC_CALLBACK_URL:-http://${VERSIGO_HOST:-localhost}:${APP_PORT:-3001}/auth/callback}"
       AI_ENABLED: "${AI_ENABLED:-false}"
       AI_PROVIDER: ${AI_PROVIDER:-ollama}
       PAPERLESS_ENABLED: "${PAPERLESS_ENABLED:-false}"
@@ -181,7 +187,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: "3000"
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-http://${VERSIGO_HOST:-localhost}:${APP_PORT:-3001}}"
       NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-1.0.0-beta.1}
     ports:
       - "${WEB_PORT:-3000}:3000"

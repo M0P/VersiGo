@@ -273,7 +273,7 @@ example values and security relevance:
 
 | Category | Variables | Required | Service | Example value | Security relevance |
 |----------|-----------|----------|---------|---------------|--------------------|
-| **Infrastructure** | `DATABASE_URL`, `REDIS_URL`, `POSTGRES_*`, `APP_PORT`, `WEB_PORT`, `APP_VERSION`, `NEXT_PUBLIC_APP_VERSION` | Yes | All | `postgresql://versigo:change-me@db:5432/versigo` | DB password has no default; internal network only |
+| **Infrastructure** | `DATABASE_URL`, `REDIS_URL`, `POSTGRES_*`, `VERSIGO_HOST`, `APP_PORT`, `WEB_PORT`, `APP_VERSION`, `NEXT_PUBLIC_APP_VERSION` | Yes | All | `postgresql://versigo:change-me@db:5432/versigo`; `VERSIGO_HOST=192.168.24.8` | DB password has no default; internal network only. `VERSIGO_HOST` + `APP_PORT`/`WEB_PORT` are the single source for the public URLs (`NEXT_PUBLIC_API_BASE_URL`, `CORS_ORIGINS`, `OIDC_CALLBACK_URL` are derived in the Compose files) |
 | **Secrets** | `SESSION_SECRET`, `SETTINGS_ENCRYPTION_KEY` | Yes | API, Worker | `openssl rand -hex 32` | Min. 32 random characters; leak = session impersonation / decryption |
 | **Auth** | `LOCAL_AUTH_ENABLED`, `LOCAL_ADMIN_*`, `OIDC_*`, `CORS_ORIGINS`, `TRUST_PROXY`, `COOKIE_SECURE` | Yes (at least one auth method) | API, Worker | `LOCAL_ADMIN_PASSWORD=<strong>`; `TRUST_PROXY=false`; `COOKIE_SECURE` empty | Placeholder password is rejected in production; `TRUST_PROXY` only behind a proxy; `COOKIE_SECURE` only set explicitly for HTTP operation (default: true in production) |
 | **Storage** | `STORAGE_ENABLED`, `DOCUMENTS_STORAGE_PATH`, `S3_*`, `MINIO_*` | No | API, Worker | `change-me` placeholders | Credentials never default; path in volume |
@@ -377,6 +377,7 @@ curl http://localhost:3000/
 | **Redis connection refused** | Redis not started, wrong port | `docker compose ps redis`, check `REDIS_URL` |
 | **Migration fails** | Schema drift, lock conflict | `docker compose down -v` (data loss!) or manually `npx prisma migrate resolve` |
 | **Login fails (401)** | Wrong password, user not `ACTIVE`, `PENDING_APPROVAL` | Admin: approve the user in `/admin/users`; reset password via DB |
+| **Login succeeds (no error) but redirects back to login page** | `COOKIE_SECURE=true` (production default) while the site is served over plain HTTP – the browser drops the Secure session cookie | Set `COOKIE_SECURE=false` in `.env` (plain HTTP) or terminate TLS; recreate the API: `docker compose up -d api` |
 | **Upload fails** | `STORAGE_ENABLED=false`, volume not mounted, file too large | `STORAGE_ENABLED=true`, `docker compose ps`, check nginx/proxy `client_max_body_size` |
 | **Build error: TypeScript errors** | Code changes break types | Run `pnpm run typecheck` locally, check `tsconfig.json` `strict: true` |
 | **OIDC login fails** | `OIDC_*` variables wrong, callback URL mismatch | Compare issuer URL, client ID/secret, callback URL in IdP & `.env` |
