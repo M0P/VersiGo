@@ -18,7 +18,9 @@
     "dev:worker": "turbo run dev --filter=@versigo/worker",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "licenses:generate": "node scripts/dependency-licenses.mjs generate",
+    "licenses:check": "node scripts/dependency-licenses.mjs check"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

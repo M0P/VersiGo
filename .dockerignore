@@ -35,8 +35,10 @@ Thumbs.db
 *.swp
 *.swo
 
-# Documentation (not needed for build)
-docs/
+# Documentation (not needed for build) – except the third-party notices file,
+# which the license check inside the test image validates against.
+docs/*
+!docs/third-party-notices.md
 prompts/
 
 # Uploads (runtime data)
