@@ -23,7 +23,8 @@ git checkout <release-branch-or-tag>
 All quality gates must pass **before** tagging anything:
 
 ```bash
-# 1) Full test gate (lint, typecheck, unit/integration, i18n guard)
+# 1) Full test gate (lint, typecheck, unit/integration, license check,
+#    version sync check, i18n guard)
 docker compose -f docker-compose.test.yml down -v
 docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test
 
@@ -148,7 +149,8 @@ Before publishing, verify:
       images (see step 1). Secrets are injected via environment variables.
 - [ ] **Registry is private by default** unless you intentionally publish a
       public image.
-- [ ] **Tags and changelog updated** (concrete notes: `docs/release-notes-v1.0.0-beta.1.md`;
+- [ ] **Tags and changelog updated** (concrete notes: `docs/release-notes-v1.0.0-beta.1.md` —
+      update this reference to the new version's notes file when tagging;
       reusable template: `docs/release-notes-template.md`).
 - [ ] **Documentation updated** (`docs/end-user-guide.md` matches the release;
       the Compose configuration in the release tag matches the guide).
@@ -167,6 +169,41 @@ docker compose up -d --build
 
 The `migration` service applies schema changes automatically. If a release
 contains breaking changes, document them in the release notes.
+
+## 7. Bumping the application version
+
+The version has a single source of truth: the `"version"` field in the ROOT
+`package.json`. To publish a new version (e.g. `1.0.0-beta.2`):
+
+```bash
+node scripts/bump-version.mjs 1.0.0-beta.2
+```
+
+This updates every functional location that carries the version in one step:
+the 5 workspace `package.json` files (root, api, worker, web, foundation), the
+`APP_VERSION` / `NEXT_PUBLIC_APP_VERSION` defaults in `docker-compose.yml` and
+`docker-compose.dockerhub.yml`, `.env.example`, and the version line in
+`scripts/dependency-licenses.mjs` + `docs/third-party-notices.md`. The
+`pnpm-lock.yaml` does not need regeneration (workspace packages are linked,
+never version-pinned).
+
+Verify with the sync check (also part of the CI test gate):
+
+```bash
+node scripts/check-version-sync.mjs
+```
+
+The version reaches the web UI at container **startup**: the entrypoint
+writes `/runtime-config.js` from `NEXT_PUBLIC_APP_VERSION`, so a restart of
+the web container with the new env value is sufficient — no image rebuild is
+required. Afterwards run the full test gate (see section 1), then tag the
+release and write the release notes.
+
+Locations that are deliberately NOT covered by the sync check and are updated
+manually: the health-controller test fixtures
+(`packages/foundation/src/health/__tests__/health.controller.spec.ts`) and the
+example in the `APP_VERSION` schema comment
+(`packages/foundation/src/config/app-config.schema.ts`).
 
 ---
 

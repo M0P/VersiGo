@@ -355,10 +355,11 @@ If a new image is broken:
 ```bash
 # Go back to the last working state (image tag only),
 # provided the Compose file uses external tags:
-docker compose down
-# point the image tag in docker-compose.yml / .env at the last
-# working version (e.g. IMAGE_TAG=v1.0.0-beta-1)
-docker compose up -d
+docker compose -f docker-compose.dockerhub.yml down
+# point the image tag in docker-compose.dockerhub.yml / .env at the last
+# working version (e.g. VERSIGO_IMAGE_TAG=1.0.0-beta.2 – the publish
+# workflow strips the leading "v" from the git tag v1.0.0-beta.2)
+docker compose -f docker-compose.dockerhub.yml up -d
 ```
 
 If the database has already advanced through migrations and the rollback
