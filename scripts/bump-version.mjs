@@ -148,8 +148,8 @@ for (const rel of COMPOSE_FILES) {
     rel,
     (text) =>
       replaceToken(replaceToken(text, `\${APP_VERSION:-${current}}`, `\${APP_VERSION:-${newVersion}}`),
-        `\${NEXT_PUBLIC_APP_VERSION:-${current}}`,
-        `\${NEXT_PUBLIC_APP_VERSION:-${newVersion}}`),
+        `${NEXT_PUBLIC_APP_VERSION:-${current}}`,
+        `${NEXT_PUBLIC_APP_VERSION:-${newVersion}}`),
   );
   console.log(`  staged ${rel}`);
 }
