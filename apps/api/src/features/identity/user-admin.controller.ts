@@ -4,7 +4,12 @@ import { Roles } from './roles.decorator';
 import { CurrentUser } from './current-user.decorator';
 import { AuthenticatedUser } from './auth.service';
 import { UserAdminService, AdminUserListItem } from './user-admin.service';
-import { BindOidcIdentityDto, ListUsersQueryDto, SetUserRoleDto } from './user-admin.dto';
+import {
+  BindOidcIdentityDto,
+  ListUsersQueryDto,
+  ResetUserPasswordDto,
+  SetUserRoleDto,
+} from './user-admin.dto';
 
 /**
  * Admin management of local accounts (AP-16). Global admins only.
@@ -74,5 +79,15 @@ export class UserAdminController {
     @Param('id') userId: string,
   ): Promise<void> {
     await this.userAdmin.unbindOidcIdentity(admin, userId);
+  }
+
+  @Post(':id/reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetPassword(
+    @CurrentUser() admin: AuthenticatedUser,
+    @Param('id') userId: string,
+    @Body() body: ResetUserPasswordDto,
+  ): Promise<void> {
+    await this.userAdmin.resetPassword(admin, userId, body.newPassword);
   }
 }

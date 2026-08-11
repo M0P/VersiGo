@@ -481,6 +481,22 @@ export const de = {
       'Die Verknüpfung ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
     oidcLinkSuccess: 'Ihr Konto wurde mit dem Identity-Provider verknüpft.',
     oidcUnlinkSuccess: 'Die OIDC-Verknüpfung wurde entfernt.',
+    // BugFix-16: Passwort ändern (POST /auth/change-password)
+    pwTitle: 'Passwort ändern',
+    pwBody:
+      'Legen Sie ein neues Passwort für Ihr Konto fest. Zur Bestätigung benötigen Sie Ihr aktuelles Passwort. Das Passwort muss mindestens 12 Zeichen lang sein.',
+    pwCurrent: 'Aktuelles Passwort',
+    pwNew: 'Neues Passwort',
+    pwConfirm: 'Neues Passwort wiederholen',
+    pwMinHint: 'Mindestens {min} Zeichen.',
+    pwButton: 'Passwort ändern',
+    pwSaving: 'Speichert…',
+    pwChanged: 'Ihr Passwort wurde geändert.',
+    pwMismatch: 'Die neuen Passwörter stimmen nicht überein.',
+    pwWrongCurrent: 'Das aktuelle Passwort ist falsch.',
+    pwNoLocalCredential:
+      'Dieses Konto hat kein lokales Passwort (Anmeldung über OIDC).',
+    pwChangeError: 'Fehler beim Ändern des Passworts.',
   },
   appearance: {
     title: 'Design-Anpassung',
@@ -550,6 +566,18 @@ export const de = {
       confirmRoleChangeDowngrade:
         'Rolle von {from} auf {to} aendern? Ein herabgestufter Admin verliert sofort Admin-Rechte.',
       roleChangeFailed: 'Rollenwechsel fehlgeschlagen',
+      // BugFix-16: Passwort-Reset durch Admin (POST /admin/users/:id/reset-password)
+      resetPassword: 'Passwort zurücksetzen',
+      resetPasswordTitle: 'Passwort zurücksetzen',
+      resetPasswordBody: 'Legen Sie ein neues Passwort für den Benutzer {username} fest.',
+      resetPasswordLabel: 'Neues Passwort',
+      resetPasswordConfirmLabel: 'Neues Passwort wiederholen',
+      resetPasswordHint: 'Mindestens 12 Zeichen.',
+      resetPasswordMismatch: 'Die neuen Passwörter stimmen nicht überein.',
+      resetPasswordSuccess: 'Das Passwort wurde zurückgesetzt.',
+      resetPasswordFailed: 'Passwort-Reset fehlgeschlagen',
+      resetPasswordNoCredential:
+        'Dieses Konto hat kein lokales Passwort (Anmeldung über OIDC).',
     },
     integrations: {
       title: 'Integrationen',

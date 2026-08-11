@@ -3,6 +3,7 @@ import {
   ConflictException,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpException,
@@ -18,7 +19,7 @@ import { Public } from '@versigo/foundation';
 import { OidcStrategy } from './oidc.strategy';
 import { CapabilityFlagsService } from '@versigo/foundation';
 import { LoginRateLimiterService } from './login-rate-limiter.service';
-import { LocalLoginDto, RegisterLocalAccountDto } from './auth.dto';
+import { ChangePasswordDto, LocalLoginDto, RegisterLocalAccountDto } from './auth.dto';
 
 type SessionRequest = Request & {
   user?: AuthenticatedUser;
@@ -380,5 +381,46 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser): AuthenticatedUser {
     return user;
+  }
+
+  /**
+   * BugFix-16: password change for the signed-in user. Authenticated (no
+   * @Public). 403 when the current password is wrong, 409 when the account
+   * has no local credential (OIDC-only). Failed current-password
+   * verifications are rate-limited per IP (scope "change-password"), so a
+   * stolen session cannot be used to brute-force the current password. The
+   * session stays valid.
+   */
+  @Post('change-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: ChangePasswordDto,
+    @Req() req: SessionRequest,
+  ): Promise<void> {
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    if (await this.rateLimiter.isBlocked(ip, 'change-password')) {
+      // Generic message – does not reveal anything about the account.
+      throw new HttpException(
+        'Too many failed attempts. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    try {
+      await this.authService.changePassword(
+        user.id,
+        body.currentPassword,
+        body.newPassword,
+      );
+      // Success: lift the counter again so a later typo in the same window
+      // is not punished with a spurious 429 (mirrors localLogin).
+      await this.rateLimiter.resetAttempts(ip, 'change-password');
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        await this.rateLimiter.recordAttempt(ip, 'change-password');
+      }
+      throw error;
+    }
   }
 }

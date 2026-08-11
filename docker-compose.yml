@@ -1,9 +1,11 @@
 # VersiGo – production/development stack
-# Public URLs (single source of truth): NEXT_PUBLIC_API_BASE_URL,
-# CORS_ORIGINS and OIDC_CALLBACK_URL are derived from VERSIGO_HOST plus
-# APP_PORT/WEB_PORT (see .env). They only need to be set explicitly when the
-# stack is served through a TLS-terminating reverse proxy that uses a
-# different public URL (e.g. https://app.example.com).
+# Public URLs: CORS_ORIGINS and OIDC_CALLBACK_URL are derived from
+# VERSIGO_HOST plus APP_PORT/WEB_PORT (see .env). NEXT_PUBLIC_API_BASE_URL is
+# auto-detected by the web app in the browser (BugFix-14): direct IP/HTTP
+# access -> http://<host>:<API port>, HTTPS via reverse proxy ->
+# https://<host>/api. Only set the variables explicitly when the stack is
+# served through a TLS-terminating reverse proxy that uses a different public
+# URL (e.g. https://app.example.com).
 name: versigo
 
 services:
@@ -83,9 +85,12 @@ services:
     restart: unless-stopped
     environment:
       APP_PORT: "3001"
+      # BugFix-15: port for the curl-based healthcheck (internal only, like
+      # WORKER_HEALTH_PORT). Default 3001 = container-internal API port.
+      API_HEALTHCHECK_PORT: "${API_HEALTHCHECK_PORT:-3001}"
       NODE_ENV: ${NODE_ENV:-production}
       # BugFix-11 (R7): runtime application version exposed on /health + /ready
-      APP_VERSION: ${APP_VERSION:-1.0.0-beta.1}
+      APP_VERSION: ${APP_VERSION:-1.0.0-beta.2}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       REDIS_URL: ${REDIS_URL:?REDIS_URL must be set}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
@@ -96,10 +101,9 @@ services:
       # (otherwise req.ip falls back to the proxy IP behind the proxy and the
       # per-IP rate limits would lock out all clients globally).
       TRUST_PROXY: "${TRUST_PROXY:-false}"
-      # AP-20: Secure flag of the session cookie. Default: true in production
-      # (derived from NODE_ENV). Only set explicitly when the API is served
-      # deliberately over plain HTTP (TLS-terminating reverse proxy or
-      # controlled internal installation).
+      # AP-20/BugFix-14: Secure flag of the session cookie. Empty (default):
+      # per-request "auto" – Secure only over HTTPS (requires TRUST_PROXY=true
+      # behind a proxy). Set true/false explicitly only to force the flag.
       COOKIE_SECURE: "${COOKIE_SECURE:-}"
       # AP-16: Allowed browser origins for CORS (comma-separated list).
       CORS_ORIGINS: "${CORS_ORIGINS:-http://${VERSIGO_HOST:-localhost}:${WEB_PORT:-3000}}"
@@ -140,7 +144,11 @@ services:
       migration:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', r => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      # BugFix-15: curl-based liveness probe (the previous `node -e` probe was
+      # unreliable and the published images had no curl). Port follows
+      # API_HEALTHCHECK_PORT (default 3001 = container-internal API port) and
+      # is only probed inside the container network.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${API_HEALTHCHECK_PORT:-3001}/health > /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -158,7 +166,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       # BugFix-11 (R7): runtime application version (kept in sync with the API)
-      APP_VERSION: ${APP_VERSION:-1.0.0-beta.1}
+      APP_VERSION: ${APP_VERSION:-1.0.0-beta.2}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       REDIS_URL: ${REDIS_URL:?REDIS_URL must be set}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set}
@@ -199,8 +207,8 @@ services:
         condition: service_completed_successfully
     healthcheck:
       # Port aus WORKER_HEALTH_PORT lesen (Default 3100), damit der
-      # Healthcheck dem konfigurierten Liveness-Port folgt.
-      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:' + (process.env.WORKER_HEALTH_PORT || '3100') + '/health', r => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      # Healthcheck dem konfigurierten Liveness-Port folgt (BugFix-15: curl).
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${WORKER_HEALTH_PORT:-3100}/health > /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -218,11 +226,16 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: "3000"
-      # API base URL for the browser - injected at container startup via entrypoint
-      # This allows fully dynamic port configuration without rebuilding the web image
-      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-http://${VERSIGO_HOST:-localhost}:${APP_PORT:-3001}}"
+      # API base URL for the browser - injected at container startup via entrypoint.
+      # Empty (default): the browser auto-detects it from the loaded page
+      # (BugFix-14): direct IP/HTTP access -> http://<host>:<API port>,
+      # HTTPS via reverse proxy -> https://<host>/api (proxy strips /api).
+      # Set NEXT_PUBLIC_API_BASE_URL only for proxy URLs outside this scheme.
+      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-}"
+      # API port for the direct IP/HTTP auto-detection path.
+      NEXT_PUBLIC_API_PORT: "${APP_PORT:-3001}"
       # BugFix-11 (R7): runtime app version, shown in the UI footer
-      NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-1.0.0-beta.1}
+      NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-1.0.0-beta.2}
     ports:
       - "${WEB_PORT:-3000}:3000"
     networks:
@@ -231,7 +244,9 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => { process.exit(r.statusCode >= 200 && r.statusCode < 400 ? 0 : 1); }).on('error', () => process.exit(1))"]
+      # BugFix-15: curl-based liveness probe; Next.js may answer 307 redirects
+      # on / – curl -f only fails on HTTP >= 400, so redirects count as healthy.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/ > /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5

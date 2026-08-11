@@ -130,12 +130,12 @@ setzbar; die Admin-API lehnt diese Schlüssel ab (`ForbiddenException`):
 | `APP_PORT`, `WEB_PORT` | Infrastruktur | Port-Bindings |
 | `CORS_ORIGINS` | Infrastruktur | Netzwerk/Trust-Grenze |
 | `TRUST_PROXY` | Infrastruktur | Reverse-Proxy-Vertrauen |
-| `COOKIE_SECURE` | Infrastruktur | Session-Cookie Secure-Flag (Default: true in Produktion) |
+| `COOKIE_SECURE` | Infrastruktur | Session-Cookie Secure-Flag (leer = pro Request "auto", Secure nur über HTTPS; BugFix-14) |
 | `DATABASE_URL`, `REDIS_URL` | Infrastruktur | Verbindungsstrings |
 | `DOCUMENTS_STORAGE_PATH` | Infrastruktur | Dateisystempfad |
 | `SETTINGS_ENCRYPTION_KEY` | Infrastruktur | **Root-Secret** (AES-256-GCM) |
 | `SESSION_SECRET` | Infrastruktur | **Session-Secret** |
-| `NEXT_PUBLIC_API_BASE_URL` | Infrastruktur | Browser-Build-Zeit |
+| `NEXT_PUBLIC_API_BASE_URL` | Infrastruktur | Browser-Auto-Erkennung (leer = Default; BugFix-14) |
 | `APP_VERSION`, `NEXT_PUBLIC_APP_VERSION` | Infrastruktur | Laufzeit-Versionskennung (`/health`, `/ready`, Web-Footer; BugFix-11/R7) |
 | `NEXT_ALLOWED_DEV_ORIGINS` | Infrastruktur | Dev-HMR-Origins |
 | `LOCAL_AUTH_ENABLED`, `LOCAL_ADMIN_USERNAME`, `LOCAL_ADMIN_PASSWORD` | Authentifizierung | Boot-/Fail-Fast-Logik |

@@ -87,6 +87,21 @@ describe('LoginRateLimiterService', () => {
       expect(client.pexpire).toHaveBeenCalledWith('register:attempts:192.168.1.1', 900_000);
     });
 
+    it('uses the change-password scope for separate counters', async () => {
+      const client = {
+        incr: vi.fn().mockResolvedValue(1),
+        pexpire: vi.fn().mockResolvedValue('OK'),
+        get: vi.fn(),
+        del: vi.fn(),
+        status: 'ready',
+      } as unknown as Redis;
+      (service as unknown as { client: Redis }).client = client;
+
+      await service.recordAttempt('192.168.1.1', 'change-password');
+      expect(client.incr).toHaveBeenCalledWith('change-password:attempts:192.168.1.1');
+      expect(client.pexpire).toHaveBeenCalledWith('change-password:attempts:192.168.1.1', 900_000);
+    });
+
     it('returns 1 on a Redis error (fail-open)', async () => {
       const client = {
         incr: vi.fn().mockRejectedValue(new Error('Redis down')),

@@ -64,7 +64,7 @@ export const appConfigSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
-    // BugFix-11 (R7): runtime application version (e.g. "1.0.0-beta.1"),
+    // BugFix-11 (R7): runtime application version (e.g. "1.0.0-beta.2"),
     // injected via APP_VERSION in Compose. Public, harmless value exposed on
     // the health/readiness endpoints; empty values are treated as unset.
     APP_VERSION: optionalEnvString(z.string().min(1)).optional(),

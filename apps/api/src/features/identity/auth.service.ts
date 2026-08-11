@@ -246,6 +246,18 @@ export class AuthService {
     action: string,
     diff: Record<string, unknown>,
   ): Promise<void> {
+    await this.auditSelf(actorUserId, action, diff);
+  }
+
+  /**
+   * BugFix-16: generic self-service audit entry (actor = the user itself,
+   * entity = the user's own account). Never logs passwords or hashes.
+   */
+  private async auditSelf(
+    actorUserId: string,
+    action: string,
+    diff: Record<string, unknown>,
+  ): Promise<void> {
     await this.db.auditEvent
       .create({
         data: {
@@ -259,6 +271,52 @@ export class AuthService {
       .catch(() => {
         /* audit is non-critical */
       });
+  }
+
+  /**
+   * BugFix-16: changes the local password of the signed-in user
+   * (POST /auth/change-password). The current password is verified against
+   * the stored bcrypt hash first.
+   *
+   * - 404 when the user does not exist (should not happen with a valid
+   *   session).
+   * - 409 when the account has no local credential (OIDC-only account) –
+   *   there is no password to change.
+   * - 403 when the current password is wrong. The message deliberately does
+   *   not reveal whether the username exists; the error is generic.
+   *
+   * Passwords are never stored, logged or audited – the audit entry only
+   * records the action PASSWORD_CHANGED. The session stays valid.
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.db.user.findUnique({
+      where: { id: userId },
+      select: { credential: { select: { passwordHash: true } } },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.credential) {
+      throw new ConflictException('Account has no local password');
+    }
+
+    const valid = await this.passwordHashing.verify(
+      currentPassword,
+      user.credential.passwordHash,
+    );
+    if (!valid) {
+      await this.auditSelf(userId, 'PASSWORD_CHANGE_FAILURE', {});
+      throw new ForbiddenException('Current password is incorrect');
+    }
+
+    const passwordHash = await this.passwordHashing.hash(newPassword);
+    await this.db.credential.update({
+      where: { userId },
+      data: { passwordHash },
+    });
+    await this.auditSelf(userId, 'PASSWORD_CHANGED', {});
   }
 
   /**

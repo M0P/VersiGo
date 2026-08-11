@@ -1,116 +1,115 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Project state after BugFix-12 (third-party license compliance)
+## Project state after BugFix-17 (version maintenance tooling + bump to 1.0.0-beta.2)
 
-The third-party license-compliance work package (no prompt file – direct user
-request: "create a list of all used libraries and licenses, find the rules to
-use each, then apply the rules so we use each library as intended") is
-implemented, reviewed (2 review rounds, acceptance condition met: 0 Critical /
-0 High / 0 Medium / ≤ 8 Minor – final round 0/0/0/4, three of the four Minors
-fixed immediately, the fourth explicitly deferred to the next work package;
-see `docs/reviews/BugFix-12-review-1.md` and
-`docs/reviews/BugFix-12-review-2.md`), and committed on branch
-`fix/BugFix-09-ci-fix-community-standards-dockerhub` (commit `f6ffeb7`).
+BugFix-17 was a direct user request with no prompt file (work package: make
+version maintenance easy + bump `1.0.0-beta.1` → `1.0.0-beta.2`). It is
+implemented, reviewed (13 review rounds, acceptance condition met on round 13:
+0 Critical / 0 High / 0 Medium / 0 Minor; see
+`docs/reviews/BugFix-17-review-1.md` … `BugFix-17-review-13.md`), and
+committed on branch `fix/BugFix-09-ci-fix-community-standards-dockerhub`
+(commit `8f814b5`).
 
-Package BugFix-12 delivered:
+Package BugFix-17 delivered:
 
-1. **Full dependency + license inventory.** `docs/third-party-notices.md`
-   lists all 578 npm packages (direct and transitive, incl. dev tooling) with
-   their license, generated from the installed pnpm virtual store
-   (`node_modules/.pnpm`). License summary: MIT 482, Apache-2.0 35, ISC 28,
-   BSD-2-Clause 12, BSD-3-Clause 10, BlueOak-1.0.0 5, Unlicense 2, 0BSD 1,
-   CC-BY-4.0 1 (caniuse-lite), LGPL-3.0-or-later 1
-   (@img/sharp-libvips-linuxmusl-x64), Python-2.0 1 (argparse). Four packages
-   without a `license` field (busboy, streamsearch, passport-strategy, pause)
-   confirmed MIT; `pause` handled via `KNOWN_LICENSES` override.
-2. **License policy + usage rules.** `scripts/dependency-licenses.mjs` is the
-   single source of truth (allowlist, restricted licenses, special cases) and
-   `docs/10-quality-and-library-policy.md` gained a "Lizenzpolitik" section
-   (German, matching the existing doc language) documenting the per-license
-   usage rules: permissive (MIT/ISC/BSD/BlueOak/Unlicense/0BSD/Python-2.0)
-   used unmodified as libraries with attribution; Apache-2.0 additionally
-   ships NOTICE files; CC-BY-4.0 data-only; LGPL-3.0-or-later libvips binary
-   used unmodified and dynamically loaded by sharp (replaceable, not statically
-   linked). CC-BY-4.0 and LGPL-3.0-or-later are RESTRICTED to their named
-   packages and the check fails for any other package carrying them.
-3. **Test-gate license check.** `docker-compose.test.yml` now runs
-   `node scripts/dependency-licenses.mjs check` after the tests (before the
-   i18n guard): fails on non-allowlisted licenses, missing license
-   declarations, restricted-license misuse, or a stale notices doc. The
-   generation is deterministic (explicit name+version sort, no
-   localeCompare/readdir dependence). Root `package.json` gained
-   `licenses:generate` / `licenses:check` scripts.
-4. **Web-image license collection.** Next.js standalone output traces only
-   runtime files and dropped all LICENSE texts (the web image previously
-   shipped zero). `apps/web/Dockerfile` now runs
-   `node ../../scripts/dependency-licenses.mjs collect --pnpm-dir
-   /app/node_modules/.pnpm --out .../standalone/THIRD_PARTY_LICENSES` after
-   `pnpm run build`. Verified in the rebuilt image: 220 dirs / 221 files /
-   3.3 MB, zero empty entries; each package keeps its own license text in
-   `<entry>/<package>/` subdirs (no overwrites – next and styled-jsx each ship
-   their own MIT text, libvips ships its README documenting the bundled
-   LGPLv3/MPL-2.0/BSD/MIT libraries).
-5. **Build plumbing.** `Dockerfile.test` COPYs the script + notices doc into
-   the test image; `.dockerignore` changed `docs/` to `docs/*` +
-   `!docs/third-party-notices.md` so the notices file reaches the test image.
+1. **Single source of truth**: the `"version"` field in the ROOT
+   `package.json`.
+2. **`scripts/bump-version.mjs`** (`pnpm version:bump <version>`): updates all
+   6 `package.json` files (root, api, worker, web, foundation), both compose
+   files (`APP_VERSION` + `NEXT_PUBLIC_APP_VERSION` defaults, 3 occurrences
+   each), `.env.example` (line-anchored, CRLF-preserving), and the version
+   line in `scripts/dependency-licenses.mjs` + `docs/third-party-notices.md`.
+   Atomic staging in memory (writes only after full validation); pre-check
+   aborts on superset drift (e.g. `...beta.10` next to `...beta.1`); partial
+   write errors instruct to run the sync check + `git checkout` restore.
+   `pnpm-lock.yaml` needs no rebuild (workspace packages are linked via
+   `link:`/`workspace:*`, never version-pinned).
+3. **`scripts/check-version-sync.mjs`** (`pnpm version:check`): exit-1 gate
+   verifying every version-carrying location against the root package.json
+   (5 workspace packages, both compose files incl. comment-line skipping and
+   occurrence-count parity, `.env.example`, licenses/notices header with
+   `[0-9A-Za-z.+-]` lookahead). Hardened guards: exactly one "malformed JSON"
+   diagnostic, missing-file/primitive/non-string version handled cleanly.
+4. **CI test gate**: `docker-compose.test.yml` runs the sync check between
+   license check and i18n guard; `Dockerfile.test` now COPYs the new script
+   plus `docker-compose.yml`, `docker-compose.dockerhub.yml`, `.env.example`.
+5. **Version bump**: `1.0.0-beta.1` → `1.0.0-beta.2` in every functional
+   location. `NEXT_PUBLIC_APP_VERSION` is injected at container STARTUP
+   (`apps/web/docker-entrypoint.sh` → `/runtime-config.js`), so only a web
+   container restart is needed, no rebuild. Publish workflow maps git tag
+   `v1.0.0-beta.2` → Docker tag `1.0.0-beta.2` (`${GITHUB_REF_NAME#v}`).
+6. **Docs**: `docs/release-guide.md` §1 gate comment updated, §5 checklist
+   note ("update this reference when tagging"), new §7 "Bumping the
+   application version" (workflow, startup injection, manual locations:
+   health-controller spec fixtures + app-config.schema.ts comment);
+   `docs/docker-image-guide.md` rollback example corrected
+   (`docker-compose.dockerhub.yml` + `VERSIGO_IMAGE_TAG=1.0.0-beta.2`).
 
-**Known debt / deferred items:**
-- No automated unit tests for `scripts/dependency-licenses.mjs` (check
-  allowlist/restricted/stale-doc and collect no-overwrite/symlink-skip) –
-  explicitly deferred with reviewer permission. The next work package that
-  touches this tooling should add a fixture-based test.
-- Re-running the compose smoke test without `--clean` against a leftover DB
-  (two active admins) makes step 8m ("DELETE /privacy/account should return
-  409") fail with 204 – pre-existing script characteristic (stale state), NOT
-  a regression. Always run `./scripts/compose-smoke-test.sh --build --clean`.
+**Review loop history (13 rounds, acceptance met):**
+R1 0/0/3/4 → R2 0/0/0/3 → R3 0/0/0/2 → R4 0/0/0/1 → R5 0/0/0/4 → R6 split
+(6B 0/0/1/3, 6D 0/0/1/2, others minors) → R7 split (7A 0/0/1/1, 7B 0/0/1/2)
+→ R8 split 0/0/0/2+0/0/0/2 → R9 split (9A 0/0/0/0, 9B 0/0/0/2) → R10 0/0/0/2
+→ R11 0/0/1/0 → R12 0/0/0/1 → R13 0/0/0/0 (PASS). Every round's findings were
+fixed and re-verified (scratch tests + full gate after each fix cycle).
 
-## Verification state of the BugFix-12 commit
-
-- Full compose test gate (container): lint, typecheck, `pnpm run test` 5/5
-  tasks (API 58 files / 660 tests, web 47, foundation 107, worker 4),
-  `License check: OK` (578 packages), i18n guard OK.
-- Compose smoke test (`--build --clean`): "All smoke tests passed".
-- Web image verified: `THIRD_PARTY_LICENSES` per-package layout correct
-  (next own MIT text, styled-jsx own license.md, libvips README, zero empty
-  entries).
-- Review loop: 2 rounds, acceptance met 0/0/0/4 (round 1: 1 High + 1 Medium +
-  6 Minor, all fixed; round 2: 0/0/0/4, three Minors fixed after; 1 Minor
-  deferred).
+**Verification state of the BugFix-17 commit (`8f814b5`):**
+- Full compose test gate (container, `docker compose -p versigo-test -f
+  docker-compose.test.yml up --build --abort-on-container-exit
+  --exit-code-from test`): Prisma migrate deploy, lint, typecheck, tests
+  (API 58 files / 672 tests), license check (578 packages, OK), version sync
+  check (OK, "all locations match 1.0.0-beta.2"), i18n guard (OK) →
+  "All checks passed!".
 
 ## No next work package exists
 
-`prompts/` contains no further numbered work package after BugFix-11 (the
-last file is `prompts/BugFix-11-release-readiness.md`); BugFix-12 was a
-direct user request with no prompt file. All currently defined work packages
-are committed (AP-01 … AP-21, BugFix-01 … BugFix-12).
+`prompts/` contains no further numbered work package after BugFix-11 (last
+file `prompts/BugFix-11-release-readiness.md`). BugFix-12 through BugFix-17
+were direct user requests without prompt files, all committed:
+- BugFix-12 (`f6ffeb7`): third-party license compliance.
+- BugFix-13 (`d6afe07`): single source for public URLs (VERSIGO_HOST +
+  APP_PORT/WEB_PORT derive NEXT_PUBLIC_API_BASE_URL, CORS_ORIGINS,
+  OIDC_CALLBACK_URL).
+- BugFix-14 (`0e29c02`): dual access with one deployment (per-request cookie
+  `Secure` flag 'auto', web entrypoint auto-detects API base URL).
+- BugFix-15 (`4360b65`): curl-based compose healthchecks.
+- BugFix-16 (`d74ba53`): password change for logged-in user + admin password
+  reset.
+- BugFix-17 (`8f814b5`): this package.
 
 **A new coding-agent session must therefore NOT auto-start any work package.**
 Wait for the user's next explicit instruction. If the user provides a new
-numbered prompt file in `prompts/`, implement only that one and use the same
-review loop (invoke the `code-reviewer` subagent via the Task tool on the
-uncommitted diff, write each report verbatim to
+numbered prompt file in `prompts/` (or a direct request), implement only that
+one and use the same review loop: invoke the `code-reviewer` subagent via the
+Task tool on the uncommitted diff, write each report verbatim to
 `docs/reviews/<package>-review-<n>.md`, fix every Critical/High/Medium and
-Minor where reasonable until 0 Critical / 0 High / 0 Medium / ≤ 8 Minor,
-max 5 rounds, then commit with a message starting with the package number and
-write a new handoff).
+Minor where reasonable until 0 Critical / 0 High / 0 Medium / ≤ 8 Minor, max
+5 review rounds, then commit with a message starting with the package number
+and write a new handoff (this file).
 
 ## Environment reminders for the next session (Podman host)
 
 - `docker` is a Podman shim → podman-compose. Reuse stale containers after
-  rebuilds: always `docker compose ... down` (or `down -v`) before `up`; the
-  smoke script supports `--clean`. The test runner service has NO volume mount
-  — source is baked into the image at build time, so any verification of
-  host-side edits requires rebuilding the test image
-  (`docker compose -f docker-compose.test.yml build test`).
-- `docker-compose.test.yml` sets `name: versigo`, which collides with the dev
-  stack project name: `docker compose -f docker-compose.test.yml down -v`
-  tries to remove the dev network `versigo_versigo-internal` and errors.
-  Workaround: run `down` (drop `-v`) or remove test containers manually.
-- Node/pnpm are NOT on the host PATH; run gates via the test container.
+  rebuilds: always `docker compose ... down -v` before `up` (`up --build`
+  alone is NOT enough on this machine). The test runner service has NO volume
+  mount — source is baked into the image at build time, so any verification
+  of host-side edits requires rebuilding the test image.
+- `docker-compose.yml` AND `docker-compose.test.yml` both set `name: versigo`
+  — the project names collide. ALWAYS run the test stack with an explicit
+  project override: `docker compose -p versigo-test -f docker-compose.test.yml
+  ...`; a plain `down`/`down -v` against the test file tries to remove the
+  DEV network `versigo_versigo-internal` and would disrupt the running dev
+  stack. Never touch the dev stack (`versigo_*` containers).
+- Node/pnpm are NOT on the host PATH; run gates via the test container. For
+  quick script checks (version scripts) use
+  `podman run --rm -v <repo>:/work -w /work --user 1000:1000 --entrypoint node
+  docker.io/library/node:24-alpine scripts/check-version-sync.mjs`. Bind
+  mounts from `/tmp` fail in the rootless userns (EACCES) — use a scratch
+  directory on the data partition if tests need a copy of the repo.
 - The `auth.service.ts ↔ oidc.strategy.ts` cycle is load-order fragile: a
   full API boot (real Nest bootstrap) is the ONLY check that proves it; the
   unit suites cannot.
-- Disk on `/var/home` is ~123 GB and fills quickly; `podman system prune -a -f`
+- Disk on `/var/home` is ~123 GB and fills quickly. `podman system prune -a -f`
   before large rebuilds. Never redirect podman storage. Clean up all podman
-  artifacts created during a session before the commit and verify
-  `df -h /var/home` afterwards.
+  artifacts created during a session (test stack down -v,
+  `localhost/versigo-test` image, scratch containers/volumes/files) before
+  the commit and verify `df -h /var/home` afterwards (AGENTS.md point 9).

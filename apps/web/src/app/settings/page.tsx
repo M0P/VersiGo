@@ -49,6 +49,14 @@ export default function SettingsPage(): ReactElement {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
 
+  // BugFix-16: password change (POST /auth/change-password)
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMessage, setPwMessage] = useState<string | null>(null);
+  const [pwError, setPwError] = useState<string | null>(null);
+
   // BugFix-07 (Q2): OIDC linking
   const [oidcStatus, setOidcStatus] = useState<OidcLinkStatus | null>(null);
   const [linking, setLinking] = useState(false);
@@ -164,6 +172,53 @@ export default function SettingsPage(): ReactElement {
   };
 
   const profileLoading = loadingProfile || userLoading;
+
+  // BugFix-16: change the local password of the signed-in account. The
+  // current password is verified server-side; wrong current password maps
+  // to 403, an OIDC-only account (no local credential) to 409.
+  const handleChangePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    setPwMessage(null);
+    if (pwNew !== pwConfirm) {
+      setPwError(t('settings.pwMismatch'));
+      return;
+    }
+    setPwSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: pwCurrent, newPassword: pwNew }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        // All reachable error states are mapped to localized keys so the
+        // UI never shows a raw English server message.
+        const message =
+          res.status === 429
+            ? t('auth.rateLimited')
+            : res.status === 403
+              ? t('settings.pwWrongCurrent')
+              : res.status === 409
+                ? t('settings.pwNoLocalCredential')
+                : t('settings.pwChangeError');
+        throw new Error(message);
+      }
+      setPwMessage(t('settings.pwChanged'));
+      setPwCurrent('');
+      setPwNew('');
+      setPwConfirm('');
+    } catch (e: unknown) {
+      setPwError(e instanceof Error ? e.message : t('common.unknownError'));
+    } finally {
+      setPwSaving(false);
+    }
+  };
 
   // BugFix-07 (Q2): self-service OIDC linking. POST starts the
   // link flow (the session remembers the link mode) and returns the
@@ -323,6 +378,73 @@ export default function SettingsPage(): ReactElement {
               </div>
               <Button type="submit" variant="primary" disabled={saving}>
                 {saving ? t('settings.savingProfile') : t('settings.saveProfile')}
+              </Button>
+            </form>
+          </Card>
+
+          {/* BugFix-16: change the local password. Always rendered – for an
+              OIDC-only account (no local credential) the API answers 409 and
+              the localized message is shown. */}
+          <Card style={{ marginTop: 'var(--versigo-space-6)' }}>
+            <CardHeader>
+              <SectionHeader title={t('settings.pwTitle')} />
+            </CardHeader>
+            <p style={{ marginBottom: 'var(--versigo-space-4)' }}>
+              {t('settings.pwBody')}
+            </p>
+            {pwMessage && (
+              <div style={{ marginBottom: 'var(--versigo-space-4)' }}>
+                <Alert variant="success">{pwMessage}</Alert>
+              </div>
+            )}
+            {pwError && (
+              <div style={{ marginBottom: 'var(--versigo-space-4)' }}>
+                <Alert variant="danger">{pwError}</Alert>
+              </div>
+            )}
+            <form onSubmit={handleChangePassword} style={{ display: 'flex', gap: 'var(--versigo-space-4)', flexWrap: 'wrap', alignItems: 'end' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <FormField label={t('settings.pwCurrent')}>
+                  <Input
+                    id="pw-current"
+                    type="password"
+                    value={pwCurrent}
+                    onChange={(e) => setPwCurrent(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </FormField>
+              </div>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <FormField label={t('settings.pwNew')} hint={t('settings.pwMinHint', { min: 12 })}>
+                  <Input
+                    id="pw-new"
+                    type="password"
+                    value={pwNew}
+                    onChange={(e) => setPwNew(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={12}
+                    maxLength={128}
+                    required
+                  />
+                </FormField>
+              </div>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <FormField label={t('settings.pwConfirm')}>
+                  <Input
+                    id="pw-confirm"
+                    type="password"
+                    value={pwConfirm}
+                    onChange={(e) => setPwConfirm(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={12}
+                    maxLength={128}
+                    required
+                  />
+                </FormField>
+              </div>
+              <Button type="submit" variant="primary" disabled={pwSaving}>
+                {pwSaving ? t('settings.pwSaving') : t('settings.pwButton')}
               </Button>
             </form>
           </Card>

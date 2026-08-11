@@ -27,6 +27,9 @@ function createMockDb() {
     householdMembership: {
       upsert: vi.fn().mockResolvedValue({ id: 'membership-1' }),
     },
+    credential: {
+      update: vi.fn().mockResolvedValue({ userId: 'user-2' }),
+    },
     auditEvent: {
       create: vi.fn().mockResolvedValue({ id: 'audit-1' }),
     },
@@ -36,13 +39,23 @@ function createMockDb() {
 
 type MockDb = ReturnType<typeof createMockDb>;
 
+function createMockPasswordHashing() {
+  return {
+    hash: vi.fn().mockResolvedValue('$2b$12$hash'),
+  };
+}
+
+type MockPasswordHashing = ReturnType<typeof createMockPasswordHashing>;
+
 describe('UserAdminService', () => {
   let mockDb: MockDb;
+  let mockPasswordHashing: MockPasswordHashing;
   let service: UserAdminService;
 
   beforeEach(() => {
     mockDb = createMockDb();
-    service = new UserAdminService(mockDb as never);
+    mockPasswordHashing = createMockPasswordHashing();
+    service = new UserAdminService(mockDb as never, mockPasswordHashing as never);
     // $transaction supports both forms:
     // - Array form: $transaction([p1, p2]) => Promise.all (used by list())
     // - Callback form: $transaction(cb[, options]) => cb(tx); tx === mockDb
@@ -440,6 +453,52 @@ describe('UserAdminService', () => {
         'Account has no OIDC binding',
       );
       expect(mockDb.user.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('sets a new password hash, audits and never stores the plaintext password', async () => {
+      mockDb.user.findUnique.mockResolvedValue({ credential: { userId: 'user-2' } });
+
+      await service.resetPassword(adminUser, 'user-2', 'neues-passwort');
+
+      expect(mockPasswordHashing.hash).toHaveBeenCalledWith('neues-passwort');
+      expect(mockDb.credential.update).toHaveBeenCalledWith({
+        where: { userId: 'user-2' },
+        data: { passwordHash: '$2b$12$hash' },
+      });
+      expect(mockDb.auditEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: 'admin-1',
+          entityType: 'User',
+          entityId: 'user-2',
+          action: 'USER_PASSWORD_RESET',
+        }),
+      });
+      const auditCall = mockDb.auditEvent.create.mock.calls[0][0] as {
+        data: { diffJson: unknown };
+      };
+      expect(JSON.stringify(auditCall.data.diffJson)).not.toContain('neues-passwort');
+    });
+
+    it('throws NotFoundException for an unknown user', async () => {
+      mockDb.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.resetPassword(adminUser, 'ghost', 'neues-passwort')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockDb.credential.update).not.toHaveBeenCalled();
+    });
+
+    it('throws ConflictException for an account without a local credential (OIDC-only)', async () => {
+      mockDb.user.findUnique.mockResolvedValue({ credential: null });
+
+      await expect(service.resetPassword(adminUser, 'oidc-user', 'neues-passwort')).rejects.toThrow(
+        'Account has no local password',
+      );
+      // The hash is computed before the transaction; the update must not
+      // happen for an account without a credential.
+      expect(mockDb.credential.update).not.toHaveBeenCalled();
     });
   });
 });

@@ -207,14 +207,51 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-> **Public URLs – single source of truth:** `NEXT_PUBLIC_API_BASE_URL`,
-> `CORS_ORIGINS` and `OIDC_CALLBACK_URL` are derived in the Compose files
-> from `VERSIGO_HOST` (default `localhost`) plus `APP_PORT`/`WEB_PORT`
-> (e.g. `VERSIGO_HOST=192.168.24.8`, `APP_PORT=2669` → the web app calls the
-> API at `http://192.168.24.8:2669` automatically). Only set the three
-> derived variables explicitly when the stack is served through a
-> TLS-terminating reverse proxy that uses a different public URL
-> (e.g. `https://app.example.com`) or when multiple origins must be allowed.
+> **Public URLs:** `CORS_ORIGINS` and `OIDC_CALLBACK_URL` are derived in the
+> Compose files from `VERSIGO_HOST` (default `localhost`) plus
+> `APP_PORT`/`WEB_PORT`. `NEXT_PUBLIC_API_BASE_URL` is **auto-detected in the
+> browser** (BugFix-14): with direct IP/HTTP access the web app calls
+> `http://<host>:<APP_PORT>` (only the port differs from the web port), with
+> HTTPS via a reverse proxy it calls `https://<host>/api` (the proxy strips
+> the `/api` prefix). One deployment therefore works over both access paths.
+> Only set the variables explicitly when the proxy uses a different public
+> URL (e.g. `https://app.example.com`).
+>
+> **Reverse proxy (Caddy) with dual access (BugFix-14):** to serve the stack
+> over HTTPS while keeping direct IP/HTTP access working, route the API
+> through the same host under the `/api` prefix and set `TRUST_PROXY=true`:
+>
+> ```caddyfile
+> versicherung.home {
+>     tls internal
+>     handle /api/* {
+>         uri strip_prefix /api
+>         reverse_proxy api:3001
+>     }
+>     handle {
+>         reverse_proxy web:3000
+>     }
+> }
+> ```
+>
+> `.env` for this setup:
+>
+> ```env
+> VERSIGO_HOST=192.168.24.8      # direct-IP access
+> APP_PORT=2669
+> WEB_PORT=2670
+> CORS_ORIGINS=http://192.168.24.8:2670,https://versicherung.home
+> TRUST_PROXY=true
+> # NEXT_PUBLIC_API_BASE_URL unset -> browser auto-detects
+> # COOKIE_SECURE unset -> per-request "auto" (Secure only over HTTPS)
+> # OIDC_CALLBACK_URL=https://versicherung.home/api/auth/callback  (only with OIDC)
+> ```
+>
+> Caddy must be attached to the same Docker network as the `web`/`api`
+> containers. An API subdomain (`api.versicherung.home`) does **not** work:
+> the session cookies use `SameSite=Lax`, and `.home` is not on the Public
+> Suffix List, so the browser treats the subdomain as cross-site and would
+> not send the session cookie on API requests.
 >
 > **Important (AP-20, `NODE_ENV=production`):** `.env.example` sets
 > `NODE_ENV=development` (local development mode). For
@@ -225,15 +262,15 @@ docker compose up --build -d
 > and auth fail-fast at startup. The Compose smoke test verifies this
 > production path (step 12).
 >
-> `COOKIE_SECURE` (secure flag of the session cookie) defaults to
-> `true` in production. **If the stack is accessed over plain HTTP (no TLS),
-> set `COOKIE_SECURE=false` explicitly.** Symptom if you forget it: the login
-> POST succeeds (no error is shown) but the browser silently refuses to
-> store the Secure session cookie, so every follow-up request is
-> unauthenticated and you are redirected straight back to the login page.
-> Only deployments served deliberately over plain HTTP (TLS-terminating
-> reverse proxy or a controlled internal installation without TLS) set
-> `COOKIE_SECURE=false` explicitly – in all other cases leave it unset.
+> `COOKIE_SECURE` (secure flag of the session cookie) is **`auto` per
+> request** when unset (BugFix-14): the cookie gets the `Secure` flag only
+> when the request arrived over HTTPS (needs `TRUST_PROXY=true` behind the
+> proxy). Over plain HTTP the cookie stays plain, so both access modes work
+> with one deployment and the old symptom "login succeeds but redirects back
+> to the login page" (Secure cookie silently dropped over HTTP) no longer
+> occurs. Set `COOKIE_SECURE=true`/`false` explicitly only to force the flag,
+> e.g. `COOKIE_SECURE=false` when the API itself is deliberately served over
+> plain HTTP in production without a proxy.
 >
 > The initial administrator is **never created automatically**. For the
 > first start, `LOCAL_AUTH_ENABLED=true` and your own strong
@@ -318,10 +355,11 @@ If a new image is broken:
 ```bash
 # Go back to the last working state (image tag only),
 # provided the Compose file uses external tags:
-docker compose down
-# point the image tag in docker-compose.yml / .env at the last
-# working version (e.g. IMAGE_TAG=v1.0.0-beta-1)
-docker compose up -d
+docker compose -f docker-compose.dockerhub.yml down
+# point the image tag in docker-compose.dockerhub.yml / .env at the last
+# working version (e.g. VERSIGO_IMAGE_TAG=1.0.0-beta.2 – the publish
+# workflow strips the leading "v" from the git tag v1.0.0-beta.2)
+docker compose -f docker-compose.dockerhub.yml up -d
 ```
 
 If the database has already advanced through migrations and the rollback
@@ -410,5 +448,5 @@ podman run --rm --entrypoint sh versigo-migration:latest -c \
 | Build fails with `no space left on device` | `podman system prune -a -f`, then rebuild |
 | `pnpm install --prod` creates an empty `node_modules` | pnpm-11.17.0 regression → the Dockerfiles use `pnpm deploy --prod --legacy` |
 | `pg_isready` fails | `postgresql16-client` must be installed in the runner (Alpine APK) |
-| Login succeeds (no error) but you are redirected back to the login page | Production + plain HTTP: the session cookie has the `Secure` flag (`COOKIE_SECURE` defaults to `true` in production) and the browser drops it. Fix: set `COOKIE_SECURE=false` in `.env` and recreate the API container (`docker compose up -d api`). If the login POST itself returns 401, the `.env` `LOCAL_ADMIN_PASSWORD` differs from the one used at first bootstrap – either use the original value or reset the DB (`docker compose down -v`) |
-| Stack/service reported as `unhealthy` | Check which service and why: `docker compose ps -a`, `docker inspect <container> --format '{{json .State.Health}}'` (look at the last `Output` of the failing check), `docker compose logs <service> \| tail -50`. Known benign cases: the one-shot `migration` container shows as `exited (0)` by design; during the initial image pull (`pull_policy: always`) services show as `starting` and only become `healthy` after `start_period`. `unhealthy` only sticks when the healthcheck command itself fails 5 times in a row |
+| Login succeeds (no error) but you are redirected back to the login page | Since BugFix-14 the session-cookie `Secure` flag is `auto` per request, so a plain-HTTP deployment no longer needs `COOKIE_SECURE=false`. If the symptom still occurs because `COOKIE_SECURE=true` is set explicitly while the API is served over plain HTTP, unset it (or set `false`) in `.env` and recreate the API container (`docker compose up -d api`). If the login POST itself returns 401, the `.env` `LOCAL_ADMIN_PASSWORD` differs from the one used at first bootstrap – either use the original value or reset the DB (`docker compose down -v`) |
+| Stack/service reported as `unhealthy` | The healthchecks are curl-based (BugFix-15): `curl -fsS` against the internal health endpoints – `/health` on `API_HEALTHCHECK_PORT` (default `3001`, the container-internal API port) for the API, `/health` on `WORKER_HEALTH_PORT` (default `3100`) for the worker, `/` on `:3000` for the web. **The images must be rebuilt and republished after BugFix-15** – older images contain no `curl` and the healthcheck then fails with `curl: not found` (this is the most likely cause of a persistently `unhealthy` stack with `m000p/versigo-*` images). Check which service and why: `docker compose ps -a`, `docker inspect <container> --format '{{json .State.Health}}'` (look at the last `Output` of the failing check), `docker compose logs <service> \| tail -50`. Known benign cases: the one-shot `migration` container shows as `exited (0)` by design; during the initial image pull (`pull_policy: always`) services show as `starting` and only become `healthy` after `start_period`. `unhealthy` only sticks when the healthcheck command itself fails 5 times in a row |

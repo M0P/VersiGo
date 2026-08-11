@@ -10,8 +10,8 @@ import { AppConfigService } from '@versigo/foundation';
  * Uses Redis INCR + EXPIRE for atomic TTL-based counters.
  *
  * Key format: {scope}:attempts:{ipAddress}
- * Scope "login" (default) and "register" use separate counters, so
- * the endpoints do not throttle each other.
+ * Scopes "login" (default), "register" and "change-password" use separate
+ * counters, so the endpoints do not throttle each other.
  * TTL is configurable via LOCAL_AUTH_RATE_LIMIT_WINDOW_MS.
  * Max attempts per window is configurable via LOCAL_AUTH_MAX_ATTEMPTS.
  */
@@ -33,7 +33,7 @@ export class LoginRateLimiterService implements OnModuleDestroy {
     });
   }
 
-  private redisKey(scope: 'login' | 'register', ip: string): string {
+  private redisKey(scope: 'login' | 'register' | 'change-password', ip: string): string {
     // The IP is used as-is in the Redis key. IPv6 addresses with colons
     // are valid Redis key characters and do not cause hierarchy issues.
     // IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) and their bare IPv4
@@ -46,7 +46,7 @@ export class LoginRateLimiterService implements OnModuleDestroy {
    * Record a failed attempt for the given IP and scope.
    * Returns the current attempt count.
    */
-  async recordAttempt(ip: string, scope: 'login' | 'register' = 'login'): Promise<number> {
+  async recordAttempt(ip: string, scope: 'login' | 'register' | 'change-password' = 'login'): Promise<number> {
     try {
       const key = this.redisKey(scope, ip);
       const count = await this.client.incr(key);
@@ -69,7 +69,7 @@ export class LoginRateLimiterService implements OnModuleDestroy {
   /**
    * Check whether the given IP is currently rate-limited for the given scope.
    */
-  async isBlocked(ip: string, scope: 'login' | 'register' = 'login'): Promise<boolean> {
+  async isBlocked(ip: string, scope: 'login' | 'register' | 'change-password' = 'login'): Promise<boolean> {
     try {
       const key = this.redisKey(scope, ip);
       const count = await this.client.get(key);
@@ -84,7 +84,7 @@ export class LoginRateLimiterService implements OnModuleDestroy {
    * Reset the attempt counter for the given IP and scope
    * (e.g., after successful login).
    */
-  async resetAttempts(ip: string, scope: 'login' | 'register' = 'login'): Promise<void> {
+  async resetAttempts(ip: string, scope: 'login' | 'register' | 'change-password' = 'login'): Promise<void> {
     try {
       await this.client.del(this.redisKey(scope, ip));
     } catch (err) {

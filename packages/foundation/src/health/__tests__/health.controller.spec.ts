@@ -34,7 +34,7 @@ function buildController(
   redisHealth: RedisHealthService,
   capabilities: CapabilityFlagsService,
   workerHeartbeat: WorkerHeartbeatService,
-  appVersion: string | undefined = '1.0.0-beta.1',
+  appVersion: string | undefined = '1.0.0-beta.2',
 ): HealthController {
   return new HealthController(db, redisHealth, capabilities, workerHeartbeat, buildConfig(appVersion));
 }
@@ -45,7 +45,7 @@ describe('HealthController', () => {
     const redisHealth = { isHealthy: vi.fn() } as unknown as RedisHealthService;
     const controller = buildController(db, redisHealth, buildCapabilities(), buildWorkerHeartbeat());
 
-    expect(controller.health()).toEqual({ status: 'ok', version: '1.0.0-beta.1' });
+    expect(controller.health()).toEqual({ status: 'ok', version: '1.0.0-beta.2' });
   });
 
   it('reports version on /health and /ready', async () => {
@@ -53,9 +53,9 @@ describe('HealthController', () => {
     const redisHealth = { isHealthy: vi.fn().mockResolvedValue(true) } as unknown as RedisHealthService;
     const controller = buildController(db, redisHealth, buildCapabilities(), buildWorkerHeartbeat());
 
-    expect(controller.health().version).toBe('1.0.0-beta.1');
+    expect(controller.health().version).toBe('1.0.0-beta.2');
     const result = await controller.ready();
-    expect(result.version).toBe('1.0.0-beta.1');
+    expect(result.version).toBe('1.0.0-beta.2');
   });
 
   it('reports version unknown when APP_VERSION is not set', async () => {

@@ -5,10 +5,11 @@ import { AppShell } from '../../../components/ui/app-shell';
 import { PageHeader } from '../../../components/ui/page-header';
 import { Card } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { Select } from '../../../components/ui/form-field';
+import { Select, Input, FormField } from '../../../components/ui/form-field';
 import { Alert } from '../../../components/ui/alert';
 import { Loading } from '../../../components/ui/loading';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { Dialog } from '../../../components/ui/dialog';
 import { NAV_SECTIONS } from '../../../components/ui/nav-config';
 import { useI18n } from '../../../i18n';
 import type { MessagePath, Messages } from '../../../i18n';
@@ -60,6 +61,13 @@ export default function AdminUsersPage(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [roleDrafts, setRoleDrafts] = useState<Record<string, GlobalRole>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  // BugFix-16: admin password reset (POST /admin/users/:id/reset-password)
+  const [resetTarget, setResetTarget] = useState<AdminUser | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
   const loadUsers = useCallback(() => {
     setLoading(true);
@@ -112,6 +120,59 @@ export default function AdminUsersPage(): ReactElement {
       t('admin.users.confirmDisable'));
   const enable = (id: string) =>
     runAction((i) => fetch(`${API_BASE}/admin/users/${i}/enable`, { method: 'POST', credentials: 'include' }), id);
+
+  // BugFix-16: admin password reset. Opens a dialog for the new password,
+  // POSTs it and reloads the list. The new password is never logged.
+  const openResetDialog = (user: AdminUser) => {
+    setResetTarget(user);
+    setResetPassword('');
+    setResetConfirm('');
+    setResetError(null);
+    setResetSuccess(null);
+  };
+
+  async function submitReset(): Promise<void> {
+    if (!resetTarget || !resetPassword) return;
+    if (resetPassword !== resetConfirm) {
+      setResetError(t('admin.users.resetPasswordMismatch'));
+      return;
+    }
+    setResetting(true);
+    setResetError(null);
+    setResetSuccess(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${resetTarget.id}/reset-password`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: resetPassword }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        // 409 (no local credential) is the only reachable business error
+        // the dialog can produce with a valid list state; everything else
+        // falls back to the localized failure text (never a raw English
+        // server message).
+        const message =
+          res.status === 409
+            ? t('admin.users.resetPasswordNoCredential')
+            : t('admin.users.resetPasswordFailed');
+        throw new Error(message);
+      }
+      setResetSuccess(t('admin.users.resetPasswordSuccess'));
+      setResetTarget(null);
+      setResetPassword('');
+      loadUsers();
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : t('common.unknownError');
+      setResetError(message);
+    } finally {
+      setResetting(false);
+    }
+  }
 
   async function applyRole(id: string): Promise<void> {
     const role = roleDrafts[id];
@@ -254,6 +315,11 @@ export default function AdminUsersPage(): ReactElement {
                           {u.status === 'DISABLED' && (
                             <Button size="sm" variant="secondary" disabled={isBusy} onClick={() => void enable(u.id)}>{t('admin.users.unblock')}</Button>
                           )}
+                          {u.hasCredential && (
+                            <Button size="sm" variant="secondary" disabled={isBusy} onClick={() => openResetDialog(u)}>
+                              {t('admin.users.resetPassword')}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -264,6 +330,58 @@ export default function AdminUsersPage(): ReactElement {
           </div>
         )}
       </Card>
+
+      {resetSuccess && (
+        <div style={{ marginTop: 'var(--versigo-space-4)' }}>
+          <Alert variant="success">{resetSuccess}</Alert>
+        </div>
+      )}
+
+      {/* BugFix-16: password reset dialog. The Dialog renders its own
+          cancel button; the confirm button is passed as action. */}
+      <Dialog
+        open={resetTarget !== null}
+        onClose={() => setResetTarget(null)}
+        title={t('admin.users.resetPasswordTitle')}
+        actions={
+          <Button
+            variant="primary"
+            disabled={resetting || resetPassword.length < 12}
+            onClick={() => void submitReset()}
+          >
+            {resetting ? t('common.saving') : t('admin.users.resetPassword')}
+          </Button>
+        }
+      >
+        {resetTarget && (
+          <>
+            <p style={{ marginTop: 0 }}>{t('admin.users.resetPasswordBody', { username: resetTarget.username })}</p>
+            {resetError && <Alert variant="danger">{resetError}</Alert>}
+            <FormField label={t('admin.users.resetPasswordLabel')} hint={t('admin.users.resetPasswordHint')}>
+              <Input
+                type="password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={12}
+                maxLength={128}
+                required
+              />
+            </FormField>
+            <FormField label={t('admin.users.resetPasswordConfirmLabel')}>
+              <Input
+                type="password"
+                value={resetConfirm}
+                onChange={(e) => setResetConfirm(e.target.value)}
+                autoComplete="new-password"
+                minLength={12}
+                maxLength={128}
+                required
+              />
+            </FormField>
+          </>
+        )}
+      </Dialog>
     </AppShell>
   );
 }
