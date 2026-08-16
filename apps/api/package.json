@@ -1,6 +1,6 @@
 {
   "name": "@versigo/api",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.4",
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
