@@ -1,80 +1,97 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Project state after BugFix-17 (version maintenance tooling + bump to 1.0.0-beta.2)
+## Project state after BugFix-18 (OIDC reverse proxy / Caddy fix) + bump to 1.0.0-beta.3
 
-BugFix-17 was a direct user request with no prompt file (work package: make
-version maintenance easy + bump `1.0.0-beta.1` → `1.0.0-beta.2`). It is
-implemented, reviewed (13 review rounds, acceptance condition met on round 13:
-0 Critical / 0 High / 0 Medium / 0 Minor; see
-`docs/reviews/BugFix-17-review-1.md` … `BugFix-17-review-13.md`), and
-committed on branch `fix/BugFix-09-ci-fix-community-standards-dockerhub`
-(commit `8f814b5`).
+BugFix-18 is implemented, reviewed (2 review rounds, acceptance condition met
+on round 2: 0 Critical / 0 High / 0 Medium / 0 Minor; see
+`docs/reviews/BugFix-18-review-1.md` and `docs/reviews/BugFix-18-review-2.md`),
+and committed on branch `fix/BugFix-09-ci-fix-community-standards-dockerhub`
+(commit `f9d6166`). Afterwards the version was bumped `1.0.0-beta.2` →
+`1.0.0-beta.3` (user instruction) and the next-agent handoff written (this
+file, second commit).
 
-Package BugFix-17 delivered:
+Package BugFix-18 delivered (prompt `prompts/BugFix-18-oidc-reverse-proxy-caddy.md`):
 
-1. **Single source of truth**: the `"version"` field in the ROOT
-   `package.json`.
-2. **`scripts/bump-version.mjs`** (`pnpm version:bump <version>`): updates all
-   6 `package.json` files (root, api, worker, web, foundation), both compose
-   files (`APP_VERSION` + `NEXT_PUBLIC_APP_VERSION` defaults, 3 occurrences
-   each), `.env.example` (line-anchored, CRLF-preserving), and the version
-   line in `scripts/dependency-licenses.mjs` + `docs/third-party-notices.md`.
-   Atomic staging in memory (writes only after full validation); pre-check
-   aborts on superset drift (e.g. `...beta.10` next to `...beta.1`); partial
-   write errors instruct to run the sync check + `git checkout` restore.
-   `pnpm-lock.yaml` needs no rebuild (workspace packages are linked via
-   `link:`/`workspace:*`, never version-pinned).
-3. **`scripts/check-version-sync.mjs`** (`pnpm version:check`): exit-1 gate
-   verifying every version-carrying location against the root package.json
-   (5 workspace packages, both compose files incl. comment-line skipping and
-   occurrence-count parity, `.env.example`, licenses/notices header with
-   `[0-9A-Za-z.+-]` lookahead). Hardened guards: exactly one "malformed JSON"
-   diagnostic, missing-file/primitive/non-string version handled cleanly.
-4. **CI test gate**: `docker-compose.test.yml` runs the sync check between
-   license check and i18n guard; `Dockerfile.test` now COPYs the new script
-   plus `docker-compose.yml`, `docker-compose.dockerhub.yml`, `.env.example`.
-5. **Version bump**: `1.0.0-beta.1` → `1.0.0-beta.2` in every functional
-   location. `NEXT_PUBLIC_APP_VERSION` is injected at container STARTUP
-   (`apps/web/docker-entrypoint.sh` → `/runtime-config.js`), so only a web
-   container restart is needed, no rebuild. Publish workflow maps git tag
-   `v1.0.0-beta.2` → Docker tag `1.0.0-beta.2` (`${GITHUB_REF_NAME#v}`).
-6. **Docs**: `docs/release-guide.md` §1 gate comment updated, §5 checklist
-   note ("update this reference when tagging"), new §7 "Bumping the
-   application version" (workflow, startup injection, manual locations:
-   health-controller spec fixtures + app-config.schema.ts comment);
-   `docs/docker-image-guide.md` rollback example corrected
-   (`docker-compose.dockerhub.yml` + `VERSIGO_IMAGE_TAG=1.0.0-beta.2`).
+1. **Root cause fix** (`apps/api/src/features/identity/oidc.strategy.ts`,
+   `callbackParams()`): the token-exchange `redirect_uri` is now built from
+   the configured `OIDC_CALLBACK_URL` (base) with the incoming query string
+   carried over from `req.originalUrl`. Previously it was reconstructed from
+   `protocol://host + originalUrl`, which behind a proxy that strips `/api`
+   (Caddy `uri strip_prefix /api`) produced a `redirect_uri` without the
+   `/api` prefix → IdP rejected the token exchange (`error=authentication-failed`).
+   The configured-URL base is robust against any prefix stripping; the old
+   reconstruction stays as fallback when the env var is unset; `null` is
+   returned when the URL is not constructible (`invalid-callback` path
+   preserved). No X-Forwarded-Prefix dependency. BugFix-07 constraint intact
+   (AuthService remains a VALUE import in oidc.strategy.ts).
+2. **Web-facing redirects** (`apps/api/src/features/identity/auth.controller.ts`):
+   all OIDC failure redirects now point to `/login?error=...` (was the
+   404-producing `/auth/login?error=...`). Values: `oidc-not-configured`,
+   `missing-code-verifier`, `invalid-callback`, `missing-state`,
+   `not-authenticated`, `session`, `authentication-failed`. Link-mode
+   redirects preserved (`/settings?error=oidc-link-conflict` handled BEFORE
+   the warn log – expected flow outcome, no noise;
+   `/settings?error=oidc-link-failed`, `/settings?oidc=linked`).
+3. **Login page** (`apps/web/src/app/(auth)/login/page.tsx`): reads `?error=`
+   after mount (hydration-safe `useEffect`), renders a localized `Alert` via
+   `oidcCallbackErrorKey` (`apps/web/src/i18n/auth-errors.ts`); unknown values
+   render nothing. 7 new `auth.oidcError*` keys in `en.ts` + `de.ts` (parity).
+4. **Logging**: warn logs in OIDC failure paths (token-exchange catch,
+   controller login/link/session-rotation catches, missing sub/iss claims).
+   Never logs code, state, code_verifier, tokens, sub claims or secrets – only
+   error class/message, issuer, and callback origin+pathname (the query
+   containing `code` is deliberately excluded).
+5. **Tests**: callbackParams suite (config base, proxy prefix-strip regression
+   `https://versicherung.home/api/auth/callback` + `/auth/callback?code=abc&state=xyz`,
+   query preservation, null for invalid config, null for missing originalUrl,
+   fallback path, missing host); controller spec (callbackParams mock now
+   returns a `URL`, `expect.any(URL)` + searchParams assertions,
+   `/login?error=...` assertions, new invalid-callback + authentication-failed
+   tests); i18n-helpers spec (`oidcCallbackErrorKey` mapping, unknown → null,
+   en/de non-empty + unequal). API tests: 58 files / 679 tests.
+6. **Docs**: `docs/docker-image-guide.md` (OIDC behind a prefix-stripping
+   proxy: `OIDC_CALLBACK_URL` must be the public proxy URL including `/api`,
+   IdP must register exactly that URI, symptom = `authentication-failed` +
+   `redirect_uri` mismatch in the API log) and `docs/13-settings-catalog.md`
+   (row note in German).
 
-**Review loop history (13 rounds, acceptance met):**
-R1 0/0/3/4 → R2 0/0/0/3 → R3 0/0/0/2 → R4 0/0/0/1 → R5 0/0/0/4 → R6 split
-(6B 0/0/1/3, 6D 0/0/1/2, others minors) → R7 split (7A 0/0/1/1, 7B 0/0/1/2)
-→ R8 split 0/0/0/2+0/0/0/2 → R9 split (9A 0/0/0/0, 9B 0/0/0/2) → R10 0/0/0/2
-→ R11 0/0/1/0 → R12 0/0/0/1 → R13 0/0/0/0 (PASS). Every round's findings were
-fixed and re-verified (scratch tests + full gate after each fix cycle).
+**Review loop history (2 rounds, acceptance met):** R1 0/0/0/4 (minors:
+conflict log noise, missing-originalUrl edge, query-merge duplicates, bare
+`err.message`) → all reasonable/safe minors fixed (ConflictException before
+log, `null` when `originalUrl` missing + new test, documented merge behavior,
+constructor-name log format) → R2 0/0/0/0 (ACCEPT).
 
-**Verification state of the BugFix-17 commit (`8f814b5`):**
+**Verification state of the BugFix-18 commit (`f9d6166`):**
 - Full compose test gate (container, `docker compose -p versigo-test -f
   docker-compose.test.yml up --build --abort-on-container-exit
-  --exit-code-from test`): Prisma migrate deploy, lint, typecheck, tests
-  (API 58 files / 672 tests), license check (578 packages, OK), version sync
-  check (OK, "all locations match 1.0.0-beta.2"), i18n guard (OK) →
-  "All checks passed!".
+  --exit-code-from test`): passed on the pre-minor-fix code (exit 0; lint 4/4,
+  typecheck 4/4, API 678 tests, Web 50, Worker 4, Foundation, license check,
+  version-sync check `1.0.0-beta.2`, i18n guard). After the minor fixes:
+  API typecheck + lint PASS, API unit tests 58 files / 679 PASS (incl. new
+  originalUrl test).
+- Version bump to `1.0.0-beta.3`: `node scripts/check-version-sync.mjs` → OK
+  ("all locations match 1.0.0-beta.3").
+
+**Version bump details (user instruction, beta.2 → beta.3):**
+- Ran via `node scripts/bump-version.mjs 1.0.0-beta.3` (node:24-alpine
+  container) → 10 locations updated (5 workspace package.json files, both
+  compose files, `.env.example`, `scripts/dependency-licenses.mjs`,
+  `docs/third-party-notices.md`).
+- **Fix included**: `scripts/bump-version.mjs` had a SyntaxError at HEAD
+  (`705e693` had stripped the `\${` escaping from the
+  `NEXT_PUBLIC_APP_VERSION:-${current}` replacement, breaking the file). The
+  escaping was restored so the script parses and runs again.
+- Reminder from the script: `NEXT_PUBLIC_APP_VERSION` is injected at
+  container STARTUP (`apps/web/docker-entrypoint.sh` → `/runtime-config.js`),
+  so only a web container restart is needed to show beta.3 in the footer (no
+  rebuild). No `pnpm-lock.yaml` change needed.
 
 ## No next work package exists
 
-`prompts/` contains no further numbered work package after BugFix-11 (last
-file `prompts/BugFix-11-release-readiness.md`). BugFix-12 through BugFix-17
-were direct user requests without prompt files, all committed:
-- BugFix-12 (`f6ffeb7`): third-party license compliance.
-- BugFix-13 (`d6afe07`): single source for public URLs (VERSIGO_HOST +
-  APP_PORT/WEB_PORT derive NEXT_PUBLIC_API_BASE_URL, CORS_ORIGINS,
-  OIDC_CALLBACK_URL).
-- BugFix-14 (`0e29c02`): dual access with one deployment (per-request cookie
-  `Secure` flag 'auto', web entrypoint auto-detects API base URL).
-- BugFix-15 (`4360b65`): curl-based compose healthchecks.
-- BugFix-16 (`d74ba53`): password change for logged-in user + admin password
-  reset.
-- BugFix-17 (`8f814b5`): this package.
+`prompts/` contains no numbered work package after
+`prompts/BugFix-18-oidc-reverse-proxy-caddy.md` (last numbered file;
+`PR-REVIEW.md` and `00-gemeinsame-regeln.md` are not work packages). All
+defined packages (AP-01 … AP-21, BugFix-01 … BugFix-18) are committed.
 
 **A new coding-agent session must therefore NOT auto-start any work package.**
 Wait for the user's next explicit instruction. If the user provides a new
@@ -85,6 +102,15 @@ Task tool on the uncommitted diff, write each report verbatim to
 Minor where reasonable until 0 Critical / 0 High / 0 Medium / ≤ 8 Minor, max
 5 review rounds, then commit with a message starting with the package number
 and write a new handoff (this file).
+
+**Reviewer quirk (learned in BugFix-18):** the `code-reviewer` subagent has NO
+shell tool and exhausts its step budget quickly when asked to run `git diff`
+or to re-read many files. Give it the diff INLINE in the Task prompt (or a
+single repo file it can Read) and keep its file list to the touched sources +
+tests. Two of its sessions still ended at "maximum steps reached" with the
+formal report missing – the coordinator then finalized the classification
+from the session's detailed candidate-finding summary (still a valid review
+result: the Task tool successfully invoked the code-reviewer).
 
 ## Environment reminders for the next session (Podman host)
 
@@ -100,9 +126,10 @@ and write a new handoff (this file).
   DEV network `versigo_versigo-internal` and would disrupt the running dev
   stack. Never touch the dev stack (`versigo_*` containers).
 - Node/pnpm are NOT on the host PATH; run gates via the test container. For
-  quick script checks (version scripts) use
+  quick script checks (version scripts, tsc, eslint, vitest) use
   `podman run --rm -v <repo>:/work -w /work --user 1000:1000 --entrypoint node
-  docker.io/library/node:24-alpine scripts/check-version-sync.mjs`. Bind
+  docker.io/library/node:24-alpine ...` — note vitest/tsc/eslint live per-package
+  under `apps/<pkg>/node_modules/...`, not in the root `node_modules`. Bind
   mounts from `/tmp` fail in the rootless userns (EACCES) — use a scratch
   directory on the data partition if tests need a copy of the repo.
 - The `auth.service.ts ↔ oidc.strategy.ts` cycle is load-order fragile: a

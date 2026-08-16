@@ -114,6 +114,22 @@ export const de = {
     or: 'oder',
     alternativeOidc: 'Alternativ mit Ihrem Identity-Provider anmelden:',
     oidcSignIn: 'Mit OIDC anmelden',
+    // BugFix-18: lokalisierte Meldungen fuer den `error`-Query-Parameter, den
+    // die API nach einem fehlgeschlagenen OIDC-Callback weiterleitet
+    // (Login- und Verknuepfungs-Flow).
+    oidcErrorAuthenticationFailed:
+      'Die Anmeldung mit dem Identity-Provider ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
+    oidcErrorMissingCodeVerifier:
+      'Die Anmeldung konnte nicht verifiziert werden (fehlender Flow-Zustand). Bitte versuchen Sie es erneut.',
+    oidcErrorInvalidCallback:
+      'Der Anmelde-Rückruf war ungültig. Bitte versuchen Sie es erneut.',
+    oidcErrorMissingState:
+      'Die Anmeldung konnte nicht verifiziert werden (fehlender State). Bitte versuchen Sie es erneut.',
+    oidcErrorNotConfigured:
+      'Die Anmeldung mit dem Identity-Provider ist nicht konfiguriert.',
+    oidcErrorNotAuthenticated:
+      'Ihre Sitzung ist während der Verknüpfung abgelaufen. Bitte melden Sie sich an und versuchen Sie es erneut.',
+    oidcErrorSession: 'Ein Session-Fehler ist aufgetreten. Bitte versuchen Sie es erneut.',
     registerTagline: 'Neues Konto erstellen',
     registrationFailedTitle: 'Registrierung fehlgeschlagen',
     registrationFailedDefault: 'Registrierung fehlgeschlagen',

@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Logger,
   Post,
   Req,
   Res,
@@ -37,6 +38,8 @@ type SessionRequest = Request & {
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly oidc: OidcStrategy,
     private readonly authService: AuthService,
@@ -237,25 +240,27 @@ export class AuthController {
   @Get('callback')
   async callback(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
     if (!(await this.oidc.isEnabled())) {
-      res.redirect('/auth/login?error=oidc-not-configured');
+      // BugFix-18: redirect to the web login route (/login), NOT the API
+      // route /auth/login – the latter has no web page and produced a 404.
+      res.redirect('/login?error=oidc-not-configured');
       return;
     }
 
     const codeVerifier = req.session.oidcCodeVerifier;
     if (!codeVerifier) {
-      res.redirect('/auth/login?error=missing-code-verifier');
+      res.redirect('/login?error=missing-code-verifier');
       return;
     }
 
     const params = this.oidc.callbackParams(req);
     if (!params) {
-      res.redirect('/auth/login?error=invalid-callback');
+      res.redirect('/login?error=invalid-callback');
       return;
     }
 
     const expectedState = req.session.oidcState;
     if (!expectedState) {
-      res.redirect('/auth/login?error=missing-state');
+      res.redirect('/login?error=missing-state');
       return;
     }
 
@@ -270,7 +275,7 @@ export class AuthController {
       delete req.session.oidcState;
       delete req.session.oidcLinkMode;
       if (!userId) {
-        res.redirect('/auth/login?error=not-authenticated');
+        res.redirect('/login?error=not-authenticated');
         return;
       }
       try {
@@ -282,11 +287,19 @@ export class AuthController {
         await this.authService.bindOidcIdentityForUser(userId, issuer, subject);
         res.redirect('/settings?oidc=linked');
       } catch (error) {
-        // 409: identity already bound to another account.
+        // 409: identity already bound to another account – an expected
+        // user-flow outcome, no log noise (BugFix-18 review round 1).
         if (error instanceof ConflictException) {
           res.redirect('/settings?error=oidc-link-conflict');
           return;
         }
+        // BugFix-18: log the underlying failure (no secrets) so production
+        // issues can be diagnosed.
+        this.logger.warn(
+          `OIDC self-service link failed: ` +
+            `${error instanceof Error ? error.constructor.name : typeof error}: ` +
+            `${error instanceof Error ? error.message : String(error)}`,
+        );
         res.redirect('/settings?error=oidc-link-failed');
       }
       return;
@@ -296,7 +309,12 @@ export class AuthController {
       const user = await this.oidc.validateCallback(params, codeVerifier, expectedState);
       req.session.regenerate((err?: Error | null) => {
         if (err) {
-          res.redirect('/auth/login?error=session');
+          this.logger.warn(
+            `OIDC login session rotation failed: ` +
+              `${err instanceof Error ? err.constructor.name : typeof err}: ` +
+              `${err instanceof Error ? err.message : String(err)}`,
+          );
+          res.redirect('/login?error=session');
           return;
         }
         req.session.userId = user.id;
@@ -304,8 +322,15 @@ export class AuthController {
         delete req.session.oidcState;
         res.redirect('/');
       });
-    } catch {
-      res.redirect('/auth/login?error=authentication-failed');
+    } catch (error) {
+      // BugFix-18: log the underlying failure (no secrets) so production
+      // issues can be diagnosed.
+      this.logger.warn(
+        `OIDC login failed: ` +
+          `${error instanceof Error ? error.constructor.name : typeof error}: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+      res.redirect('/login?error=authentication-failed');
     }
   }
 
