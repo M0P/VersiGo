@@ -24,12 +24,28 @@ export async function relaxedFetch(
   const url = new URL(raw);
   const method = init?.method ?? 'GET';
   const headers = new Headers(init?.headers);
-  const body = init?.body as string | Buffer | undefined;
   const timeoutMs = 10_000;
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return new Response(null, { status: 400, statusText: 'Unsupported protocol' });
   }
+
+  // BugFix-19: oauth4webapi sends the token-endpoint POST body as a
+  // `URLSearchParams` instance. `http.request().write()` only accepts
+  // string/Buffer/Uint8Array chunks, so the body must be normalized before
+  // it is written (previously this threw ERR_INVALID_ARG_TYPE "Received an
+  // instance of URLSearchParams" and the token exchange never reached the
+  // IdP). The `content-type` header is already set by oauth4webapi; the
+  // `content-length` is added here because Node's http client does not
+  // derive it from a written chunk.
+  const body = normalizeBody(init?.body);
+  if (body.unsupported) {
+    return new Response(null, { status: 400, statusText: 'Unsupported body type' });
+  }
+  if (body.value !== undefined && !headers.has('content-length')) {
+    headers.set('content-length', String(Buffer.byteLength(body.value)));
+  }
+
   const httpModule = url.protocol === 'https:' ? https : http;
 
   return new Promise<Response>((resolve, reject) => {
@@ -61,9 +77,44 @@ export async function relaxedFetch(
       });
     });
     request.on('error', reject);
-    if (body) request.write(body);
+    if (body.value !== undefined) request.write(body.value);
     request.end();
     const timer = setTimeout(() => request.destroy(new Error('OIDC request timed out')), timeoutMs);
     request.on('close', () => clearTimeout(timer));
   });
+}
+
+type NormalizedBody =
+  | { unsupported: true }
+  | { unsupported: false; value?: string | Buffer };
+
+/**
+ * BugFix-19: converts the `fetch`-style body values used by
+ * openid-client/oauth4webapi into something `http.request().write()`
+ * accepts (string or Buffer). `URLSearchParams` is the token-endpoint body;
+ * discovery/JWKS/userinfo are GET requests without a body. Blob, FormData
+ * and ReadableStream are not used by the app's OIDC flows and are rejected.
+ */
+function normalizeBody(rawBody: unknown): NormalizedBody {
+  if (rawBody === undefined || rawBody === null) {
+    return { unsupported: false, value: undefined };
+  }
+  if (rawBody instanceof URLSearchParams) {
+    return { unsupported: false, value: rawBody.toString() };
+  }
+  if (typeof rawBody === 'string') {
+    return { unsupported: false, value: rawBody };
+  }
+  if (rawBody instanceof ArrayBuffer) {
+    return { unsupported: false, value: Buffer.from(rawBody) };
+  }
+  if (ArrayBuffer.isView(rawBody)) {
+    // Uint8Array (FetchBody) and any other TypedArray/DataView: copy only
+    // the view's own bytes (byteOffset/length of the underlying buffer).
+    return {
+      unsupported: false,
+      value: Buffer.from(rawBody.buffer, rawBody.byteOffset, rawBody.byteLength),
+    };
+  }
+  return { unsupported: true };
 }

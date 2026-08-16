@@ -1,97 +1,83 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Project state after BugFix-18 (OIDC reverse proxy / Caddy fix) + bump to 1.0.0-beta.3
+## Project state after BugFix-19 (OIDC token-exchange `URLSearchParams` fix) + bump to 1.0.0-beta.4
 
-BugFix-18 is implemented, reviewed (2 review rounds, acceptance condition met
-on round 2: 0 Critical / 0 High / 0 Medium / 0 Minor; see
-`docs/reviews/BugFix-18-review-1.md` and `docs/reviews/BugFix-18-review-2.md`),
-and committed on branch `fix/BugFix-09-ci-fix-community-standards-dockerhub`
-(commit `f9d6166`). Afterwards the version was bumped `1.0.0-beta.2` →
-`1.0.0-beta.3` (user instruction) and the next-agent handoff written (this
-file, second commit).
+BugFix-19 is implemented, reviewed (3 review rounds, acceptance condition met
+on round 3: 0 Critical / 0 High / 0 Medium / 0 Minor; see
+`docs/reviews/BugFix-19-review-1.md` … `BugFix-19-review-3.md`), and committed
+on branch `fix/BugFix-09-ci-fix-community-standards-dockerhub` (commit
+`d3f539b`). Afterwards the version was bumped `1.0.0-beta.3` →
+`1.0.0-beta.4` (user instruction) and this handoff written (second commit).
 
-Package BugFix-18 delivered (prompt `prompts/BugFix-18-oidc-reverse-proxy-caddy.md`):
+Package BugFix-19 was a direct user request (no prompt file; the user reported
+production logs with a `TypeError: The "chunk" argument must be of type string
+or an instance of Buffer or Uint8Array. Received an instance of
+URLSearchParams` at the OIDC token exchange):
 
-1. **Root cause fix** (`apps/api/src/features/identity/oidc.strategy.ts`,
-   `callbackParams()`): the token-exchange `redirect_uri` is now built from
-   the configured `OIDC_CALLBACK_URL` (base) with the incoming query string
-   carried over from `req.originalUrl`. Previously it was reconstructed from
-   `protocol://host + originalUrl`, which behind a proxy that strips `/api`
-   (Caddy `uri strip_prefix /api`) produced a `redirect_uri` without the
-   `/api` prefix → IdP rejected the token exchange (`error=authentication-failed`).
-   The configured-URL base is robust against any prefix stripping; the old
-   reconstruction stays as fallback when the env var is unset; `null` is
-   returned when the URL is not constructible (`invalid-callback` path
-   preserved). No X-Forwarded-Prefix dependency. BugFix-07 constraint intact
-   (AuthService remains a VALUE import in oidc.strategy.ts).
-2. **Web-facing redirects** (`apps/api/src/features/identity/auth.controller.ts`):
-   all OIDC failure redirects now point to `/login?error=...` (was the
-   404-producing `/auth/login?error=...`). Values: `oidc-not-configured`,
-   `missing-code-verifier`, `invalid-callback`, `missing-state`,
-   `not-authenticated`, `session`, `authentication-failed`. Link-mode
-   redirects preserved (`/settings?error=oidc-link-conflict` handled BEFORE
-   the warn log – expected flow outcome, no noise;
-   `/settings?error=oidc-link-failed`, `/settings?oidc=linked`).
-3. **Login page** (`apps/web/src/app/(auth)/login/page.tsx`): reads `?error=`
-   after mount (hydration-safe `useEffect`), renders a localized `Alert` via
-   `oidcCallbackErrorKey` (`apps/web/src/i18n/auth-errors.ts`); unknown values
-   render nothing. 7 new `auth.oidcError*` keys in `en.ts` + `de.ts` (parity).
-4. **Logging**: warn logs in OIDC failure paths (token-exchange catch,
-   controller login/link/session-rotation catches, missing sub/iss claims).
-   Never logs code, state, code_verifier, tokens, sub claims or secrets – only
-   error class/message, issuer, and callback origin+pathname (the query
-   containing `code` is deliberately excluded).
-5. **Tests**: callbackParams suite (config base, proxy prefix-strip regression
-   `https://versicherung.home/api/auth/callback` + `/auth/callback?code=abc&state=xyz`,
-   query preservation, null for invalid config, null for missing originalUrl,
-   fallback path, missing host); controller spec (callbackParams mock now
-   returns a `URL`, `expect.any(URL)` + searchParams assertions,
-   `/login?error=...` assertions, new invalid-callback + authentication-failed
-   tests); i18n-helpers spec (`oidcCallbackErrorKey` mapping, unknown → null,
-   en/de non-empty + unequal). API tests: 58 files / 679 tests.
-6. **Docs**: `docs/docker-image-guide.md` (OIDC behind a prefix-stripping
-   proxy: `OIDC_CALLBACK_URL` must be the public proxy URL including `/api`,
-   IdP must register exactly that URI, symptom = `authentication-failed` +
-   `redirect_uri` mismatch in the API log) and `docs/13-settings-catalog.md`
-   (row note in German).
+1. **Root cause** (`apps/api/src/common/connectivity/relaxed-fetch.ts`,
+   pre-existing BugFix-06 bug): oauth4webapi 3.8.6 (`authenticatedRequest`,
+   `oauth4webapi/build/index.js:1150-1159`) sends the token-endpoint POST body
+   as a `URLSearchParams` instance via `(customFetch || fetch)(url.href, { body,
+   ... })`. `relaxedFetch` passed that object straight to
+   `http.request().write()` → Node `ERR_INVALID_ARG_TYPE` → the token exchange
+   never reached the IdP (`OIDC token exchange failed ... UnauthorizedException:
+   OIDC authentication failed` on login AND link flows). Discovery/JWKS/userinfo
+   are GET requests without a body → unaffected, which is why the bug was
+   invisible until BugFix-18's logging surfaced it.
+2. **Fix**: `normalizeBody(rawBody)` converts `fetch`-style bodies into
+   `string | Buffer`: `URLSearchParams` → `.toString()`, string passthrough,
+   `ArrayBuffer` → `Buffer.from`, `ArrayBuffer.isView` (TypedArray/DataView) →
+   `Buffer.from(buffer, byteOffset, byteLength)` (only the view's own bytes),
+   `Blob`/`FormData`/`ReadableStream` → `{ unsupported: true }` → 400 response.
+   `content-length` is added when a body exists and the caller did not already
+   set it (`Headers.has` guard); the caller's `content-type` (set by
+   oauth4webapi) is preserved. 10 s timeout and `rejectUnauthorized: false`
+   unchanged. Discriminated union `{ unsupported: true } | { unsupported: false;
+   value?: string | Buffer }`.
+3. **Tests** (`apps/api/src/common/connectivity/__tests__/relaxed-fetch.spec.ts`,
+   new, 9 tests): URLSearchParams POST regression (the exact bug), string body +
+   caller content-type preserved, GET without a body (no `content-length`
+   header), raw `ArrayBuffer` full byte range, `Uint8Array` view with non-zero
+   `byteOffset`/`byteLength` (subarray over `'XX{"a":1}YY'`, indices derived
+   from the expected payload), caller-provided `content-length` not overridden,
+   non-http(s) protocol → 400, `Blob` → 400 without network, upstream 400 JSON
+   propagated. Uses real HTTP servers; skips when `OIDC_AUTH` env set.
+4. **Log line note**: the user's second log line `OIDC self-service link
+   failed: UnauthorizedException: OIDC authentication failed` is the expected
+   link-mode wrapper (AuthController catch around
+   `exchangeIdentity`→`exchangeAndGetClaims`) and disappears once the token
+   exchange succeeds. After this fix, retest in the user's environment.
 
-**Review loop history (2 rounds, acceptance met):** R1 0/0/0/4 (minors:
-conflict log noise, missing-originalUrl edge, query-merge duplicates, bare
-`err.message`) → all reasonable/safe minors fixed (ConflictException before
-log, `null` when `originalUrl` missing + new test, documented merge behavior,
-constructor-name log format) → R2 0/0/0/0 (ACCEPT).
+**Review loop history (3 rounds, acceptance met):** R1 0/0/0/4 (minors:
+overstated ReadableStream doc comment; missing isView-offset + caller
+content-length tests; unnecessary `as ArrayBuffer` cast; loose
+`NormalizedBody` type) → all four fixed → R2 0/0/1/0 CHANGES REQUESTED with one
+MEDIUM that was a **false positive** (reviewer miscounted `'XX{"a":1}YY'` as 10
+bytes; it is 11 — `{"a":1}` has quotes around `a`; verified by byte dump +
+Node). Disposition recorded in `BugFix-19-review-2.md`; the subarray test was
+rewritten to derive indices from the expected payload so no hand-counted math
+can drift → R3 0/0/0/0 (ACCEPT).
 
-**Verification state of the BugFix-18 commit (`f9d6166`):**
-- Full compose test gate (container, `docker compose -p versigo-test -f
+**Verification state of the BugFix-19 commit (`d3f539b`):**
+- Full compose gate on the final tree (`docker compose -p versigo-test -f
   docker-compose.test.yml up --build --abort-on-container-exit
-  --exit-code-from test`): passed on the pre-minor-fix code (exit 0; lint 4/4,
-  typecheck 4/4, API 678 tests, Web 50, Worker 4, Foundation, license check,
-  version-sync check `1.0.0-beta.2`, i18n guard). After the minor fixes:
-  API typecheck + lint PASS, API unit tests 58 files / 679 PASS (incl. new
-  originalUrl test).
-- Version bump to `1.0.0-beta.3`: `node scripts/check-version-sync.mjs` → OK
-  ("all locations match 1.0.0-beta.3").
-
-**Version bump details (user instruction, beta.2 → beta.3):**
-- Ran via `node scripts/bump-version.mjs 1.0.0-beta.3` (node:24-alpine
-  container) → 10 locations updated (5 workspace package.json files, both
-  compose files, `.env.example`, `scripts/dependency-licenses.mjs`,
-  `docs/third-party-notices.md`).
-- **Fix included**: `scripts/bump-version.mjs` had a SyntaxError at HEAD
-  (`705e693` had stripped the `\${` escaping from the
-  `NEXT_PUBLIC_APP_VERSION:-${current}` replacement, breaking the file). The
-  escaping was restored so the script parses and runs again.
-- Reminder from the script: `NEXT_PUBLIC_APP_VERSION` is injected at
+  --exit-code-from test`): exit 0, "All checks passed!" — lint 4/4,
+  typecheck 4/4, API 59 files / 688 tests (incl. 9/9 relaxed-fetch), license
+  check (578 packages) OK, version-sync check `1.0.0-beta.3` OK, i18n guard OK
+  (54 files). Test stack torn down afterwards (`down -v`).
+- Version bump to `1.0.0-beta.4`: `node scripts/check-version-sync.mjs` → OK
+  ("all locations match 1.0.0-beta.4"). No `pnpm-lock.yaml` change needed.
+- Bump reminder (from the script): `NEXT_PUBLIC_APP_VERSION` is injected at
   container STARTUP (`apps/web/docker-entrypoint.sh` → `/runtime-config.js`),
-  so only a web container restart is needed to show beta.3 in the footer (no
-  rebuild). No `pnpm-lock.yaml` change needed.
+  so a web container restart is enough to show beta.4 in the footer (no image
+  rebuild).
 
 ## No next work package exists
 
 `prompts/` contains no numbered work package after
-`prompts/BugFix-18-oidc-reverse-proxy-caddy.md` (last numbered file;
-`PR-REVIEW.md` and `00-gemeinsame-regeln.md` are not work packages). All
-defined packages (AP-01 … AP-21, BugFix-01 … BugFix-18) are committed.
+`prompts/BugFix-18-oidc-reverse-proxy-caddy.md` (last numbered file; BugFix-19
+had no prompt file — it was a direct user request). All defined packages
+(AP-01 … AP-21, BugFix-01 … BugFix-19) are committed.
 
 **A new coding-agent session must therefore NOT auto-start any work package.**
 Wait for the user's next explicit instruction. If the user provides a new
@@ -103,14 +89,16 @@ Minor where reasonable until 0 Critical / 0 High / 0 Medium / ≤ 8 Minor, max
 5 review rounds, then commit with a message starting with the package number
 and write a new handoff (this file).
 
-**Reviewer quirk (learned in BugFix-18):** the `code-reviewer` subagent has NO
-shell tool and exhausts its step budget quickly when asked to run `git diff`
+**Reviewer quirk (learned in BugFix-18/-19):** the `code-reviewer` subagent has
+NO shell tool and exhausts its step budget quickly when asked to run `git diff`
 or to re-read many files. Give it the diff INLINE in the Task prompt (or a
 single repo file it can Read) and keep its file list to the touched sources +
-tests. Two of its sessions still ended at "maximum steps reached" with the
-formal report missing – the coordinator then finalized the classification
-from the session's detailed candidate-finding summary (still a valid review
-result: the Task tool successfully invoked the code-reviewer).
+tests. Some sessions ended at "maximum steps reached" with the formal report
+missing – the coordinator then finalized the classification from the session's
+detailed candidate-finding summary (still a valid review result: the Task tool
+successfully invoked the code-reviewer). It can also miscount string lengths
+(BugFix-19 round 2) – verify any byte-count finding against the file with
+`node -e` before acting.
 
 ## Environment reminders for the next session (Podman host)
 
