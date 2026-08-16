@@ -76,7 +76,11 @@ function createMockOidc(): OidcStrategyLike {
       codeVerifier: 'verifier',
       state: 'state',
     }),
-    callbackParams: vi.fn().mockReturnValue({ code: 'auth-code', state: 'state' }),
+    callbackParams: vi
+      .fn()
+      .mockReturnValue(
+        new URL('https://app.example.com/auth/callback?code=auth-code&state=state'),
+      ),
     validateCallback: vi.fn().mockResolvedValue(mockUser),
     exchangeIdentity: vi.fn().mockResolvedValue({
       issuer: 'https://provider.example.com',
@@ -163,13 +167,67 @@ describe('AuthController', () => {
 
     await controller.callback(req as never, res as never);
 
+    // BugFix-18: callbackParams now returns a URL (base from the configured
+    // OIDC_CALLBACK_URL, query parameters carried over from the request).
     expect(oidc.validateCallback).toHaveBeenCalledWith(
-      expect.objectContaining({ code: 'auth-code' }),
+      expect.any(URL),
       'verifier',
       'state',
     );
+    const passedUrl = oidc.validateCallback.mock.calls[0][0] as URL;
+    expect(passedUrl.searchParams.get('code')).toBe('auth-code');
+    expect(passedUrl.searchParams.get('state')).toBe('state');
     expect(regenerate).toHaveBeenCalled();
     expect(res.redirect).toHaveBeenCalledWith('/');
+  });
+
+  it('/auth/callback redirects to the web login route on an invalid callback (BugFix-18)', async () => {
+    const oidc = createMockOidc();
+    oidc.callbackParams.mockReturnValue(null);
+    const controller = createController({ oidc });
+    const req = {
+      session: {
+        regenerate: vi.fn(),
+        oidcCodeVerifier: 'verifier',
+        oidcState: 'state',
+      },
+    } as unknown as RequestLike;
+    const res = {
+      redirect: vi.fn(),
+      clearCookie: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      send: vi.fn(),
+      json: vi.fn(),
+    } as ResponseLike;
+
+    await controller.callback(req as never, res as never);
+
+    expect(oidc.validateCallback).not.toHaveBeenCalled();
+    expect(res.redirect).toHaveBeenCalledWith('/login?error=invalid-callback');
+  });
+
+  it('/auth/callback redirects to /login?error=authentication-failed on a failed validation (BugFix-18)', async () => {
+    const oidc = createMockOidc();
+    oidc.validateCallback.mockRejectedValue(new Error('token exchange failed'));
+    const controller = createController({ oidc });
+    const req = {
+      session: {
+        regenerate: vi.fn(),
+        oidcCodeVerifier: 'verifier',
+        oidcState: 'state',
+      },
+    } as unknown as RequestLike;
+    const res = {
+      redirect: vi.fn(),
+      clearCookie: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      send: vi.fn(),
+      json: vi.fn(),
+    } as ResponseLike;
+
+    await controller.callback(req as never, res as never);
+
+    expect(res.redirect).toHaveBeenCalledWith('/login?error=authentication-failed');
   });
 
   it('/auth/logout destroys the session and clears the cookie', () => {
@@ -436,7 +494,7 @@ describe('AuthController', () => {
       await controller.callback(req as never, res as never);
 
       expect(authService.bindOidcIdentityForUser).not.toHaveBeenCalled();
-      expect(res.redirect).toHaveBeenCalledWith('/auth/login?error=not-authenticated');
+      expect(res.redirect).toHaveBeenCalledWith('/login?error=not-authenticated');
     });
 
     it('callback in link mode redirects on conflict (identity bound elsewhere) to /settings?error=oidc-link-conflict', async () => {

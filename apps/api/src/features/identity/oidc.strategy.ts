@@ -215,15 +215,52 @@ export class OidcStrategy implements OnModuleInit {
   }
 
   /**
-   * Builds the complete callback URL from the incoming Express request.
-   * authorizationCodeGrant expects in v6 the actually called redirect URL
-   * (incl. query parameters) instead of a parameter map. Under
-   * "trust proxy" makes req.protocol/req.get('host') return the
-   * x-forwarded-* values. Returns null when the URL is not constructible
-   * (then: invalid-callback).
+   * Builds the callback URL passed to authorizationCodeGrant (openid-client
+   * v6). BugFix-18: the token-exchange redirect_uri MUST always equal the
+   * redirect_uri from the authorization request – that is by definition
+   * OIDC_CALLBACK_URL. The base URL is therefore taken from the configured
+   * OIDC_CALLBACK_URL and only the query parameters (code, state, …) are
+   * carried over from the actual incoming request.
+   *
+   * This is robust against ANY reverse-proxy prefix stripping (Caddy
+   * `uri strip_prefix /api`, nginx, subdomain proxies, direct-IP access):
+   * the proxy-visible request path may differ from the public callback
+   * path without breaking the token exchange. Previously the URL was
+   * reconstructed from `protocol://host + originalUrl`, which under a
+   * prefix-stripping proxy produced a redirect_uri WITHOUT the `/api`
+   * prefix – the IdP then rejected the token request (redirect_uri
+   * mismatch).
+   *
+   * Without a configured OIDC_CALLBACK_URL the old reconstruction from
+   * the request is kept as a fallback. Returns null when the URL is not
+   * constructible (then: invalid-callback).
    */
   callbackParams(req: OidcCallbackRequest): URL | null {
     try {
+      const callbackUrl = this.config.get('OIDC_CALLBACK_URL');
+      if (callbackUrl) {
+        // The code/state query parameters can only come from the actual
+        // request; without originalUrl the callback URL is not constructible
+        // (consistent with the fallback path below).
+        const originalUrl = req.originalUrl;
+        if (!originalUrl) {
+          return null;
+        }
+        const url = new URL(callbackUrl);
+        const queryIndex = originalUrl.indexOf('?');
+        if (queryIndex !== -1) {
+          const incomingQuery = originalUrl.slice(queryIndex + 1);
+          if (incomingQuery) {
+            // Merge: keep any query the configured callback URL already has
+            // and append the incoming parameters. A configured callback URL
+            // should normally carry no query string of its own.
+            url.search = url.search
+              ? `${url.search}&${incomingQuery}`
+              : `?${incomingQuery}`;
+          }
+        }
+        return url;
+      }
       const host = req.get?.('host');
       if (!req.protocol || !host || !req.originalUrl) {
         return null;
@@ -306,19 +343,31 @@ export class OidcStrategy implements OnModuleInit {
         expectedState,
         pkceCodeVerifier: codeVerifier,
       });
-    } catch {
+    } catch (error) {
+      // BugFix-18: log the underlying failure for production diagnosis.
+      // NEVER log sensitive material: no code, state, code_verifier,
+      // tokens or secrets. currentUrl contains the code in its query
+      // string, so only the callback base (origin + pathname) is logged.
+      this.logger.warn(
+        `OIDC token exchange failed ` +
+          `(issuer=${this.config.get('OIDC_ISSUER_URL') ?? 'unknown'}, ` +
+          `callbackBase=${currentUrl.origin}${currentUrl.pathname}): ` +
+          `${error instanceof Error ? `${error.constructor.name}: ${error.message}` : String(error)}`,
+      );
       // Generic error: reveals neither binding nor provider details.
       throw new UnauthorizedException('OIDC authentication failed');
     }
 
     const claims = tokenSet.claims();
     if (!claims?.sub) {
+      this.logger.warn('OIDC token exchange succeeded but the token does not contain a sub claim');
       throw new UnauthorizedException('OIDC token does not contain a sub claim');
     }
     // ADR-007: no placeholder issuer ('unknown') – without iss there is no
     // binding. OIDC-spec-compliant tokens always contain iss.
     const issuer = claims.iss;
     if (!issuer) {
+      this.logger.warn('OIDC token exchange succeeded but the token does not contain an iss claim');
       throw new UnauthorizedException('OIDC token does not contain an iss claim');
     }
 

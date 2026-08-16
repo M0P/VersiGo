@@ -26,5 +26,5 @@ export {
 export type { Language, MessageParams, MessagePath, Messages, Translator } from './core';
 export { fetchLanguagePreference, saveLanguagePreference } from './language-client';
 export type { LanguagePreference, LanguagePersistence } from './language-client';
-export { localizeAuthError } from './auth-errors';
+export { localizeAuthError, oidcCallbackErrorKey } from './auth-errors';
 export { formatCurrency, formatDate, formatNumber } from './format';

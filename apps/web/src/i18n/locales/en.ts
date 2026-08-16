@@ -118,6 +118,21 @@ export const en = {
     or: 'or',
     alternativeOidc: 'Alternatively, sign in with your identity provider:',
     oidcSignIn: 'Sign in with OIDC',
+    // BugFix-18: localized messages for the `error` query parameter that the
+    // API redirects to after a failed OIDC callback (login and link flows).
+    oidcErrorAuthenticationFailed:
+      'Sign-in with the identity provider failed. Please try again.',
+    oidcErrorMissingCodeVerifier:
+      'The sign-in request could not be verified (missing flow state). Please try again.',
+    oidcErrorInvalidCallback:
+      'The sign-in callback was invalid. Please try again.',
+    oidcErrorMissingState:
+      'The sign-in request could not be verified (missing state). Please try again.',
+    oidcErrorNotConfigured:
+      'Sign-in with the identity provider is not configured.',
+    oidcErrorNotAuthenticated:
+      'Your session expired while linking. Please sign in and try again.',
+    oidcErrorSession: 'A session error occurred. Please try again.',
     registerTagline: 'Create a new account',
     registrationFailedTitle: 'Registration failed',
     registrationFailedDefault: 'Registration failed',

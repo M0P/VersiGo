@@ -139,7 +139,7 @@ setzbar; die Admin-API lehnt diese Schlüssel ab (`ForbiddenException`):
 | `APP_VERSION`, `NEXT_PUBLIC_APP_VERSION` | Infrastruktur | Laufzeit-Versionskennung (`/health`, `/ready`, Web-Footer; BugFix-11/R7) |
 | `NEXT_ALLOWED_DEV_ORIGINS` | Infrastruktur | Dev-HMR-Origins |
 | `LOCAL_AUTH_ENABLED`, `LOCAL_ADMIN_USERNAME`, `LOCAL_ADMIN_PASSWORD` | Authentifizierung | Boot-/Fail-Fast-Logik |
-| `OIDC_ENABLED`, `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_CALLBACK_URL` | Authentifizierung | Boot-/Fail-Fast-Logik, Client-Secret |
+| `OIDC_ENABLED`, `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_CALLBACK_URL` | Authentifizierung | Boot-/Fail-Fast-Logik, Client-Secret; `OIDC_CALLBACK_URL` muss hinter einem Reverse Proxy, der `/api` entfernt, die öffentliche Proxy-URL **inkl. `/api`** sein (z. B. `https://versicherung.home/api/auth/callback`) – die App leitet die Callback-URL aus dieser Einstellung ab, nicht aus dem vom Proxy sichtbaren Request-Pfad (BugFix-18) |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Speicher | Infrastruktur-Secrets |
 | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Speicher | Infrastruktur-Secrets |
 | `WORKER_HEALTH_PORT` | Worker Health | Liveness-Port (intern, nicht publiziert) |

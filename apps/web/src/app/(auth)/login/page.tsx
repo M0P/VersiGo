@@ -7,7 +7,7 @@ import { Button } from '../../../components/ui/button';
 import { Input, FormField } from '../../../components/ui/form-field';
 import { Alert } from '../../../components/ui/alert';
 import { InlineSpinner } from '../../../components/ui/loading';
-import { localizeAuthError, useI18n } from '../../../i18n';
+import { localizeAuthError, oidcCallbackErrorKey, useI18n } from '../../../i18n';
 
 type AuthConfig = {
   oidcEnabled: boolean;
@@ -64,6 +64,10 @@ export default function LoginPage(): ReactElement {
       ? '/'
       : safeRedirectPath(new URLSearchParams(window.location.search).get('redirectTo')),
   );
+  // BugFix-18: `error` query parameter set by the API when the OIDC callback
+  // failed (e.g. authentication-failed). Read after mount (window access,
+  // no SSR hydration mismatch) and rendered as a localized alert.
+  const [oidcErrorKey, setOidcErrorKey] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchConfig() {
@@ -81,6 +85,13 @@ export default function LoginPage(): ReactElement {
     }
     void fetchConfig();
   }, [apiBaseUrl]);
+
+  // BugFix-18: read the API's OIDC callback error (query parameter `error`).
+  useEffect(() => {
+    setOidcErrorKey(
+      oidcCallbackErrorKey(new URLSearchParams(window.location.search).get('error')),
+    );
+  }, []);
 
   async function handleLocalLogin(e: FormEvent) {
     e.preventDefault();
@@ -191,6 +202,12 @@ export default function LoginPage(): ReactElement {
         {error && (
           <Alert variant="danger" title={t('auth.loginErrorTitle')}>
             {error.message}
+          </Alert>
+        )}
+
+        {oidcErrorKey && (
+          <Alert variant="danger" title={t('auth.loginErrorTitle')}>
+            {t(oidcErrorKey)}
           </Alert>
         )}
 

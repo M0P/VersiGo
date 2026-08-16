@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createTranslator } from '../i18n/core';
-import { localizeAuthError } from '../i18n/auth-errors';
+import { localizeAuthError, oidcCallbackErrorKey } from '../i18n/auth-errors';
 import { formatCurrency, formatDate, formatNumber } from '../i18n/format';
 
 const tEn = createTranslator('en');
@@ -39,6 +39,41 @@ describe('localizeAuthError', () => {
     expect(localizeAuthError(tEn, 501, 'register')).not.toBe(
       localizeAuthError(tEn, 409, 'register'),
     );
+  });
+});
+
+describe('oidcCallbackErrorKey (BugFix-18)', () => {
+  it('maps every error value the API redirects with to a localized auth key', () => {
+    expect(oidcCallbackErrorKey('authentication-failed')).toBe('auth.oidcErrorAuthenticationFailed');
+    expect(oidcCallbackErrorKey('missing-code-verifier')).toBe('auth.oidcErrorMissingCodeVerifier');
+    expect(oidcCallbackErrorKey('invalid-callback')).toBe('auth.oidcErrorInvalidCallback');
+    expect(oidcCallbackErrorKey('missing-state')).toBe('auth.oidcErrorMissingState');
+    expect(oidcCallbackErrorKey('oidc-not-configured')).toBe('auth.oidcErrorNotConfigured');
+    expect(oidcCallbackErrorKey('not-authenticated')).toBe('auth.oidcErrorNotAuthenticated');
+    expect(oidcCallbackErrorKey('session')).toBe('auth.oidcErrorSession');
+  });
+
+  it('returns null for unknown values (no alert, no raw key in the UI)', () => {
+    expect(oidcCallbackErrorKey(null)).toBeNull();
+    expect(oidcCallbackErrorKey('')).toBeNull();
+    expect(oidcCallbackErrorKey('some-unknown-error')).toBeNull();
+  });
+
+  it('produces existing, non-empty, localized messages in both languages', () => {
+    const keys = [
+      'auth.oidcErrorAuthenticationFailed',
+      'auth.oidcErrorMissingCodeVerifier',
+      'auth.oidcErrorInvalidCallback',
+      'auth.oidcErrorMissingState',
+      'auth.oidcErrorNotConfigured',
+      'auth.oidcErrorNotAuthenticated',
+      'auth.oidcErrorSession',
+    ] as const;
+    for (const key of keys) {
+      expect(tEn(key).trim()).not.toBe('');
+      expect(tDe(key).trim()).not.toBe('');
+      expect(tEn(key)).not.toBe(tDe(key));
+    }
   });
 });
 

@@ -353,7 +353,7 @@ describe('OidcStrategy', () => {
   });
 
   describe('callbackParams', () => {
-    it('builds the full callback URL from the Express request', () => {
+    it('builds the full callback URL from the Express request (fallback without OIDC_CALLBACK_URL)', () => {
       const { strategy } = createStrategy();
       const url = strategy.callbackParams({
         protocol: 'https',
@@ -365,6 +365,73 @@ describe('OidcStrategy', () => {
       expect(url?.toString()).toBe(
         'https://app.example.com/auth/callback?code=abc&state=xyz',
       );
+    });
+
+    it('BugFix-18: uses the configured OIDC_CALLBACK_URL as the base and carries over the incoming query parameters', () => {
+      const { strategy, config } = createStrategy();
+      config.get.mockReturnValue('https://app.example.com/auth/callback');
+      const url = strategy.callbackParams({
+        protocol: 'https',
+        get: (name: string) => (name === 'host' ? 'proxy.example.com' : undefined),
+        originalUrl: '/auth/callback?code=abc&state=xyz',
+      });
+
+      expect(url?.toString()).toBe(
+        'https://app.example.com/auth/callback?code=abc&state=xyz',
+      );
+    });
+
+    it('BugFix-18 regression: proxy prefix-strip scenario keeps the public /api callback path', () => {
+      // Caddy rewrites GET /api/auth/callback?code=… to /auth/callback?….
+      // The reconstructed callback URL must STILL use the public URL with
+      // the /api prefix, otherwise the IdP rejects the token exchange
+      // (redirect_uri mismatch).
+      const { strategy, config } = createStrategy();
+      config.get.mockReturnValue('https://versicherung.home/api/auth/callback');
+      const url = strategy.callbackParams({
+        protocol: 'https',
+        get: (name: string) => (name === 'host' ? 'versicherung.home' : undefined),
+        originalUrl: '/auth/callback?code=abc&state=xyz',
+      });
+
+      expect(url?.toString()).toBe(
+        'https://versicherung.home/api/auth/callback?code=abc&state=xyz',
+      );
+    });
+
+    it('BugFix-18: keeps the query parameters of the callback URL when the request has none', () => {
+      const { strategy, config } = createStrategy();
+      config.get.mockReturnValue('https://app.example.com/auth/callback?flow=link');
+      const url = strategy.callbackParams({
+        protocol: 'https',
+        get: (name: string) => (name === 'host' ? 'proxy.example.com' : undefined),
+        originalUrl: '/auth/callback',
+      });
+
+      expect(url?.toString()).toBe('https://app.example.com/auth/callback?flow=link');
+    });
+
+    it('returns null for an invalid configured OIDC_CALLBACK_URL', () => {
+      const { strategy, config } = createStrategy();
+      config.get.mockReturnValue('not a url');
+      expect(
+        strategy.callbackParams({
+          protocol: 'https',
+          get: (name: string) => (name === 'host' ? 'app.example.com' : undefined),
+          originalUrl: '/auth/callback?code=abc',
+        }),
+      ).toBeNull();
+    });
+
+    it('BugFix-18: returns null when OIDC_CALLBACK_URL is set but the request has no originalUrl', () => {
+      const { strategy, config } = createStrategy();
+      config.get.mockReturnValue('https://app.example.com/auth/callback');
+      expect(
+        strategy.callbackParams({
+          protocol: 'https',
+          get: (name: string) => (name === 'host' ? 'proxy.example.com' : undefined),
+        }),
+      ).toBeNull();
     });
 
     it('returns null for a missing host (invalid callback URL)', () => {

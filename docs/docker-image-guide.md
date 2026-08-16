@@ -247,6 +247,17 @@ docker compose up --build -d
 > # OIDC_CALLBACK_URL=https://versicherung.home/api/auth/callback  (only with OIDC)
 > ```
 >
+> **OIDC behind a reverse proxy that strips `/api` (BugFix-18):** when the
+> proxy rewrites the callback path (Caddy `uri strip_prefix /api`), the API
+> never sees the `/api` prefix on the incoming request. `OIDC_CALLBACK_URL`
+> must therefore be the **public proxy URL including `/api`**
+> (e.g. `https://versicherung.home/api/auth/callback`), and the IdP client
+> must be registered with **exactly that** redirect URI. The app derives the
+> callback URL from this setting (not from the proxy-visible request path),
+> so the proxy may freely strip/rewrite path prefixes without breaking the
+> OIDC token exchange. Symptom of a mismatch: OIDC login fails with
+> `error=authentication-failed` and a `redirect_uri` mismatch in the API log.
+>
 > Caddy must be attached to the same Docker network as the `web`/`api`
 > containers. An API subdomain (`api.versicherung.home`) does **not** work:
 > the session cookies use `SameSite=Lax`, and `.home` is not on the Public
