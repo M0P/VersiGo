@@ -11,6 +11,9 @@ import {
   WorkerHealthFoundationModule,
 } from '@versigo/foundation';
 import { AiExtractionProcessor } from './ai-extraction.processor';
+import { PaperlessTagProcessor } from './paperless-tag.processor';
+import { PaperlessTagClient } from './paperless-tag.client';
+import { PAPERLESS_TAG_QUEUE } from './paperless-tag.constants';
 
 /**
  * Worker root module. Binds exclusively technical foundations.
@@ -31,7 +34,13 @@ import { AiExtractionProcessor } from './ai-extraction.processor';
     BullModule.registerQueue({
       name: 'ai-extraction',
     }),
+
+    // Paperless tag sync queue (must match the API queue name,
+    // see paperless-tag.constants.ts)
+    BullModule.registerQueue({
+      name: PAPERLESS_TAG_QUEUE,
+    }),
   ],
-  providers: [AiExtractionProcessor],
+  providers: [AiExtractionProcessor, PaperlessTagProcessor, PaperlessTagClient],
 })
 export class WorkerModule {}

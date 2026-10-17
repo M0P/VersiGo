@@ -1,0 +1,340 @@
+# AP: Tag-basierte Dokumentzuordnung mit Paperless-ngx
+
+## Ziel
+
+Erweitere die bestehende Paperless-ngx-Einbindung von Insura um eine tag-basierte Dokumentzuordnung je Versicherung.
+
+Pro Versicherung kann ein bestehender Paperless-ngx-Tag ausgewählt oder ein neuer Tag erzeugt werden. Alle in Paperless-ngx zugänglichen Dokumente mit diesem Tag werden automatisch bei der Versicherung angezeigt.
+
+Die manuelle Dokumentverlinkung bleibt bestehen. Beim manuellen Verlinken eines Paperless-Dokuments erhält dieses automatisch den konfigurierten Versicherungs-Tag in Paperless-ngx.
+
+Implementiere die Funktion vollständig einschließlich Datenmodell, Backend, Synchronisierung, Frontend, Tests und Dokumentation. Nutze die bestehende Architektur und integriere keine parallele Connector- oder Authentifizierungslösung.
+
+## Fachliche Anforderungen
+
+### Tag je Versicherung
+
+- Jede Versicherung kann genau einen Paperless-Tag zur automatischen Dokumentzuordnung hinterlegen.
+- Die Zuordnung ist optional; bestehende Versicherungen funktionieren ohne Tag unverändert.
+- Nutzer können einen vorhandenen Tag suchen und auswählen.
+- Falls kein passender Tag existiert, können berechtigte Nutzer direkt einen neuen Tag in Paperless-ngx erstellen und auswählen.
+- Ein neuer Tag darf nicht ohne bewusste Nutzeraktion angelegt werden.
+- Speichere die externe Tag-ID zusammen mit der zugehörigen Paperless-Verbindung; der Tag-Name allein ist keine stabile Referenz.
+- Wird der Tag in Paperless umbenannt, bleibt die Zuordnung anhand seiner ID erhalten.
+- Derselbe Tag darf mehreren Versicherungen zugeordnet werden. Weise in der Oberfläche darauf hin, dass dann dieselben Dokumente automatisch bei mehreren Versicherungen erscheinen können.
+
+### Automatische Dokumentanzeige
+
+- Zeige alle für die konfigurierte Verbindung zugänglichen Paperless-Dokumente mit dem zugeordneten Tag bei der Versicherung an.
+- Berücksichtige auch Dokumente, die erst später in Paperless hinzugefügt oder mit dem Tag versehen werden.
+- Verliert ein Dokument den Tag in Paperless, entfällt seine automatische Zuordnung nach erfolgreicher Synchronisierung.
+- Eine zusätzlich bestehende manuelle Verknüpfung bleibt dabei erhalten.
+- Dokumente dürfen nicht doppelt erscheinen, wenn sie gleichzeitig automatisch und manuell zugeordnet sind.
+- Die automatische Zuordnung überträgt keine Dokumentdateien nach Insura. Nutze die bestehenden Funktionen für Metadaten, Vorschau, Download und Paperless-Aufruf.
+- Die Anforderung betrifft ausschließlich Dokumente innerhalb der autorisierten Paperless-Verbindung, nicht beliebige Dokumente auf dem Server.
+
+### Manuelles Verlinken
+
+- Die bestehende manuelle Verlinkung bleibt nutzbar.
+- Ist ein Versicherungs-Tag konfiguriert, erhält das manuell verlinkte Paperless-Dokument diesen Tag automatisch.
+- Bereits vorhandene Tags am Dokument müssen unverändert erhalten bleiben.
+- Ist der Tag bereits vorhanden, wird er nicht erneut hinzugefügt.
+- Ohne konfigurierten Versicherungs-Tag funktioniert die manuelle Verlinkung wie bisher.
+- Beim nachträglichen Konfigurieren eines Tags erhalten bereits manuell verlinkte Paperless-Dokumente ebenfalls diesen Tag.
+- Andere Dokumentquellen oder lokale Uploads werden nicht verändert.
+
+## Verbindliche Zuordnungsregeln
+
+### Herkunft einer Verknüpfung
+
+Unterscheide zwei unabhängige Zuordnungsgründe:
+
+- `MANUAL`: Der Nutzer hat das Dokument ausdrücklich verlinkt.
+- `PAPERLESS_TAG`: Das Dokument trägt den konfigurierten Versicherungs-Tag.
+
+Ein Dokument kann beide Gründe gleichzeitig besitzen. Speichere dies nicht als gegenseitig ausschließendes Enum, wenn dadurch einer der Gründe verloren geht.
+
+Die sichtbare Dokumentliste ist die deduplizierte Vereinigung beider Zuordnungsgründe.
+
+### Manuelle Verknüpfung entfernen
+
+- Das Entfernen einer manuellen Verknüpfung entfernt ausschließlich den Grund `MANUAL`.
+- Der Tag wird nicht automatisch aus Paperless entfernt.
+- Trägt das Dokument weiterhin den Versicherungs-Tag, bleibt es automatisch sichtbar.
+- Erkläre dieses Verhalten im Bestätigungsdialog.
+- Das Ausblenden einzelner automatisch zugeordneter Dokumente ist nicht Bestandteil dieses AP.
+
+### Versicherungs-Tag ändern
+
+- Speichere den neu ausgewählten Tag.
+- Ermittle die automatischen Dokumentzuordnungen anhand des neuen Tags neu.
+- Entferne veraltete automatische Zuordnungsgründe erst nach einem vollständig erfolgreichen Abgleich.
+- Manuelle Verknüpfungen bleiben erhalten.
+- Ergänze den neuen Tag bei allen manuell verlinkten Paperless-Dokumenten.
+- Entferne den alten Tag nicht automatisch aus Paperless-Dokumenten.
+- Informiere den Nutzer vor dem Wechsel über diese Auswirkungen.
+
+### Versicherungs-Tag entfernen
+
+- Deaktiviere die automatische Tag-Zuordnung für diese Versicherung.
+- Entferne ausschließlich ihre automatischen Zuordnungsgründe.
+- Erhalte sämtliche manuellen Verknüpfungen.
+- Lösche weder den Tag noch Dokumente oder Tags in Paperless.
+- Bereits eingereihte Jobs dürfen den entfernten Tag anschließend nicht wieder zuweisen.
+
+### Versicherung löschen
+
+- Beachte die bestehenden Lösch- und Archivierungsregeln von Insura.
+- Lösche keine Paperless-Dokumente oder Paperless-Tags.
+- Beende bzw. invalidiere zugehörige Synchronisierungsjobs.
+
+## Technische Umsetzung
+
+### Bestandsaufnahme
+
+Prüfe vor der Implementierung:
+
+- Bestehenden Paperless-Connector und dessen API-Client.
+- Versicherungs- und Dokumentdatenmodell.
+- Haushalts-, Mandanten- und Berechtigungsmodell.
+- Bestehende Queue-, Worker- und Scheduler-Strukturen.
+- Dokumentlisten, manuelle Verlinkung, Vorschau und Download.
+- Bestehende Audit- und Fehlerbehandlung.
+
+Erweitere vorhandene Strukturen, statt dieselbe Funktionalität erneut aufzubauen.
+
+### Datenmodell
+
+Ergänze die Versicherung oder eine passende Relation um:
+
+- Referenz auf die Paperless-Verbindung.
+- Externe Paperless-Tag-ID.
+- Optional zwischengespeicherten Tag-Namen.
+- Zeitpunkt der letzten erfolgreichen Synchronisierung.
+- Synchronisierungsstatus und einen nicht sensitiven Fehlercode.
+- Eine Konfigurationsversion zur Erkennung veralteter Jobs.
+
+Ergänze Dokumentverknüpfungen um unabhängige Herkunftsinformationen.
+
+Weitere Anforderungen:
+
+- Externe Dokumente werden durch Verbindung und externe Dokument-ID identifiziert.
+- Verhindere doppelte Zuordnungen per geeigneten Unique Constraints.
+- Bestehende manuelle Verknüpfungen werden bei der Migration als manuell übernommen.
+- Erhalte alle bestehenden Dokumentdaten.
+- Erstelle eine additive Prisma-Migration.
+
+### Paperless-API
+
+Erweitere den bestehenden Client um:
+
+- Paginierte Auflistung und Suche nach Tags.
+- Anlegen eines Tags.
+- Abruf eines Tags anhand seiner ID.
+- Paginierte Dokumentabfrage gefiltert nach Tag.
+- Additives Zuweisen eines Tags an ein Dokument.
+- Prüfung des Ergebnisses einer Tag-Zuweisung.
+
+Verifiziere konkrete Endpunkte, Filterparameter und Payloads anhand des API-Schemas der unterstützten Paperless-Version.
+
+Für Tag-Erzeugung:
+
+- Schlage einen nachvollziehbaren Namen vor, beispielsweise `Insura – <Versicherungsname>`.
+- Erlaube die Bearbeitung vor dem Erstellen.
+- Prüfe vor dem Anlegen auf einen bereits vorhandenen identischen Namen.
+- Behandle parallele Erstellungsversuche ohne unkontrollierte Duplikate.
+- Verwende keine automatische Paperless-Matching-Regel, sofern der Nutzer dies nicht ausdrücklich konfiguriert.
+- Übernimm passende bestehende Rechtekonventionen des Connectors.
+- Setze nicht pauschal `owner=null` und erweitere keine Sichtbarkeitsrechte automatisch.
+
+Für Dokument-Tags:
+
+- Bevorzuge eine additive API-Operation, um vorhandene Tags und parallele Änderungen nicht zu überschreiben.
+- Falls eine Operation asynchron arbeitet, warte auf ihre erfolgreiche Verarbeitung oder prüfe das Ergebnis nach.
+- Ein erfolgreich angenommener Auftrag ist noch keine bestätigte Tag-Zuweisung.
+- Begrenze Timeouts, Parallelität und Wiederholungen.
+- Respektiere Rate Limits.
+
+### Synchronisierung
+
+Verwende die bestehende Queue-/Worker-Infrastruktur.
+
+Auslöser:
+
+- Erstmaliges Speichern eines Versicherungs-Tags.
+- Wechsel eines Tags.
+- Manuelles Verlinken eines Dokuments.
+- Manuelles Aktualisieren durch den Nutzer.
+- Regelmäßiger Hintergrundabgleich.
+
+Anforderungen:
+
+- Konfigurierbares Abgleichintervall, Standard: fünf Minuten.
+- Keine Abhängigkeit von neu einzurichtenden Paperless-Webhooks.
+- Vollständige Verarbeitung aller Ergebnisse über alle Seiten.
+- Stabile Sortierung und Deduplizierung anhand externer Dokument-IDs.
+- Idempotente Jobs und Schutz vor überlappenden Läufen derselben Versicherung.
+- Vor jeder Verarbeitung prüfen, ob Verbindung und Konfigurationsversion noch aktuell sind.
+- Bei Tag-Wechsel oder Entfernung dürfen alte Jobs keine neue Konfiguration überschreiben.
+- Entferne veraltete automatische Zuordnungen nur nach einem vollständig erfolgreichen Abgleich.
+- Bei Timeout, fehlender Seite oder API-Fehler bleiben zuletzt bekannte Zuordnungen erhalten.
+- Zeige bei Fehlern den letzten erfolgreichen Datenstand und einen verständlichen Warnhinweis.
+- Unterscheide fehlende Berechtigungen von einem tatsächlich gelöschten Tag, soweit die API dies zulässt.
+- Erzeuge nach extern gelöschten Tags keinen Ersatz ohne Nutzerbestätigung.
+
+### Konsistenz beim manuellen Verlinken
+
+Die lokale Verknüpfung und die externe Tag-Zuweisung bilden keine gemeinsame Datenbanktransaktion.
+
+Implementiere deshalb einen nachvollziehbaren Ablauf:
+
+1. Prüfe Berechtigung, Versicherung und Paperless-Dokument.
+2. Speichere die manuelle Verknüpfung dauerhaft.
+3. Erzeuge bei konfiguriertem Tag einen zuverlässigen Tagging-Auftrag.
+4. Kennzeichne die Tag-Zuweisung bis zur externen Bestätigung als ausstehend.
+5. Setze den Status nach erfolgreicher Prüfung auf erfolgreich.
+6. Zeige bei Fehlern den fehlgeschlagenen Tagging-Status und eine Wiederholungsoption.
+
+Nutze die vorhandene Outbox- oder eine gleichwertige dauerhafte Job-Erfassung, damit zwischen Datenbankänderung und Job-Erstellung keine Aufträge verloren gehen.
+
+Ein fehlgeschlagenes Tagging darf weder die manuelle Verknüpfung löschen noch als vollständig erfolgreich angezeigt werden.
+
+## Backend
+
+Implementiere nach bestehenden API-Konventionen Funktionen für:
+
+- Paperless-Tags suchen und auflisten.
+- Tag erstellen.
+- Tag einer Versicherung zuordnen, ändern oder entfernen.
+- Dokumentabgleich anfordern.
+- Synchronisierungsstatus abrufen.
+- Fehlgeschlagene Tag-Zuweisung erneut anstoßen.
+- Vereinigte Dokumentliste einschließlich Herkunft und Tagging-Status abrufen.
+
+Anforderungen:
+
+- Validierte DTOs und nachvollziehbare Fehlercodes.
+- Keine Paperless-Zugangsdaten im Browser.
+- Kein Vertrauen in vom Client übermittelte Mandanten- oder Verbindungszugehörigkeiten.
+- Alle Operationen prüfen serverseitig die vorhandenen Haushalts- und Rollenberechtigungen.
+- Verbindung, Tag und Dokument müssen zum autorisierten Kontext passen.
+- Die Tag-Zuordnung erweitert keine bestehenden Insura-Zugriffsrechte.
+- Verwende Audit-Ereignisse für Konfigurationsänderungen und manuelle Verlinkungen.
+- Logge keine Tokens oder vertraulichen Dokumentinhalte.
+
+## Frontend
+
+### Versicherungseinstellungen
+
+Ergänze einen Bereich „Paperless-ngx-Dokumentzuordnung“ mit:
+
+- Anzeige der verwendeten Verbindung.
+- Suchbarem Tag-Auswahlfeld mit serverseitiger Suche.
+- Aktion „Neuen Tag erstellen“.
+- Anzeige des ausgewählten Tags.
+- Aktionen zum Wechseln und Entfernen.
+- Anzeige des letzten erfolgreichen Abgleichs.
+- Aktion „Jetzt aktualisieren“.
+- Verständlichen Lade-, Leer- und Fehlerzuständen.
+
+### Dokumentliste
+
+- Zeige automatische und manuelle Dokumente gemeinsam ohne Duplikate.
+- Kennzeichne die Herkunft als „Automatisch über Tag“, „Manuell verlinkt“ oder beide.
+- Zeige ausstehende oder fehlgeschlagene Tag-Zuweisungen sichtbar an.
+- Erhalte bestehende Vorschau-, Download- und Paperless-Aufruf-Funktionen.
+- Automatisch zugeordnete Dokumente dürfen nicht über eine irreführende Aktion „Verknüpfung löschen“ verschwinden.
+- Erkläre, dass ihre automatische Zuordnung durch den Tag in Paperless gesteuert wird.
+- Die manuelle Verlinkung weist darauf hin, welcher Tag ergänzt wird.
+
+## Migration und Kompatibilität
+
+- Bestehende Versicherungen erhalten zunächst keinen Tag.
+- Bestehende manuelle Dokumentverknüpfungen bleiben erhalten.
+- Die Migration führt keine externen Paperless-Aufrufe aus.
+- Backfill-Tagging erfolgt erst nach bewusster Tag-Konfiguration.
+- Die Funktion benötigt keine globale Neueinrichtung der bestehenden Paperless-Verbindung.
+- Dokumentiere benötigte Lese-, Tag-Erstellungs- und Dokumentänderungsrechte.
+- Dokumentiere unterstützte Paperless-Versionen und das Abgleichintervall.
+
+## Tests
+
+### Unit-Tests
+
+- Vereinigung beider Zuordnungsgründe ohne Duplikate.
+- Erhaltung manueller Links nach Tag-Entfernung.
+- Idempotente Tag-Zuweisung.
+- Erhaltung fremder Tags.
+- Verwerfen veralteter Jobs.
+- Fehlerhafte Teilabgleiche entfernen keine bestehenden Zuordnungen.
+
+### Integrations-Tests
+
+- Vorhandenen Tag auswählen.
+- Neuen Tag erstellen und zuordnen.
+- Parallele Tag-Erstellung behandeln.
+- Mehrseitige Dokumentabfrage vollständig abgleichen.
+- Manuelles Verlinken löst Tag-Zuweisung aus.
+- Externe Tag-Zuweisung ist tatsächlich abgeschlossen.
+- Paperless-Ausfall mit später erfolgreichem Retry.
+- Tag-Wechsel und Tag-Entfernung.
+- Mehrere Versicherungen mit demselben Tag.
+- Kein Zugriff über Haushalts- oder Verbindungsgrenzen hinweg.
+- Migration erhält vorhandene manuelle Verknüpfungen.
+
+### End-to-End-Tests
+
+1. Tag bei einer Versicherung auswählen.
+2. Dokument mit diesem Tag in Paperless anlegen.
+3. Abgleich auslösen.
+4. Dokument erscheint automatisch bei der Versicherung.
+5. Weiteres Paperless-Dokument manuell verlinken.
+6. Dokument erhält den Versicherungs-Tag unter Erhaltung vorhandener Tags.
+7. Dokument bleibt genau einmal in der Liste sichtbar.
+8. Tag in Paperless vom ausschließlich automatisch zugeordneten Dokument entfernen.
+9. Nach erfolgreichem Abgleich verschwindet dieses aus der Versicherung.
+10. Ein zusätzlich manuell verlinktes Dokument bleibt trotz entfernter Tag-Zuordnung erhalten.
+
+## Akzeptanzkriterien
+
+- Pro Versicherung kann ein bestehender Paperless-Tag ausgewählt oder ein neuer erstellt werden.
+- Alle zugänglichen Dokumente mit diesem Tag erscheinen automatisch.
+- Neue und geänderte Tag-Zuordnungen werden spätestens nach einem erfolgreichen regulären Abgleich sichtbar.
+- Manuelles Aktualisieren startet einen unmittelbaren Abgleich.
+- Manuelle Verlinkung bleibt vollständig nutzbar.
+- Manuell verlinkte Paperless-Dokumente erhalten den konfigurierten Versicherungs-Tag.
+- Vorhandene Dokument-Tags bleiben erhalten.
+- Doppelte Dokumenteinträge werden verhindert.
+- Manuelle und automatische Zuordnungsgründe bleiben unabhängig.
+- Tag-Wechsel, Tag-Entfernung und externe Fehler führen nicht zum Verlust manueller Links.
+- API-Fehler und Teilabgleiche löschen keine zuletzt bekannten Zuordnungen.
+- Berechtigungen und Mandantentrennung bleiben erhalten.
+- Keine Dokumentdateien werden für diese Funktion zusätzlich kopiert.
+- Tests, Migration und Dokumentation sind enthalten.
+
+## Nicht Bestandteil
+
+- Automatische Inhaltsklassifikation.
+- Neue OCR- oder Upload-Pipelines.
+- Automatisches Löschen von Paperless-Dokumenten oder Tags.
+- Automatisches Entfernen alter Tags bei Tag-Wechsel.
+- Mehrere automatische Versicherungs-Tags pro Versicherung.
+- Individuelle Ausschlusslisten automatisch zugeordneter Dokumente.
+- Änderung der bestehenden Authentifizierung.
+
+## Abschlusslieferung
+
+Liefere:
+
+1. Implementierung in den vorhandenen Projektstrukturen.
+2. Additive Prisma-Migration.
+3. Backend- und Frontend-Anpassungen.
+4. Idempotente Queue-Jobs einschließlich Retry- und Fehlerbehandlung.
+5. Automatisierte Tests.
+6. Aktualisierte Konfigurations- und Nutzerdokumentation.
+7. Liste geänderter Dateien und kurze technische Begründungen.
+8. Tatsächlich ausgeführte Prüfungen mit Ergebnissen.
+9. Offen gebliebene Einschränkungen, klar von abgeschlossenen Arbeiten getrennt.
+
+Behaupte keine erfolgreichen Tests oder externen Paperless-Aufrufe, wenn sie nicht tatsächlich ausgeführt wurden.
+

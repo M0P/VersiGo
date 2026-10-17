@@ -3,6 +3,9 @@ import { HttpModule } from '@nestjs/axios';
 import { SettingsFoundationModule } from '@versigo/foundation';
 import { PaperlessNgxService } from './paperless-ngx.service';
 import { PaperlessController } from './paperless-ngx.controller';
+import { PaperlessTagController } from './paperless-tag.controller';
+import { PaperlessTagService } from './paperless-tag.service';
+import { PaperlessTagQueue } from './paperless-tag.queue';
 import { PAPERLESS_ADAPTER } from './paperless-ngx.interface';
 
 /**
@@ -24,10 +27,10 @@ const adapterProvider = {
 };
 
 @Module({
-  imports: [HttpModule, SettingsFoundationModule],
-  controllers: [PaperlessController],
-  providers: [PaperlessNgxService, adapterProvider],
-  exports: [PAPERLESS_ADAPTER],
+  imports: [HttpModule, SettingsFoundationModule, PaperlessTagQueue],
+  controllers: [PaperlessController, PaperlessTagController],
+  providers: [PaperlessNgxService, PaperlessTagService, adapterProvider],
+  exports: [PAPERLESS_ADAPTER, PaperlessTagService],
 })
 export class PaperlessNgxModule {}
 

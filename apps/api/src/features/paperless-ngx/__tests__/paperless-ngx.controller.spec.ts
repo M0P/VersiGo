@@ -12,6 +12,12 @@ describe('PaperlessController', () => {
       syncDocument: vi.fn(),
       searchDocuments: vi.fn(),
       healthCheck: vi.fn(),
+      // AP-22: tag-based assignment (not exercised by this controller spec).
+      searchTags: vi.fn(),
+      getTag: vi.fn(),
+      createTag: vi.fn(),
+      listDocumentsByTag: vi.fn(),
+      assignTagToDocument: vi.fn(),
     };
   }
 

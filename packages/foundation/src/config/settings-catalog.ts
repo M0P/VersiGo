@@ -217,6 +217,22 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     connectivityTestable: true,
     permission: 'ADMIN',
   },
+  {
+    key: 'PAPERLESS_TAG_SYNC_INTERVAL_MS',
+    envVar: 'PAPERLESS_TAG_SYNC_INTERVAL_MS',
+    category: 'runtime',
+    type: 'number',
+    group: 'Paperless-ngx',
+    description:
+      'Intervall des regelmaessigen Hintergrundabgleichs fuer die tag-basierte ' +
+      'Dokumentzuordnung in Millisekunden. Wird bei jedem Abgleich-Tick neu gelesen.',
+    defaultValue: 300_000,
+    min: 30_000,
+    max: 86_400_000,
+    validationHint: 'Zwischen 30.000 ms (30 s) und 86.400.000 ms (24 h).',
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
 
   // ====================== Authentifizierung ======================
   {

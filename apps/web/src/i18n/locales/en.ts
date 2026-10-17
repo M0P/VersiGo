@@ -262,6 +262,8 @@ export const en = {
     paperlessConnectTitle: 'Link Paperless documents',
     paperlessConnectBody:
       'Search Paperless-ngx and link documents to this policy.',
+    paperlessLinkAddsTag:
+      'The linked document will additionally receive the tag “{tag}” in Paperless-ngx.',
     paperlessSearchPlaceholder: 'Search Paperless...',
     paperlessSearchHint: 'Type at least 2 characters to search.',
     paperlessNoResults: 'No matching documents found.',
@@ -273,6 +275,69 @@ export const en = {
     paperlessAlreadyLinked: 'Already linked',
     paperlessOpenInPaperless: 'Open in Paperless',
     paperlessLinkedDocument: 'Paperless document',
+    // AP-22: tag-based document assignment
+    paperlessTagTitle: 'Paperless-ngx document assignment',
+    paperlessTagBody:
+      'All Paperless documents with the tag selected here appear automatically for this policy.',
+    paperlessTagConnection: 'Connection in use',
+    paperlessTagConnectionUnknown: 'Default connection',
+    paperlessTagConnectionChanged:
+      'The Paperless connection has changed. The existing assignment belongs to a different server; it is not moved automatically. Please review the connection and re-assign the tag.',
+    paperlessTagSearchLabel: 'Search tag',
+    paperlessTagSearchPlaceholder: 'Search an existing tag...',
+    paperlessTagSearchHint: 'Type at least 2 characters. The search runs server-side in Paperless.',
+    paperlessTagNoResults: 'No matching tag found.',
+    paperlessTagSearchError: 'The tag search is currently unavailable.',
+    paperlessTagCreate: 'Create new tag',
+    paperlessTagCreateName: 'Name of the new tag',
+    paperlessTagCreateHint:
+      'The tag is created in Paperless-ngx. A tag is only created after an explicit confirmation.',
+    paperlessTagCreateButton: 'Create tag and assign',
+    paperlessTagCreating: 'Creating tag...',
+    paperlessTagSelected: 'Assigned tag',
+    paperlessTagId: 'External tag ID',
+    paperlessTagChange: 'Change tag',
+    paperlessTagRemove: 'Remove assignment',
+    paperlessTagRemoveConfirm:
+      'Disable the automatic assignment for this policy? Manually linked documents are preserved. The tag and the documents in Paperless-ngx are not deleted.',
+    paperlessTagChangeWarning:
+      'On change, the automatic assignments are recomputed from the new tag. The old tag is not removed in Paperless-ngx. Manual links are preserved and additionally receive the new tag.',
+    paperlessTagSharedWarning:
+      'Note: the same tag can be assigned to multiple policies. The same documents then appear automatically for several policies.',
+    paperlessTagLastSync: 'Last successful sync',
+    paperlessTagNeverSynced: 'Not synchronized yet',
+    paperlessTagRefresh: 'Refresh now',
+    paperlessTagRefreshing: 'Refreshing...',
+    paperlessTagLoadError: 'The Paperless assignment could not be loaded.',
+    paperlessTagSaveError: 'The Paperless assignment could not be saved.',
+    paperlessTagSyncQueued: 'The synchronization has been started.',
+    paperlessTagStatusPENDING: 'Synchronization pending',
+    paperlessTagStatusACTIVE: 'Active',
+    paperlessTagStatusERROR: 'Error during the last sync',
+    paperlessTagErrorTAG_DELETED: 'The tag no longer exists in Paperless-ngx.',
+    paperlessTagErrorAUTH_FAILED: 'Paperless-ngx denied access (check the permissions).',
+    paperlessTagErrorNOT_CONFIGURED: 'Paperless-ngx is not configured.',
+    paperlessTagErrorUNREACHABLE: 'Paperless-ngx is currently unreachable.',
+    paperlessTagErrorSYNC_FAILED: 'The synchronization could not be completed.',
+    paperlessTagErrorCONNECTION_CHANGED:
+      'The Paperless connection has changed. Please select the tag again.',
+    paperlessTagErrorUnknown: 'Unknown synchronization error.',
+    paperlessTagPendingBadge: 'Tag assignment pending',
+    paperlessTagFailedBadge: 'Tag assignment failed',
+    paperlessTagFailedHint:
+      'The document stays manually linked. The tag assignment can be retried.',
+    paperlessTagRetry: 'Retry tag assignment',
+    paperlessOriginAuto: 'Automatic via tag',
+    paperlessOriginManual: 'Manually linked',
+    paperlessOriginBoth: 'Automatic via tag and manually linked',
+    paperlessAutoManagedHint:
+      'The automatic assignment is controlled by the tag in Paperless-ngx and cannot be removed individually here.',
+    paperlessDeleteAutoConfirm:
+      'This document is assigned automatically via the Paperless tag. It will reappear as long as it carries the tag. Manual links are preserved. Continue?',
+    paperlessDeleteManualConfirm:
+      'Remove the manual link? If the document still carries the policy tag it stays visible automatically. The tag is not removed from Paperless-ngx.',
+    paperlessDeleteBothConfirm:
+      'This document is assigned automatically via the tag and linked manually. Only the manual link is removed; the automatic assignment via the tag remains. The tag is not removed from Paperless-ngx. Continue?',
     // Portal links
     addPortalLink: 'Add portal link',
     providerKey: 'Provider',

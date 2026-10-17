@@ -309,6 +309,8 @@ model InsurancePolicy {
   portalLinks        PortalAccountLink[]
   aiExtractionJobs   AiExtractionJob[]
   aiCoverageSummaries AiCoverageSummary[]
+  paperlessTag       PolicyPaperlessTag?
+  paperlessTagJobs   PaperlessTagJob[]
 
   @@index([householdId])
   @@index([ownerUserId])
@@ -396,12 +398,95 @@ model PolicyDocument {
   aiProcessingExcluded Boolean     @default(false)
   archivedAt           DateTime?
 
+  // AP-22: unabhaengige Herkunftsinformationen einer Dokumentzuordnung.
+  // Beide Quellen koennen gleichzeitig vorliegen (z.B. manuell verlinktes
+  // Dokument, das zusaetzlich den Versicherungs-Tag traegt) – deshalb zwei
+  // unabhaengige Booleans statt eines exklusiven Enums. INTERNAL-Uploads
+  // haben beide Felder auf false.
+  linkOriginManual  Boolean @default(false)
+  linkOriginTag     Boolean @default(false)
+
+  // AP-22: Status der externen Tag-Zuweisung fuer manuell verlinkte
+  // Paperless-Dokumente (outbox-Konsistenz: lokal verlinkt, extern noch
+  // nicht bestaetigt). NULL = keine Tag-Zuweisung ausstehend/erforderlich.
+  taggingStatus    PaperlessTaggingStatus?
+  taggingErrorCode String?
+
   policy      InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
   createdBy   User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([policyId])
   @@index([policyId, checksum])
   @@map("policy_documents")
+}
+
+// AP-22: Zuordnung eines Paperless-Versicherungs-Tags zu einer Versicherung.
+// Der externe Tag wird ueber seine ID referenziert (stabil bei Umbenennung);
+// der Name ist nur ein Anzeige-Cache. configVersion schuetzt vor veralteten
+// Queue-Jobs: Jeder Job fuehrt die zum Zeitpunkt der Einreichung geltende
+// Version mit und wird vor der Verarbeitung gegen den aktuellen Stand
+// geprueft. syncErrorCode ist bewusst nicht sensitiv (kein Token/Inhalt).
+model PolicyPaperlessTag {
+  id               String   @id @default(uuid())
+  policyId         String   @unique
+  // AP-22: Referenz auf die zum Konfigurationszeitpunkt verwendete
+  // Paperless-Verbindung (effektive PAPERLESS_URL, ohne Zugangsdaten).
+  // Zeigt der Admin spaeter auf einen anderen Paperless-Server, werden
+  // Jobs als veraltet erkannt und die Zuordnung wird nicht stillschweigend
+  // auf einen fremden Server uebertragen.
+  connectionRef    String?
+  paperlessTagId   Int
+  paperlessTagName String?
+  configVersion    Int      @default(1)
+  lastSyncedAt     DateTime?
+  syncStatus       SyncStatus @default(PENDING)
+  syncErrorCode    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([paperlessTagId])
+  @@map("policy_paperless_tags")
+}
+
+// AP-22: Dauerhafte Job-Erfassung (Outbox-Aequivalent) fuer Paperless-
+// Tagging-Auftraege. Die Zeile wird IN DERSELBEN Transaktion wie die
+// Datenbank-Aenderung angelegt und anschliessend in BullMQ eingereiht –
+// zwischen DB-Aenderung und Job-Erstellung geht kein Auftrag verloren.
+// Ein fehlgeschlagener Enqueue bleibt PENDING und wird erneut angestossen.
+model PaperlessTagJob {
+  id            String   @id @default(uuid())
+  policyId      String
+  documentId    String?
+  kind          PaperlessTagJobKind
+  status        AiJobStatus @default(PENDING)
+  configVersion Int
+  retryCount    Int      @default(0)
+  maxRetries    Int      @default(3)
+  errorCode     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  completedAt   DateTime?
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId, status])
+  @@index([status])
+  @@map("paperless_tag_jobs")
+}
+
+enum PaperlessTagJobKind {
+  SYNC_POLICY
+  TAG_DOCUMENT
+}
+
+// AP-22: Ergebnis der externen Tag-Zuweisung an ein manuell verlinktes
+// Dokument. PENDING = lokal verlinkt, extern noch nicht bestaetigt.
+enum PaperlessTaggingStatus {
+  PENDING
+  APPLIED
+  FAILED
 }
 
 // BugFix-07 (Code-Review): Race-feste Deduplizierung von Paperless-Links.

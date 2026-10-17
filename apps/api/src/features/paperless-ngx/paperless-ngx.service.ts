@@ -8,6 +8,11 @@ import type {
   PaperlessDocumentMetadata,
   PaperlessSyncResult,
   PaperlessSearchResult,
+  PaperlessTagAssignmentResult,
+  PaperlessTagDocumentRef,
+  PaperlessTagLookupResult,
+  PaperlessTagPage,
+  PaperlessTagSummary,
 } from './paperless-ngx.interface';
 import { optionalRelaxedHttpsAgent } from '../../common/connectivity/tls-agent';
 
@@ -425,5 +430,288 @@ export class PaperlessNgxService implements IPaperlessAdapter {
     } catch {
       return false;
     }
+  }
+
+  // --- AP-22: tag-based document assignment -------------------------------
+
+  /**
+   * Low-level request helper for the AP-22 tag endpoints. Unlike `get` it
+   * exposes the HTTP status code so callers can distinguish 404 from
+   * 401/403. Returns null when Paperless is disabled/unconfigured or the
+   * request failed (network, timeout, 5xx).
+   */
+  private async requestRaw(
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+    path: string,
+    body?: unknown,
+  ): Promise<{ status: number; data: unknown } | null> {
+    const { enabled, baseUrl, apiToken } = await this.runtimeConfig();
+    if (!enabled || baseUrl.length === 0 || apiToken.length === 0) return null;
+
+    const dialect = await this.resolveDialect(baseUrl, apiToken);
+
+    try {
+      const url = `${baseUrl}${PAPERLESS_API_BASE}${path}`;
+      const config = {
+        headers: {
+          ...this.createHeaders(apiToken, dialect),
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        },
+        timeout: 10_000,
+        ...(await this.tlsRelaxation()),
+      };
+      const observable =
+        method === 'GET'
+          ? this.httpService.get(url, config)
+          : this.httpService.request({
+              url,
+              method,
+              data: body,
+              ...config,
+            });
+      const { status, data } = await firstValueFrom(observable);
+      return { status, data };
+    } catch (err) {
+      if (err instanceof AxiosError && err.response) {
+        // Non-2xx with a server response: surface the status to the caller.
+        return { status: err.response.status, data: err.response.data };
+      }
+      this.logError(method, path, err);
+      return null;
+    }
+  }
+
+  private static isTagPage(data: unknown): data is {
+    results: Array<{ id: number; name: string }>;
+    next: string | null;
+    previous: string | null;
+    count: number;
+  } {
+    return PaperlessNgxService.hasResultsArray(data);
+  }
+
+  /**
+   * Separate guard for *document* pages: `fields=id,title` deliberately
+   * omits the tag name, so the tag-page result type does not apply.
+   */
+  private static isDocumentPage(data: unknown): data is {
+    results: Array<{ id: number; title?: string | null }>;
+    next: string | null;
+    previous: string | null;
+    count: number;
+  } {
+    return PaperlessNgxService.hasResultsArray(data);
+  }
+
+  private static hasResultsArray(data: unknown): data is {
+    results: Array<{ id: number }>;
+    next: string | null;
+    previous: string | null;
+    count: number;
+  } {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      Array.isArray((data as { results?: unknown }).results)
+    );
+  }
+
+  async searchTags(query: string, page: number, pageSize: number): Promise<PaperlessTagPage> {
+    const empty: PaperlessTagPage = { items: [], page: 1, pageCount: 0 };
+    const safePage = Math.max(1, Math.floor(page) || 1);
+    const safeSize = Math.min(100, Math.max(1, Math.floor(pageSize) || 20));
+
+    const term = query.trim();
+    // `name__icontains` is supported by both API dialects (v2 and legacy);
+    // results are additionally filtered client-side so a server that
+    // ignores the filter cannot return unrelated tags.
+    const nameFilter = term ? `&name__icontains=${encodeURIComponent(term)}` : '';
+    const res = await this.requestRaw(
+      'GET',
+      `/tags/?page=${safePage}&page_size=${safeSize}&ordering=name${nameFilter}`,
+    );
+    if (!res || res.status !== 200 || !PaperlessNgxService.isTagPage(res.data)) {
+      return empty;
+    }
+
+    const lowerTerm = term.toLowerCase();
+    const items = res.data.results
+      .filter((t) => !term || t.name.toLowerCase().includes(lowerTerm))
+      .map((t) => ({ tagId: t.id, name: t.name }));
+    const pageCount =
+      res.data.count > 0 ? Math.ceil(res.data.count / safeSize) : res.data.next ? safePage + 1 : safePage;
+
+    return { items, page: safePage, pageCount };
+  }
+
+  async getTag(tagId: number): Promise<PaperlessTagLookupResult> {
+    if (!(await this.isConfigured())) {
+      return { ok: false, error: { kind: 'NOT_CONFIGURED' } };
+    }
+
+    const res = await this.requestRaw('GET', `/tags/${tagId}/`);
+    if (!res) return { ok: false, error: { kind: 'UNREACHABLE' } };
+    if (res.status === 404) return { ok: false, error: { kind: 'NOT_FOUND' } };
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, error: { kind: 'AUTH_FAILED' } };
+    }
+    const data = res.data as { id?: number; name?: string } | null;
+    if (res.status !== 200 || !data || typeof data.id !== 'number' || typeof data.name !== 'string') {
+      return { ok: false, error: { kind: 'UNREACHABLE' } };
+    }
+    return { ok: true, tag: { tagId: data.id, name: data.name } };
+  }
+
+  async createTag(name: string): Promise<PaperlessTagSummary | null> {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) return null;
+
+    // Pre-check for an identical name (exact match, case-sensitive like
+    // Paperless itself) to avoid needless duplicates.
+    const existing = await this.findTagByExactName(trimmed);
+    if (existing) return existing;
+
+    const res = await this.requestRaw('POST', '/tags/', { name: trimmed });
+    if (res && res.status === 201) {
+      const data = res.data as { id?: number; name?: string } | null;
+      if (data && typeof data.id === 'number' && typeof data.name === 'string') {
+        return { tagId: data.id, name: data.name };
+      }
+    }
+
+    // Parallel creation race or server-side uniqueness: another request
+    // may have created the tag in the meantime – resolve idempotently.
+    if (res && (res.status === 400 || res.status === 409)) {
+      const raced = await this.findTagByExactName(trimmed);
+      if (raced) return raced;
+    }
+    return null;
+  }
+
+  private async findTagByExactName(name: string): Promise<PaperlessTagSummary | null> {
+    const res = await this.requestRaw(
+      'GET',
+      `/tags/?page=1&page_size=100&ordering=name&name__icontains=${encodeURIComponent(name)}`,
+    );
+    if (!res || res.status !== 200 || !PaperlessNgxService.isTagPage(res.data)) return null;
+    const exact = res.data.results.find((t) => t.name === name);
+    return exact ? { tagId: exact.id, name: exact.name } : null;
+  }
+
+  /** Upper bound of pages walked per sync (defense against runaway APIs). */
+  private static readonly MAX_TAG_SYNC_PAGES = 50;
+  private static readonly TAG_SYNC_PAGE_SIZE = 100;
+
+  async listDocumentsByTag(tagId: number): Promise<PaperlessTagDocumentRef[] | null> {
+    if (!(await this.isConfigured())) return null;
+
+    const all: PaperlessTagDocumentRef[] = [];
+    // Stable ordering by ID so pagination is deterministic across pages.
+    for (let pageNo = 1; pageNo <= PaperlessNgxService.MAX_TAG_SYNC_PAGES; pageNo++) {
+      const res = await this.requestRaw(
+        'GET',
+        `/documents/?page=${pageNo}&page_size=${PaperlessNgxService.TAG_SYNC_PAGE_SIZE}` +
+          `&ordering=id&fields=id,title&tags__id=${tagId}`,
+      );
+      if (!res || res.status !== 200 || !PaperlessNgxService.isDocumentPage(res.data)) {
+        // Any failed page invalidates the whole result – the caller keeps
+        // the previous assignments (no partial sync).
+        return null;
+      }
+      for (const doc of res.data.results) {
+        all.push({
+          paperlessId: doc.id,
+          title: typeof doc.title === 'string' ? doc.title : null,
+        });
+      }
+      if (!res.data.next) {
+        // Deduplicate by external document ID (stable sort + belt and braces).
+        const seen = new Set<number>();
+        return all.filter((d) => (seen.has(d.paperlessId) ? false : (seen.add(d.paperlessId), true)));
+      }
+    }
+    // Page cap reached with more results pending: treat as failure so the
+    // caller does not remove assignments that were simply not fetched.
+    this.logger.warn(
+      `Paperless tag ${tagId}: result set exceeds ${PaperlessNgxService.MAX_TAG_SYNC_PAGES} pages - sync aborted`,
+    );
+    return null;
+  }
+
+  async assignTagToDocument(
+    paperlessDocumentId: number,
+    tagId: number,
+  ): Promise<PaperlessTagAssignmentResult> {
+    if (!(await this.isConfigured())) {
+      return { success: false, verified: false, errorCode: 'NOT_CONFIGURED' };
+    }
+
+    // Idempotent short-circuit: tag already present -> nothing to do.
+    const before = await this.requestRaw('GET', `/documents/${paperlessDocumentId}/`);
+    if (before && before.status === 404) {
+      // Precise code shared with the worker client: the *document* is gone
+      // (as opposed to `NOT_FOUND`, which a tag lookup uses for a deleted tag).
+      return { success: false, verified: false, errorCode: 'DOCUMENT_NOT_FOUND' };
+    }
+    if (before && (before.status === 401 || before.status === 403)) {
+      return { success: false, verified: false, errorCode: 'AUTH_FAILED' };
+    }
+    const beforeTags: unknown = (before?.data as { tags?: unknown } | null)?.tags;
+    if (Array.isArray(beforeTags) && beforeTags.some((t) => t === tagId)) {
+      return { success: true, verified: true };
+    }
+
+    // Preferred: additive bulk-edit operation ("modify_tags" with
+    // added_tags) – it never overwrites concurrently changed tag lists.
+    const bulk = await this.requestRaw('POST', '/bulk_edit/', {
+      documents: [paperlessDocumentId],
+      method: 'modify_tags',
+      parameters: { added_tags: [tagId] },
+    });
+
+    let assigned = bulk !== null && bulk.status === 200;
+
+    if (!assigned && bulk !== null && (bulk.status === 404 || bulk.status === 405)) {
+      // Fallback for servers without the bulk-edit endpoint: read-merge-write.
+      // Existing tags are preserved; the read happens immediately before the
+      // write to keep the race window minimal. Verification below remains
+      // the source of truth.
+      if (before && Array.isArray(beforeTags)) {
+        const merged = Array.from(new Set([...beforeTags.map((t) => Number(t)), tagId]));
+        const patch = await this.requestRaw('PATCH', `/documents/${paperlessDocumentId}/`, {
+          tags: merged,
+        });
+        assigned = patch !== null && patch.status === 200;
+      }
+    }
+
+    if (!assigned) {
+      const errorCode =
+        bulk === null
+          ? 'UNREACHABLE'
+          : bulk.status === 401 || bulk.status === 403
+            ? 'AUTH_FAILED'
+            : bulk.status === 404
+              ? 'DOCUMENT_NOT_FOUND'
+              : 'API_ERROR';
+      return { success: false, verified: false, errorCode };
+    }
+
+    // A merely accepted assignment (or async bulk-edit task) is NOT a
+    // confirmed tag: verify by re-reading the document (short retry loop
+    // for asynchronously processed bulk edits).
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const after = await this.requestRaw('GET', `/documents/${paperlessDocumentId}/`);
+      if (after && after.status === 200) {
+        const afterTags: unknown = (after.data as { tags?: unknown }).tags;
+        if (Array.isArray(afterTags) && afterTags.some((t) => t === tagId)) {
+          return { success: true, verified: true };
+        }
+      } else if (after === null) {
+        break; // unreachable – no point retrying immediately
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+    return { success: false, verified: false, errorCode: 'VERIFY_FAILED' };
   }
 }
