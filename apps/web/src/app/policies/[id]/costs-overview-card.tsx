@@ -9,6 +9,7 @@ import { Input, Select, FormField } from '@/components/ui/form-field';
 import { useI18n, formatCurrency, formatDate } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import { parseCostAmounts } from '@/lib/cost-amounts';
 
 const API_BASE = getApiBaseUrl();
 
@@ -50,7 +51,8 @@ type CostEntry = {
   policyId: string;
   validFrom: string;
   validTo: string | null;
-  grossAmount: number;
+  /** BugFix-22: gross is optional – a net-only entry is valid. */
+  grossAmount: number | null;
   netAmount: number | null;
   frequency: string;
   bookingSource: string | null;
@@ -71,11 +73,21 @@ function toEditForm(entry: CostEntry): EditForm {
   return {
     validFrom: entry.validFrom.slice(0, 10),
     validTo: entry.validTo ? entry.validTo.slice(0, 10) : '',
-    grossAmount: String(Number(entry.grossAmount)),
+    grossAmount: entry.grossAmount != null ? String(Number(entry.grossAmount)) : '',
     netAmount: entry.netAmount != null ? String(Number(entry.netAmount)) : '',
     frequency: entry.frequency,
     note: entry.note ?? '',
   };
+}
+
+/**
+ * BugFix-22: message key of a rejected amount input. The rule itself lives in
+ * `parseCostAmounts` (and in the API service) – here it is only translated.
+ */
+function amountErrorKey(reason: 'missing' | 'invalid' | 'negative'): string {
+  if (reason === 'missing') return 'costs.amountRequired';
+  if (reason === 'negative') return 'costs.amountNegative';
+  return 'costs.amountInvalid';
 }
 
 /**
@@ -102,6 +114,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
   const [newEntry, setNewEntry] = useState({
     validFrom: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '',
   });
+  // BugFix-22: "gross OR net is enough" – the field error of the amount inputs.
+  const [newAmountError, setNewAmountError] = useState<string | null>(null);
+  const [editAmountError, setEditAmountError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   // BugFix-05 (finding 8): seq token – no setState after await on stale
@@ -152,15 +167,24 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
 
   function handleCreate(e: FormEvent) {
     e.preventDefault();
+    // BugFix-22: the gross amount is no longer mandatory – one of gross/net
+    // is enough. The rule is validated before the request so the user gets
+    // the message at the field instead of a generic server error.
+    const amounts = parseCostAmounts(newEntry.grossAmount, newEntry.netAmount);
+    if (!amounts.ok) {
+      setNewAmountError(t(amountErrorKey(amounts.reason)));
+      return;
+    }
+    setNewAmountError(null);
     const seq = ++requestSeq.current;
     setSubmitting(true);
     setActionError(null);
     const body: Record<string, unknown> = {
       validFrom: newEntry.validFrom,
-      grossAmount: parseFloat(newEntry.grossAmount),
       frequency: newEntry.frequency,
     };
-    if (newEntry.netAmount !== '') body.netAmount = parseFloat(newEntry.netAmount);
+    if (amounts.grossAmount !== undefined) body.grossAmount = amounts.grossAmount;
+    if (amounts.netAmount !== undefined) body.netAmount = amounts.netAmount;
     if (newEntry.note) body.note = newEntry.note;
 
     fetch(`${API_BASE}/households/default/policies/${policyId}/costs`, {
@@ -177,6 +201,7 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
       .then(() => {
         if (seq !== requestSeq.current) return;
         setNewEntry({ validFrom: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '' });
+        setNewAmountError(null);
         reload();
       })
       .catch(() => {
@@ -190,6 +215,7 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
 
   const handleEdit = (entry: CostEntry) => {
     setActionError(null);
+    setEditAmountError(null);
     setEditingId(entry.id);
     setEditingOriginal(entry);
     setEditForm(toEditForm(entry));
@@ -199,25 +225,36 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
     setEditingId(null);
     setEditingOriginal(null);
     setActionError(null);
+    setEditAmountError(null);
   };
 
   function handleUpdate() {
     if (!editingId || !editingOriginal) return;
+    // BugFix-22: the same rule as on create – at least one of gross/net must
+    // remain, and both may be empty as long as the other one is filled in.
+    const amounts = parseCostAmounts(editForm.grossAmount, editForm.netAmount);
+    if (!amounts.ok) {
+      setEditAmountError(t(amountErrorKey(amounts.reason)));
+      return;
+    }
+    setEditAmountError(null);
     const seq = ++requestSeq.current;
     setSubmitting(true);
     setActionError(null);
     // Only send fields that actually changed (BugFix-08 review 1):
-    //  - validTo / netAmount / note can thereby be cleared again (null),
+    //  - validTo / grossAmount / netAmount / note can thereby be cleared again
+    //    (null),
     //  - unchanged timestamps stay exactly preserved (no midnight shift).
     const body: Record<string, unknown> = {};
     if (editForm.validFrom !== editingOriginal.validFrom.slice(0, 10)) body.validFrom = editForm.validFrom;
     const originalValidTo = editingOriginal.validTo ? editingOriginal.validTo.slice(0, 10) : '';
     if (editForm.validTo !== originalValidTo) body.validTo = editForm.validTo === '' ? null : editForm.validTo;
-    if (editForm.grossAmount !== String(Number(editingOriginal.grossAmount))) {
-      body.grossAmount = parseFloat(editForm.grossAmount);
+    const originalGrossAmount = editingOriginal.grossAmount != null ? String(Number(editingOriginal.grossAmount)) : '';
+    if (editForm.grossAmount !== originalGrossAmount) {
+      body.grossAmount = amounts.grossAmount === undefined ? null : amounts.grossAmount;
     }
     const originalNetAmount = editingOriginal.netAmount != null ? String(Number(editingOriginal.netAmount)) : '';
-    if (editForm.netAmount !== originalNetAmount) body.netAmount = editForm.netAmount === '' ? null : parseFloat(editForm.netAmount);
+    if (editForm.netAmount !== originalNetAmount) body.netAmount = amounts.netAmount === undefined ? null : amounts.netAmount;
     if (editForm.note !== (editingOriginal.note ?? '')) body.note = editForm.note === '' ? null : editForm.note;
     // BugFix-08: only send the frequency when it changed – thus
     // legacy entries (SEMI_ANNUAL) stay editable without a frequency
@@ -397,10 +434,13 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
                         <Input type="date" value={editForm.validTo} onChange={(ev) => setEditForm({ ...editForm, validTo: ev.target.value })} />
                       </td>
                       <td data-label={t('costs.gross')}>
-                        <Input type="number" step="0.01" value={editForm.grossAmount} onChange={(ev) => setEditForm({ ...editForm, grossAmount: ev.target.value })} />
+                        {/* BugFix-22: gross is optional – an empty gross
+                            amount is allowed while net is filled in (the
+                            "at least one" rule is checked on save). */}
+                        <Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={(ev) => { setEditAmountError(null); setEditForm({ ...editForm, grossAmount: ev.target.value }); }} />
                       </td>
                       <td data-label={t('costs.net')}>
-                        <Input type="number" step="0.01" value={editForm.netAmount} onChange={(ev) => setEditForm({ ...editForm, netAmount: ev.target.value })} />
+                        <Input type="number" step="0.01" min="0" value={editForm.netAmount} onChange={(ev) => { setEditAmountError(null); setEditForm({ ...editForm, netAmount: ev.target.value }); }} />
                       </td>
                       <td data-label={t('costs.frequency')}>
                         <Select value={editForm.frequency} onChange={(ev) => setEditForm({ ...editForm, frequency: ev.target.value })}>
@@ -427,7 +467,7 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
                     <tr key={e.id}>
                       <td data-label={t('costs.validFrom')}>{formatDate(e.validFrom, language)}</td>
                       <td data-label={t('costs.validTo')}>{e.validTo ? formatDate(e.validTo, language) : '-'}</td>
-                      <td data-label={t('costs.gross')}>{formatCurrency(Number(e.grossAmount), language)}</td>
+                      <td data-label={t('costs.gross')}>{e.grossAmount != null ? formatCurrency(Number(e.grossAmount), language) : '-'}</td>
                       <td data-label={t('costs.net')}>{e.netAmount != null ? formatCurrency(Number(e.netAmount), language) : '-'}</td>
                       <td data-label={t('costs.frequency')}>{t(`costs.frequencies.${e.frequency}`) ?? e.frequency}</td>
                       <td data-label={t('costs.note')}>{e.note ?? '-'}</td>
@@ -446,6 +486,13 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
             </table>
           </div>
         )}
+        {/* BugFix-22: message of the "at least one of gross/net" rule while
+            editing an entry. */}
+        {editAmountError && (
+          <div style={{ marginTop: 'var(--versigo-space-3)' }}>
+            <Alert variant="danger">{editAmountError}</Alert>
+          </div>
+        )}
       </Card>
 
       {/* BugFix-08 (Q4): cost increase from a date – the previous
@@ -453,6 +500,13 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
       <Card>
         <h2>{t('costs.increaseTitle')}</h2>
         <p className="form-hint">{t('costs.increaseHint')}</p>
+        {/* BugFix-22: gross and net are both optional – one of them is enough. */}
+        <p className="form-hint">{t('costs.amountHint')}</p>
+        {newAmountError && (
+          <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
+            <Alert variant="danger">{newAmountError}</Alert>
+          </div>
+        )}
         <form onSubmit={handleCreate}>
           <FormField label={t('costs.validFrom')} required>
             <Input
@@ -462,23 +516,22 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
               required
             />
           </FormField>
-          <FormField label={t('costs.grossAmount')} required>
+          <FormField label={`${t('costs.grossAmount')} (${t('common.optional')})`}>
             <Input
               type="number"
               step="0.01"
               min="0"
               value={newEntry.grossAmount}
-              onChange={(e) => setNewEntry({ ...newEntry, grossAmount: e.target.value })}
-              required
+              onChange={(e) => { setNewAmountError(null); setNewEntry({ ...newEntry, grossAmount: e.target.value }); }}
             />
           </FormField>
-          <FormField label={t('costs.netAmount')}>
+          <FormField label={`${t('costs.netAmount')} (${t('common.optional')})`}>
             <Input
               type="number"
               step="0.01"
               min="0"
               value={newEntry.netAmount}
-              onChange={(e) => setNewEntry({ ...newEntry, netAmount: e.target.value })}
+              onChange={(e) => { setNewAmountError(null); setNewEntry({ ...newEntry, netAmount: e.target.value }); }}
             />
           </FormField>
           <FormField label={t('costs.frequency')}>

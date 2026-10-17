@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PolicyRegistryService } from '../policy-registry.service';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { GlobalRole, UserStatus } from '@prisma/client';
+import { CoveredSubjectType, GlobalRole, UserStatus } from '@prisma/client';
 import { AuthService } from '../../identity/auth.service';
 import { PortalConnectorRegistry } from '../../portal-connectors/portal-connector-registry';
 import { PortalConnectorService } from '../../portal-connectors/portal-connector.service';
@@ -278,6 +278,69 @@ describe('PolicyRegistryService', () => {
       expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ entityType: 'CoveredPerson', action: 'CREATE' }),
+        }),
+      );
+    });
+
+    it('BugFix-22: adds an object without a relation', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.coveredPerson.create.mockResolvedValue({
+        id: 'cp-2',
+        policyId,
+        personName: 'VW Golf',
+        subjectType: 'OBJECT',
+        relationType: null,
+      });
+
+      const result = await service.addCoveredPerson(householdId, userId, policyId, {
+        personName: 'VW Golf',
+        subjectType: CoveredSubjectType.OBJECT,
+      });
+
+      expect(result.subjectType).toBe('OBJECT');
+      expect(mockDb.coveredPerson.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ subjectType: 'OBJECT', relationType: null }),
+        }),
+      );
+    });
+
+    it('BugFix-22: defaults the subject type to PERSON', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.coveredPerson.create.mockResolvedValue({
+        id: 'cp-3',
+        policyId,
+        personName: 'Max Muster',
+        subjectType: 'PERSON',
+        relationType: null,
+      });
+
+      await service.addCoveredPerson(householdId, userId, policyId, { personName: 'Max Muster' });
+
+      expect(mockDb.coveredPerson.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ subjectType: 'PERSON', relationType: null }),
+        }),
+      );
+    });
+
+    it('BugFix-22: clears the relation when an empty value is submitted', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.coveredPerson.findFirst.mockResolvedValue({ id: 'cp-1', policyId, relationType: 'SELBST' });
+      mockDb.coveredPerson.update.mockResolvedValue({
+        id: 'cp-1',
+        personName: 'Max Muster',
+        relationType: null,
+      });
+
+      await service.updateCoveredPerson(householdId, userId, policyId, 'cp-1', { relationType: '' });
+
+      expect(mockDb.coveredPerson.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ relationType: null }),
         }),
       );
     });

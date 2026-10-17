@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpService } from '@nestjs/axios';
 import type { SettingsResolverService } from '@versigo/foundation';
+import { AxiosError } from 'axios';
 import { OpenAiCompatAdapter } from '../openai-compat.adapter';
 import { of } from 'rxjs';
 
@@ -125,5 +126,153 @@ describe('OpenAiCompatAdapter', () => {
 
     const result = await adapter.healthCheck();
     expect(result).toBe(false);
+  });
+
+  // --- BugFix-22: keyless endpoints, detailed reasons ---
+
+  it('treats a missing API key as configured (keyless endpoints)', async () => {
+    const settings = createMockSettings({ AI_OPENAI_COMPAT_API_KEY: '' });
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockReturnValue(
+      of({ status: 200, data: {} }) as never,
+    );
+
+    expect(await adapter.healthCheck()).toBe(true);
+    // No empty `Bearer ` header may be sent to a keyless endpoint.
+    expect(vi.mocked(httpService.get).mock.calls[0][1]).not.toHaveProperty(
+      'headers.Authorization',
+    );
+  });
+
+  it('sends no Authorization header for keyless completions', async () => {
+    const settings = createMockSettings({ AI_OPENAI_COMPAT_API_KEY: '' });
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.post).mockReturnValue(
+      of({
+        data: {
+          id: 'chat-1',
+          model: 'gpt-4o-mini',
+          choices: [{ message: { role: 'assistant', content: '{"a":1}' }, finish_reason: 'stop' }],
+        },
+      }) as never,
+    );
+
+    await adapter.extractContractFacts(['x'], 'policy-1');
+
+    const options = vi.mocked(httpService.post).mock.calls[0][2] as {
+      headers: Record<string, string>;
+    };
+    expect(options.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('healthStatus reports "not-configured" without a base URL', async () => {
+    const settings = createMockSettings({ AI_OPENAI_COMPAT_BASE_URL: '' });
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    expect(await adapter.healthStatus()).toEqual({
+      connected: false,
+      reason: 'not-configured',
+    });
+    expect(httpService.get).not.toHaveBeenCalled();
+  });
+
+  it('healthStatus reports "unauthorized" on HTTP 401', async () => {
+    const settings = createMockSettings();
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockReturnValue(
+      of({ status: 401, data: {} }) as never,
+    );
+
+    expect(await adapter.healthStatus()).toEqual({
+      connected: false,
+      reason: 'unauthorized',
+    });
+  });
+
+  it('healthStatus reports "http-error" on HTTP 500', async () => {
+    const settings = createMockSettings();
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockReturnValue(
+      of({ status: 500, data: {} }) as never,
+    );
+
+    expect(await adapter.healthStatus()).toEqual({
+      connected: false,
+      reason: 'http-error',
+    });
+  });
+
+  it('falls back to chat/completions when /models is not implemented', async () => {
+    const settings = createMockSettings();
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockReturnValue(of({ status: 404, data: {} }) as never);
+    vi.mocked(httpService.post).mockReturnValue(of({ status: 200, data: {} }) as never);
+
+    expect(await adapter.healthStatus()).toEqual({ connected: true, reason: null });
+    expect(httpService.get).toHaveBeenCalledTimes(1);
+    expect(httpService.post).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(httpService.post).mock.calls[0][0]).toBe(
+      'https://api.openai.com/v1/chat/completions',
+    );
+  });
+
+  it('reuses a successful fallback probe for a short time', async () => {
+    const settings = createMockSettings();
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockReturnValue(of({ status: 404, data: {} }) as never);
+    vi.mocked(httpService.post).mockReturnValue(of({ status: 200, data: {} }) as never);
+
+    expect(await adapter.healthStatus()).toEqual({ connected: true, reason: null });
+    expect(await adapter.healthStatus()).toEqual({ connected: true, reason: null });
+
+    // The completion probe costs tokens – it must not run per page view.
+    expect(httpService.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('healthStatus does not fall back when the completion also fails', async () => {
+    const settings = createMockSettings();
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockReturnValue(of({ status: 404, data: {} }) as never);
+    vi.mocked(httpService.post).mockReturnValue(of({ status: 401, data: {} }) as never);
+
+    expect(await adapter.healthStatus()).toEqual({
+      connected: false,
+      reason: 'unauthorized',
+    });
+  });
+
+  it('healthStatus reports "timeout" for a timed out request', async () => {
+    const settings = createMockSettings();
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockImplementation(() => {
+      throw new AxiosError('timeout of 5000ms exceeded', 'ECONNABORTED');
+    });
+
+    expect(await adapter.healthStatus()).toEqual({
+      connected: false,
+      reason: 'timeout',
+    });
+  });
+
+  it('healthStatus reports "unreachable" for a connection error', async () => {
+    const settings = createMockSettings();
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockImplementation(() => {
+      throw new AxiosError('connect ECONNREFUSED', 'ECONNREFUSED');
+    });
+
+    expect(await adapter.healthStatus()).toEqual({
+      connected: false,
+      reason: 'unreachable',
+    });
   });
 });

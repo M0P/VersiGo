@@ -27,6 +27,34 @@ export interface AiSummarizeResult {
   model: string;
 }
 
+/**
+ * Machine-readable reason why a provider is not available (BugFix-22).
+ *
+ * The values are deliberately coarse and never contain URLs,
+ * credentials or response bodies – they exist so that the UI can say
+ * WHY the configured provider does not answer instead of always
+ * claiming the provider is down.
+ */
+export type AiHealthReason =
+  /** AI_ENABLED is off (or an unknown provider key fell back to NoOp). */
+  | 'disabled'
+  /** Required settings (e.g. base URL) are missing. */
+  | 'not-configured'
+  /** The provider answered HTTP 401/403 – credentials are wrong. */
+  | 'unauthorized'
+  /** The provider did not answer within the probe timeout. */
+  | 'timeout'
+  /** Connection/DNS level failure – the provider is not reachable. */
+  | 'unreachable'
+  /** The provider answered with any other non-2xx status. */
+  | 'http-error';
+
+export interface AiHealthStatus {
+  connected: boolean;
+  /** `null` while connected, otherwise the reason why not. */
+  reason: AiHealthReason | null;
+}
+
 export interface IAIAdapter {
   /**
    * Extracts contract facts from documents.
@@ -44,12 +72,19 @@ export interface IAIAdapter {
   summarizeCoverage(
     documentContents: string[],
     policyId: string,
-  ): Promise<AiSummarizeResult | null>;
+   ): Promise<AiSummarizeResult | null>;
 
   /**
    * Checks the connection to the AI provider.
    */
   healthCheck(): Promise<boolean>;
+
+  /**
+   * Detailed health check with a machine-readable reason (BugFix-22).
+   * Optional so that third-party adapters only implementing
+   * `healthCheck()` keep working; consumers fall back to it.
+   */
+  healthStatus?(): Promise<AiHealthStatus>;
 
   /** Returns the provider key (e.g. 'ollama', 'openai-compat') */
   readonly providerKey: string;

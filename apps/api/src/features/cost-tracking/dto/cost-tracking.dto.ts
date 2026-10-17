@@ -22,10 +22,17 @@ export class CreateCostEntryDto {
   @IsDateString()
   validTo?: string;
 
+  /**
+   * BugFix-22: gross and net are both optional – at least one of them must be
+   * provided. The rule is enforced in the service (single source of truth,
+   * because it also has to hold for partial updates, where the "at least one"
+   * check needs the existing row).
+   */
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  grossAmount!: number;
+  grossAmount?: number;
 
   @IsOptional()
   @IsNumber()

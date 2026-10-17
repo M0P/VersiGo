@@ -201,8 +201,19 @@ class WorkerOpenAiCompatAdapter implements IAIAdapter {
     private readonly enabled: boolean,
   ) {}
 
+  /**
+   * BugFix-22: only the base URL is required. Many OpenAI-compatible
+   * endpoints (local gateways, vLLM, LM Studio) run without authentication;
+   * requiring a key made every extraction silently fail while the admin
+   * connectivity test reported HTTP 200.
+   */
   private isConfigured(): boolean {
-    return this.enabled && this.baseUrl.length > 0 && this.apiKey.length > 0;
+    return this.enabled && this.baseUrl.length > 0;
+  }
+
+  /** Bearer header only when a key is configured (an empty `Bearer ` trips some gateways). */
+  private authHeaders(): Record<string, string> {
+    return this.apiKey.length > 0 ? { Authorization: `Bearer ${this.apiKey}` } : {};
   }
 
   async extractContractFacts(
@@ -272,7 +283,7 @@ Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format
         },
         {
           headers: {
-            Authorization: `Bearer ${this.apiKey}`,
+            ...this.authHeaders(),
             'Content-Type': 'application/json',
           },
           timeout: this.timeout,
@@ -373,7 +384,8 @@ export class AiExtractionProcessor extends WorkerHost {
           apiKey,
           model,
           timeout,
-          baseUrl.length > 0 && apiKey.length > 0,
+          // BugFix-22: the API key is optional, only the base URL is required.
+          baseUrl.length > 0,
         );
       }
       case 'ollama':

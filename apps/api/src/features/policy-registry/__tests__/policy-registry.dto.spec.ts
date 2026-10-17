@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect } from 'vitest';
 import { plainToInstance } from 'class-transformer';
 import { validate, type ValidationError } from 'class-validator';
-import { CreatePortalAccountLinkDto, UpdatePortalAccountLinkDto, CreatePolicyDto, UpdatePolicyDto } from '../dto/policy-registry.dto';
+import { CreatePortalAccountLinkDto, UpdatePortalAccountLinkDto, CreatePolicyDto, UpdatePolicyDto, CreateCoveredPersonDto, UpdateCoveredPersonDto } from '../dto/policy-registry.dto';
 
 /**
  * Tests the DTO validation of the HTTP path (AP-18): nested
@@ -13,7 +13,7 @@ import { CreatePortalAccountLinkDto, UpdatePortalAccountLinkDto, CreatePolicyDto
  * (whitelist/forbidNonWhitelisted/transform).
  */
 async function errorsFor(
-  dtoClass: typeof CreatePortalAccountLinkDto | typeof UpdatePortalAccountLinkDto,
+  dtoClass: new () => object,
   raw: unknown,
   options: { whitelist?: boolean } = {},
 ): Promise<ValidationError[]> {
@@ -263,5 +263,51 @@ describe('insurerPortalUrl (BugFix-07, finding 1)', () => {
 
     const untouched = plainToInstance(UpdatePolicyDto, { insurerName: 'neu' });
     expect(await validate(untouched)).toHaveLength(0);
+  });
+});
+
+describe('CoveredPerson DTOs (BugFix-22: persons or objects, relation optional)', () => {
+  it('accepts a person without a relation', async () => {
+    const errors = await errorsFor(CreateCoveredPersonDto, { personName: 'Max Muster' });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('accepts an object with the subject type OBJECT', async () => {
+    const errors = await errorsFor(CreateCoveredPersonDto, {
+      personName: 'VW Golf',
+      subjectType: 'OBJECT',
+    });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects an unknown subject type', async () => {
+    const errors = await errorsFor(CreateCoveredPersonDto, {
+      personName: 'VW Golf',
+      subjectType: 'GARAGE',
+    });
+    expect(messages(errors)).not.toHaveLength(0);
+  });
+
+  it('still requires the name', async () => {
+    const errors = await errorsFor(CreateCoveredPersonDto, { relationType: 'SELBST' });
+    expect(messages(errors).join(' ')).toContain('personName');
+  });
+
+  it('rejects a non-string relation', async () => {
+    const errors = await errorsFor(CreateCoveredPersonDto, {
+      personName: 'Max Muster',
+      relationType: 42,
+    });
+    expect(messages(errors)).not.toHaveLength(0);
+  });
+
+  it('Update: accepts an update without relation (partial update)', async () => {
+    const errors = await errorsFor(UpdateCoveredPersonDto, { birthDate: '1990-01-01' });
+    expect(errors).toHaveLength(0);
+  });
+
+  it('Update: accepts clearing the relation with an empty string', async () => {
+    const errors = await errorsFor(UpdateCoveredPersonDto, { relationType: '' });
+    expect(errors).toHaveLength(0);
   });
 });

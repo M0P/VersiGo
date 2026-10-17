@@ -3,8 +3,15 @@ import { HttpService } from '@nestjs/axios';
 import { SettingsResolverService } from '@versigo/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/foundation';
+import type {
+  IAIAdapter,
+  AiExtractResult,
+  AiSummarizeResult,
+  AiHealthStatus,
+  AiHealthReason,
+} from '@versigo/foundation';
 import { tryParseExtractionResponse } from './ai-json.helper';
+import { classifyAiHealthError } from './ai-health-error.helper';
 import { optionalRelaxedHttpsAgent } from '../../common/connectivity/tls-agent';
 
 interface OpenAiChatMessage {
@@ -63,17 +70,34 @@ interface OpenAiRuntimeConfig {
   httpsAgent?: import('https').Agent;
 }
 
+/** Health probe timeout (kept short: it runs on the policy detail page). */
+const HEALTH_TIMEOUT_MS = 5_000;
+/**
+ * How long a successful fallback probe is reused (BugFix-22). The fallback
+ * costs a minimal completion request, so it must not run on every page view.
+ */
+const HEALTH_FALLBACK_TTL_MS = 60_000;
+
 /**
  * OpenAI-compatible adapter (AP-17): reads its configuration per call
  * via the central settings resolution (UI > .env > default). This
  * means admin UI changes to AI_OPENAI_COMPAT_* take effect immediately,
  * without a restart.
  * The API key is supplied internally decrypted and never logged.
+ *
+ * BugFix-22: an API key is optional – many OpenAI-compatible endpoints
+ * (local gateways, vLLM, LM Studio, Ollama's OpenAI API) run without
+ * authentication. Previously a missing key silently marked the provider
+ * as "not configured", so the UI reported "the configured provider does
+ * not answer" although every connectivity test returned HTTP 200.
  */
 @Injectable()
 export class OpenAiCompatAdapter implements IAIAdapter {
   private readonly logger = new Logger(OpenAiCompatAdapter.name);
   readonly providerKey = 'openai-compat';
+
+  /** Timestamp until which the successful `/chat/completions` fallback is reused. */
+  private healthFallbackValidUntil = 0;
 
   constructor(
     private readonly httpService: HttpService,
@@ -88,7 +112,8 @@ export class OpenAiCompatAdapter implements IAIAdapter {
     const model = (await this.settings.getEffectiveString('AI_OPENAI_COMPAT_MODEL')) ?? 'gpt-4o-mini';
     const timeout =
       (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
-    const configured = baseUrl.length > 0 && apiKey.length > 0;
+    // Only the base URL is required; the API key is optional (see JSDoc).
+    const configured = baseUrl.length > 0;
     const relaxedAgent = await optionalRelaxedHttpsAgent(this.settings);
 
     if (configured && baseUrl.startsWith('http://')) {
@@ -99,6 +124,11 @@ export class OpenAiCompatAdapter implements IAIAdapter {
     }
 
     return { baseUrl, apiKey, model, timeout, configured, ...relaxedAgent };
+  }
+
+  /** Bearer header only when a key is configured (an empty `Bearer ` trips some gateways). */
+  private authHeaders(config: OpenAiRuntimeConfig): Record<string, string> {
+    return config.apiKey.length > 0 ? { Authorization: `Bearer ${config.apiKey}` } : {};
   }
 
   private async chatCompletion(
@@ -124,7 +154,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
       const { data } = await firstValueFrom(
         this.httpService.post<OpenAiChatResponse>(url, body, {
           headers: {
-            Authorization: `Bearer ${config.apiKey}`,
+            ...this.authHeaders(config),
             'Content-Type': 'application/json',
           },
           timeout: config.timeout,
@@ -206,25 +236,104 @@ export class OpenAiCompatAdapter implements IAIAdapter {
   }
 
   async healthCheck(): Promise<boolean> {
-    const config = await this.runtimeConfig();
-    if (!config.configured) return false;
+    return (await this.healthStatus()).connected;
+  }
 
-    try {
-      const url = `${config.baseUrl}/models`;
-      const { status } = await firstValueFrom(
-        this.httpService.get(url, {
-          headers: {
-            Authorization: `Bearer ${config.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 5_000,
-          ...(config.httpsAgent !== undefined ? { httpsAgent: config.httpsAgent } : {}),
-        }),
-      );
-      return status >= 200 && status < 300;
-    } catch {
-      return false;
+  /**
+   * Detailed health check (BugFix-22) with a machine-readable reason.
+   *
+   * `GET /models` is the cheap probe. When a provider does not expose a
+   * model list (404/405) the probe falls back to the endpoint the feature
+   * actually uses (`POST /chat/completions`, minimal request), because such
+   * a provider is perfectly usable and must not be reported as "not
+   * answering". The successful fallback is reused for a short time so that
+   * it never costs a request per page view.
+   */
+  async healthStatus(): Promise<AiHealthStatus> {
+    const config = await this.runtimeConfig();
+    if (!config.configured) return { connected: false, reason: 'not-configured' };
+    if (Date.now() < this.healthFallbackValidUntil) return { connected: true, reason: null };
+
+    const models = await this.probe(
+      `${config.baseUrl}/models`,
+      'GET',
+      config,
+      undefined,
+    );
+
+    if (models.status !== null) {
+      if (models.status >= 200 && models.status < 300) {
+        return { connected: true, reason: null };
+      }
+      if (models.status === 401 || models.status === 403) {
+        return { connected: false, reason: 'unauthorized' };
+      }
+      if (models.status === 404 || models.status === 405) {
+        return this.probeCompletionFallback(config);
+      }
+      return { connected: false, reason: 'http-error' };
     }
+
+    return { connected: false, reason: models.reason ?? 'unreachable' };
+  }
+
+  /** Fallback probe for providers without a `GET /models` endpoint. */
+  private async probeCompletionFallback(config: OpenAiRuntimeConfig): Promise<AiHealthStatus> {
+    const completion = await this.probe(
+      `${config.baseUrl}/chat/completions`,
+      'POST',
+      config,
+      // Deliberately no `max_tokens`/`temperature`: some models reject
+      // them, which would hide that the endpoint itself is healthy.
+      { model: config.model, messages: [{ role: 'user', content: 'ping' }] },
+    );
+
+    if (completion.status !== null && completion.status >= 200 && completion.status < 300) {
+      this.healthFallbackValidUntil = Date.now() + HEALTH_FALLBACK_TTL_MS;
+      return { connected: true, reason: null };
+    }
+    if (completion.status === 401 || completion.status === 403) {
+      return { connected: false, reason: 'unauthorized' };
+    }
+    if (completion.status === null) {
+      return { connected: false, reason: completion.reason ?? 'unreachable' };
+    }
+    return { connected: false, reason: 'http-error' };
+  }
+
+  /**
+   * Single health request that never throws. `validateStatus: () => true`
+   * keeps non-2xx answers as statuses so they can be classified instead of
+   * being logged as errors.
+   */
+  private async probe(
+    url: string,
+    method: 'GET' | 'POST',
+    config: OpenAiRuntimeConfig,
+    body?: Record<string, unknown>,
+  ): Promise<{ status: number | null; reason: AiHealthReason | null }> {
+    try {
+      const request =
+        method === 'GET'
+          ? this.httpService.get(url, this.probeOptions(config))
+          : this.httpService.post(url, body, this.probeOptions(config));
+      const { status } = await firstValueFrom(request);
+      return { status, reason: null };
+    } catch (err) {
+      return { status: null, reason: classifyAiHealthError(err) };
+    }
+  }
+
+  private probeOptions(config: OpenAiRuntimeConfig): Record<string, unknown> {
+    return {
+      headers: {
+        ...this.authHeaders(config),
+        'Content-Type': 'application/json',
+      },
+      timeout: HEALTH_TIMEOUT_MS,
+      validateStatus: () => true,
+      ...(config.httpsAgent !== undefined ? { httpsAgent: config.httpsAgent } : {}),
+    };
   }
 
   private logError(method: string, err: unknown): void {

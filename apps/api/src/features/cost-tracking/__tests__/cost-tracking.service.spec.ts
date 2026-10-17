@@ -85,6 +85,46 @@ describe('CostTrackingService', () => {
       );
     });
 
+    it('BugFix-22: accepts an entry with only a net amount', async () => {
+      mockMembership();
+      mockPolicy();
+      mockDb.policyCostEntry.create.mockResolvedValue({
+        id: entryId,
+        policyId,
+        validFrom: new Date('2025-01-01'),
+        grossAmount: null,
+        netAmount: 1000,
+        frequency: 'MONTHLY',
+      });
+
+      const result = await service.create(householdId, userId, policyId, {
+        validFrom: '2025-01-01',
+        netAmount: 1000,
+        frequency: PaymentFrequency.MONTHLY,
+      });
+
+      expect(result.id).toBe(entryId);
+      expect(mockDb.policyCostEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ netAmount: 1000 }),
+        }),
+      );
+    });
+
+    it('BugFix-22: refuses an entry without any amount', async () => {
+      mockMembership();
+      mockPolicy();
+
+      await expect(
+        service.create(householdId, userId, policyId, {
+          validFrom: '2025-01-01',
+          frequency: PaymentFrequency.MONTHLY,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDb.policyCostEntry.create).not.toHaveBeenCalled();
+    });
+
     it('BugFix-08: ends the predecessor automatically on cost increase (validFrom)', async () => {
       mockMembership();
       mockPolicy();
@@ -262,6 +302,51 @@ describe('CostTrackingService', () => {
           data: expect.objectContaining({ action: 'UPDATE' }),
         }),
       );
+    });
+
+    it('BugFix-22: refuses an update that would clear both amounts', async () => {
+      mockMembership();
+      mockPolicy();
+      mockDb.policyCostEntry.findFirst.mockResolvedValue({
+        id: entryId,
+        policyId,
+        validFrom: new Date('2025-01-01'),
+        validTo: null,
+        grossAmount: null,
+        netAmount: 1000,
+        frequency: 'MONTHLY',
+      });
+
+      await expect(
+        service.update(householdId, userId, policyId, entryId, { netAmount: null as never }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDb.policyCostEntry.update).not.toHaveBeenCalled();
+    });
+
+    it('BugFix-22: allows an update that keeps the net amount as the only amount', async () => {
+      mockMembership();
+      mockPolicy();
+      mockDb.policyCostEntry.findFirst.mockResolvedValue({
+        id: entryId,
+        policyId,
+        validFrom: new Date('2025-01-01'),
+        validTo: null,
+        grossAmount: null,
+        netAmount: 1000,
+        frequency: 'MONTHLY',
+      });
+      mockDb.policyCostEntry.update.mockResolvedValue({
+        id: entryId,
+        netAmount: 1100,
+        frequency: 'MONTHLY',
+      });
+
+      const result = await service.update(householdId, userId, policyId, entryId, {
+        netAmount: 1100,
+      });
+
+      expect(result.netAmount).toBe(1100);
     });
 
     it('refuses update when validTo <= validFrom', async () => {
@@ -505,6 +590,34 @@ describe('CostTrackingService', () => {
       );
     });
 
+    it('BugFix-22: audit diff of a net-only entry stays null instead of NaN', async () => {
+      mockMembership();
+      mockPolicy();
+      // findFirst: 1) entry to delete, 2) restorePredecessor (nothing ended).
+      mockDb.policyCostEntry.findFirst
+        .mockResolvedValueOnce({
+          id: entryId,
+          policyId,
+          validFrom: new Date('2025-01-01'),
+          grossAmount: null,
+          netAmount: 900,
+          frequency: 'MONTHLY',
+        })
+        .mockResolvedValueOnce(null);
+      mockDb.policyCostEntry.delete.mockResolvedValue({ id: entryId });
+
+      await service.remove(householdId, userId, policyId, entryId);
+
+      expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'DELETE',
+            diffJson: expect.objectContaining({ grossAmount: null, netAmount: 900 }),
+          }),
+        }),
+      );
+    });
+
     it('BugFix-08: deleting an increase reopens the predecessor (no gap)', async () => {
       mockMembership();
       mockPolicy();
@@ -577,6 +690,34 @@ describe('CostTrackingService', () => {
       expect(result.periods[2].status).toBe('incurred');
       expect(result.periods[3].status).toBe('expected');
       expect(result.periods[3].amount).toBe(100);
+    });
+
+    it('BugFix-22: falls back to the net amount when no gross amount is set', async () => {
+      mockScheduleData(
+        { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
+        [
+          {
+            id: 'c1',
+            grossAmount: null,
+            netAmount: 90,
+            frequency: 'MONTHLY',
+            validFrom: new Date('2024-01-01'),
+            validTo: null,
+          },
+        ],
+      );
+
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      // 3 incurred monthly periods (01-03/2024) at 90 each.
+      expect(result.paidToDate).toBe(270);
+      expect(result.current?.grossAmount).toBe(90);
+      expect(result.current?.annualGross).toBe(1080);
     });
 
     it('uses the yearly frequency of the policy (annual, 01/2024, ...)', async () => {

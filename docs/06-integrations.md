@@ -136,11 +136,17 @@ Mögliche Modi:
   **Bekannte Grenze:** Für Dokumente, die vor BugFix-21 automatisch zugeordnet
   wurden, fehlen Datum und MIME-Typ, bis der erste erfolgreiche Abgleich
   gelaufen ist.
-- **Anzeige in der Dokumentliste:** Pro Dokument zeigt die UI den Dokumenttyp
-  als Symbol (PDF/Bild/Dokument/Tabelle/sonstiges, `apps/web/src/lib/document-type.ts`),
-  das Dokumentdatum und – bei verknüpften Dokumenten – die URL des Dokuments in
-  Paperless. Der Upload-Zeitstempel wird nicht mehr angezeigt; die Bezeichnung
-  „Paperless-Dokument“ erscheint nur noch einmal pro Zeile.
+- **Anzeige in der Dokumentliste (BugFix-22):** Pro Dokument zeigt die UI den
+  Dokumenttyp als Symbol (PDF/Bild/Dokument/Tabelle/sonstiges,
+  `apps/web/src/lib/document-type.ts`), das Dokumentdatum in eigener Zeile
+  (Grundschriftgröße), die Herkunft als Icon mit zugänglichem Namen/Tooltip
+  (`auto`/`manuell`/`beides`) und – bei verknüpften Dokumenten – einen
+  „In Paperless öffnen“-Button, der nur das Ziel der URL verwendet (die
+  vollständige Paperless-URL wird nicht mehr als Text dargestellt). Die Liste
+  ist sortierbar (Datum absteigend/aufsteigend, Name A–Z/Z–A); Dokumente ohne
+  Datum stehen immer am Ende. Der Upload-Zeitstempel wird nicht mehr
+  angezeigt; die Bezeichnung „Paperless-Dokument“ erscheint nur noch einmal pro
+  Zeile.
   Beim manuellen Verknüpfen werden noch fehlende Metadaten (`mimeType`,
   `documentDate`) eines bereits vorhandenen Eintrags ergänzt; vorhandene Werte
   werden nie überschrieben.
@@ -163,6 +169,12 @@ Technisch realistisch in Stufen:
   und Zugangshinweis (`accessHint`). Derzeit enthaltene Anbieter:
   HUK-COBURG, HUK24, Allianz, AXA, ERGO, Generali, DEVK, Signal Iduna, VGH,
   Wüstenrot, VKB und CosmosDirekt.
+- **Portal-Links und Stammdaten (BugFix-22):** Die Portal-URL wird nicht mehr
+  in den Versicherung-Stammdaten geführt. Die Portal-Link-Maske ist der einzige
+  Ort zur Anlage/Bearbeitung von Portal-Links. Ein vorhandener
+  Legacy-Wert `insurerPortalUrl` der Versicherung wird bei Anlage eines neuen
+  Portal-Links vorbelegt; er wird weder gelöscht noch automatisch in einen
+  Portal-Link umgewandelt.
 - **Deep-Link-Auflösung:** Reihenfolge manueller `portalUrl` > Katalog-Vorlage.
   Nur manuelle `http(s)`-URLs haben Vorrang; andere Schemata (z. B.
   `javascript:`, `data:`) und unparsbare Werte werden verworfen und fallen

@@ -1,5 +1,10 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { DatabaseService, SettingsResolverService } from '@versigo/foundation';
+import {
+  DatabaseService,
+  SettingsResolverService,
+  type AiHealthReason,
+  type AiHealthStatus,
+} from '@versigo/foundation';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { Prisma } from '@prisma/client';
@@ -8,6 +13,17 @@ import { AI_EXTRACTION_QUEUE } from './ai-assist.constants';
 import { toPrismaJson } from './ai-json.helper';
 import type { IAIAdapter } from './ai-assist.interface';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
+
+/**
+ * Result of the AI health endpoint (BugFix-22).
+ * `reason` is `null` while connected; otherwise it is a coarse,
+ * secret-free code that the UI translates into a human hint.
+ */
+export interface AiHealthCheckResult {
+  connected: boolean;
+  provider: string;
+  reason: AiHealthReason | null;
+}
 
 @Injectable()
 export class AiAssistService {
@@ -341,16 +357,31 @@ export class AiAssistService {
 
   /**
    * Checks the connection to the AI provider.
+   *
+   * BugFix-22: additionally returns a machine-readable reason why the
+   * provider is unavailable, so the UI can explain the situation instead of
+   * always claiming "the configured provider does not answer". Reasons never
+   * contain URLs, hostnames or credentials.
    */
-  async healthCheck(): Promise<{ connected: boolean; provider: string }> {
+  async healthCheck(): Promise<AiHealthCheckResult> {
     const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');
     if (!enabled) {
-      return { connected: false, provider: 'none' };
+      return { connected: false, provider: 'none', reason: 'disabled' };
     }
 
     const adapter = await this.providerRegistry.getAdapter();
-    const connected = await adapter.healthCheck();
+    const status: AiHealthStatus = adapter.healthStatus
+      ? await adapter.healthStatus()
+      : { connected: await adapter.healthCheck(), reason: null };
 
-    return { connected, provider: adapter.providerKey };
+    // An unknown AI_PROVIDER value silently falls back to the NoOp adapter
+    // (providerKey "none") – report that as "not configured" rather than
+    // "provider not answering", which would be misleading.
+    const reason: AiHealthReason | null = status.connected
+      ? null
+      : (status.reason ??
+        (adapter.providerKey === 'none' ? 'not-configured' : 'unreachable'));
+
+    return { connected: status.connected, provider: adapter.providerKey, reason };
   }
 }

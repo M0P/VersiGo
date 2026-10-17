@@ -17,7 +17,6 @@ import PortalLinksTab from './portal-links-tab';
 import CostsOverviewCard from './costs-overview-card';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
-import { normalizePortalUrl } from '@/lib/portal-url';
 
 const API_BASE = getApiBaseUrl();
 
@@ -41,7 +40,13 @@ type PolicyDetail = {
   source: string;
   createdAt: string;
   archivedAt: string | null;
-  coveredPersons: { id: string; personName: string; relationType: string }[];
+  coveredPersons: {
+    id: string;
+    personName: string;
+    /** BugFix-22: the relation is optional, the kind defaults to PERSON. */
+    relationType: string | null;
+    subjectType: string | null;
+  }[];
   portalLinks: {
     id: string;
     providerKey: string;
@@ -149,14 +154,10 @@ export default function PolicyDetailPage(): ReactElement {
                 </>
               )}
 
-              {policy.insurerPortalUrl && (
-                <>
-                  <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('policies.insurerPortalUrl')}</dt>
-                  <dd style={{ margin: 0 }}>
-                    <a href={normalizePortalUrl(policy.insurerPortalUrl)} target="_blank" rel="noopener noreferrer">{policy.insurerPortalUrl}</a>
-                  </dd>
-                </>
-              )}
+              {/* BugFix-22: the portal URL is no longer part of the master data
+                  – the "Portal-Verknüpfungen" tab is the single place for it.
+                  A legacy `insurerPortalUrl` of the policy is offered there as
+                  the default value of a new portal link. */}
 
               <dt className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-2)' }}>{t('common.status')}</dt>
               <dd style={{ margin: 0 }}>
