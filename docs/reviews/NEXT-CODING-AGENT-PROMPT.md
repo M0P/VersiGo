@@ -1,25 +1,61 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Project state after the AP-22 follow-up (2026-10-17)
+## Project state after BugFix-20 (2026-10-17)
 
-Branch: `fix/BugFix-09-ci-fix-community-standards-dockerhub` (the long-lived
-task branch; AP-22 and the follow-up are committed on it).
+Branch: `fix/policy-delete-ui` (task branch for this package, branched off
+`fix/BugFix-09-ci-fix-community-standards-dockerhub`).
 
 ### Package history relevant to this handoff
+
+- **BugFix-20** (this package, user bug report 2026-10-17) — commit
+  **`1200bdc`**, 7 files. Review report `docs/reviews/BugFix-20-review-1.md`.
+  **Caveat:** the report is a **self-review**, not an independent review — all
+  three reviewer subagents were unavailable in this session (`code-reviewer`
+  and `code-reviewer_openrouter`: model unavailable;
+  `code-reviewer_modal`: provider 404). See the blocker section in
+  `docs/reviews/BugFix-20-review-1.md`.
+
+User report (verbatim): *"ich vermisse in der aktuellen version einen weg eine
+versicherung zu löschen"*.
+
+- **Root cause:** the API already exposed a soft-delete endpoint
+  (`DELETE /households/:householdId/policies/:policyId` → sets `archivedAt` +
+  audit `ARCHIVE`), and `docs/ui-control-matrix.md` already specified the
+  control, but the web UI had no entry point for it.
+- **Fix:** the policy detail page header gained a danger button
+  "Versicherung löschen" (window.confirm → DELETE → redirect to
+  `/policies?archived=1`, inline error alert on failure); the list page shows a
+  dismissible success notice when arriving with `?archived=1`. The API service
+  now also sets `status=ARCHIVED` (and logs it in the audit diff) to match the
+  control matrix; the policy remains hidden from all lists via `archivedAt`.
+- **i18n:** `policies.deletePolicy/deleteConfirm/deleteSuccess/deleteError/
+  deleting` plus `common.dismiss` (de + en).
+- **Test:** `policy-registry.service.spec.ts` pins the update payload
+  (`archivedAt` + `status: 'ARCHIVED'`); the red phase was observed before the
+  service change.
+- **Docs:** `docs/ui-control-matrix.md` row "Police löschen" updated to the
+  actual behaviour (soft delete, inline notice instead of a toast).
+- **Open follow-ups (Minors, not fixed):** no request-sequence guard in
+  `handleDelete`; the button is also rendered for READ_ONLY (API returns 403,
+  consistent with the sibling tabs); the `?archived=1` notice reappears on a
+  manual reload; the codebase has no browser/e2e harness, so the UI was not
+  verified in a browser.
+
+### Package history (earlier)
 
 - **AP-22** (`prompts/AP-22-paperless-ngx-ext`) — tag-based Paperless-ngx
   document assignment per insurance policy. Commit `84e15ea`, handoff
   `7e4a557` / `0948b6f`, review reports
   `docs/reviews/AP-22-paperless-ngx-ext-review-1.md` … `-review-6.md`
   (final round: 0 Critical / 0 High / 0 Medium / 1 Minor).
-- **AP-22 follow-up** (this package, user bug report 2026-10-17) — commit
-  **`e5e91ac`**, 25 files. Review reports
+- **AP-22 follow-up** — commit **`e5e91ac`**, 25 files. Review reports
   `docs/reviews/AP-22-followup-review-1.md` … `-review-5.md`.
   Final round 5: **PASS — 0 Critical / 0 High / 0 Medium / 5 Minor**
   (round 5 was the cap of the review loop; the five remaining Minors are
   cosmetic doc/UI duplications documented in review 5 and in the session
   report — they were deliberately NOT changed because no further review round
   was available for a modified tree).
+
 
 ### What the AP-22 follow-up delivered
 
@@ -159,9 +195,9 @@ Trilium MCP is available and writable. The VersiGo project note is:
   Trilium root, labels `#project = versigo`, `#repository =
   VibeCode/VersiGo`, `#status = in Arbeit`.
 - Content: project overview, verification/process conventions, the
-  destructive-smoke-test warning, the AP-22 package entry (commit `84e15ea`)
-  and the AP-22 follow-up entry (commit `e5e91ac`, branch, validation results,
-  accepted limitations).
+  destructive-smoke-test warning, the AP-22 package entry (commit `84e15ea`),
+  the AP-22 follow-up entry (commit `e5e91ac`) and the BugFix-20 entry
+  (policy delete UI, commit `1200bdc`, branch `fix/policy-delete-ui`).
 - Writes are verified by reading the note back (`get_note`,
   `search_notes`). Extend this note for future packages instead of creating a
   second VersiGo note.
