@@ -25,6 +25,11 @@ type Document = {
   storageType?: string;
   storageRef?: string | null;
   deepLink?: string | null;
+  // AP-22: independent origins + external tagging state
+  linkOriginManual?: boolean;
+  linkOriginTag?: boolean;
+  taggingStatus?: 'PENDING' | 'APPLIED' | 'FAILED' | null;
+  taggingErrorCode?: string | null;
 };
 
 // BugFix-07 (Q3): result of the Paperless search (GET /paperless/documents)
@@ -57,6 +62,8 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
   const [paperlessSearching, setPaperlessSearching] = useState(false);
   const [paperlessError, setPaperlessError] = useState<string | null>(null);
   const [linkingId, setLinkingId] = useState<number | null>(null);
+  // AP-22: name of the tag that a manual link will additionally receive.
+  const [assignedTagName, setAssignedTagName] = useState<string | null>(null);
   const searchSeq = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -92,6 +99,22 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
     }
   };
 
+  // AP-22: shows the user which tag a manual link will additionally receive
+  // in Paperless. Failure is non-fatal – the hint is simply omitted.
+  const loadAssignedTag = async () => {
+    try {
+      const res = await fetch(
+        `${API_BASE}/households/default/policies/${policyId}/paperless-tag`,
+        { credentials: 'include' },
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      setAssignedTagName(data?.paperlessTagName ?? null);
+    } catch {
+      setAssignedTagName(null);
+    }
+  };
+
   // BugFix-05 (finding 4): reload on mount and on every policyId change –
   // otherwise the spinner stays stuck (empty list) or documents from the
   // previous policy are shown. The cleanup invalidates in-flight requests
@@ -109,7 +132,9 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
     setSearchTerm('');
     setPaperlessResults(null);
     setPaperlessError(null);
+    setAssignedTagName(null);
     void reloadDocuments();
+    void loadAssignedTag();
     // policyId controls the data source; `t` is deliberately not in the
     // dependencies (a language switch must not reload the list).
     return () => {
@@ -239,7 +264,18 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(t('policies.confirmDeleteDocument'))) return;
+    const doc = documents.find((d) => d.id === id);
+    // AP-22: the confirmation explains the consequences depending on the
+    // assignment origins (automatic documentation stays tag-controlled).
+    const confirmMessage =
+      doc?.linkOriginTag && doc?.linkOriginManual
+        ? t('policies.paperlessDeleteBothConfirm')
+        : doc?.linkOriginTag
+          ? t('policies.paperlessDeleteAutoConfirm')
+          : doc?.linkOriginManual
+            ? t('policies.paperlessDeleteManualConfirm')
+            : t('policies.confirmDeleteDocument');
+    if (!window.confirm(confirmMessage)) return;
     // BugFix-05 (finding 8): seq token like on reload – an error of an
     // older request must not render an error message under the new policy.
     const seq = ++requestSeq.current;
@@ -267,6 +303,34 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
 
   const isLinked = (doc: Document): boolean => doc.storageType === 'PAPERLESS_LINK';
 
+  // AP-22: origin label for a document (automatic / manual / both).
+  const originLabel = (doc: Document): string | null => {
+    if (doc.linkOriginTag && doc.linkOriginManual) return t('policies.paperlessOriginBoth');
+    if (doc.linkOriginTag) return t('policies.paperlessOriginAuto');
+    if (doc.linkOriginManual) return t('policies.paperlessOriginManual');
+    return null;
+  };
+
+  const handleRetryTagging = async (id: string) => {
+    const seq = requestSeq.current;
+    setError(null);
+    try {
+      const res = await fetch(
+        `${API_BASE}/households/default/policies/${policyId}/paperless-tag/retry`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentId: id }),
+        },
+      );
+      if (!res.ok) throw new Error(t('common.unknownError'));
+      if (seq === requestSeq.current) reloadDocuments();
+    } catch {
+      if (seq === requestSeq.current) setError(t('common.unknownError'));
+    }
+  };
+
   return (
     <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--versigo-space-4)' }}>
@@ -289,6 +353,12 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
           <p className="text-sm text-muted" style={{ margin: 'var(--versigo-space-2) 0 var(--versigo-space-4)' }}>
             {t('policies.paperlessConnectBody')}
           </p>
+          {/* AP-22: tell the user which tag the manual link will add. */}
+          {assignedTagName && (
+            <Alert variant="info">
+              {t('policies.paperlessLinkAddsTag', { tag: assignedTagName })}
+            </Alert>
+          )}
           <FormField label={t('policies.paperlessSearchPlaceholder')} hint={t('policies.paperlessSearchHint')}>
             <Input
               type="text"
@@ -410,6 +480,31 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
                 <span style={{ fontSize: '1.5rem' }}>📄</span>
                 <div>
                   <strong>{doc.fileName}</strong>
+                  {/* AP-22: origin + external tagging status */}
+                  {originLabel(doc) && (
+                    <span
+                      className="badge badge-neutral"
+                      style={{ marginLeft: 'var(--versigo-space-2)' }}
+                    >
+                      {originLabel(doc)}
+                    </span>
+                  )}
+                  {doc.taggingStatus === 'PENDING' && (
+                    <span
+                      className="badge badge-neutral"
+                      style={{ marginLeft: 'var(--versigo-space-2)' }}
+                    >
+                      {t('policies.paperlessTagPendingBadge')}
+                    </span>
+                  )}
+                  {doc.taggingStatus === 'FAILED' && (
+                    <span
+                      className="badge badge-danger"
+                      style={{ marginLeft: 'var(--versigo-space-2)' }}
+                    >
+                      {t('policies.paperlessTagFailedBadge')}
+                    </span>
+                  )}
                   <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
                     {isLinked(doc) && (
                       <>
@@ -427,9 +522,14 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
                     {doc.documentDate && ` · ${t('policies.documentDate')}: ${new Date(doc.documentDate).toLocaleDateString()}`}
                     {' · '}{t('common.uploadedAt', { date: new Date(doc.uploadedAt).toLocaleDateString() })}
                   </div>
+                  {doc.taggingStatus === 'FAILED' && (
+                    <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
+                      {t('policies.paperlessTagFailedHint')}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 'var(--versigo-space-2)' }}>
+              <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {/* BugFix-07 (Q3): PAPERLESS_LINK documents have no
                     local file content – instead of preview/download the
                     Paperless deep link is offered. */}
@@ -451,7 +551,21 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
                     </a>
                   </>
                 )}
-                <Button variant="danger" size="sm" onClick={() => handleDelete(doc.id)}>{t('policies.deleteDocument')}</Button>
+                {doc.taggingStatus === 'FAILED' && (
+                  <Button variant="secondary" size="sm" onClick={() => handleRetryTagging(doc.id)}>
+                    {t('policies.paperlessTagRetry')}
+                  </Button>
+                )}
+                {/* AP-22: an exclusively automatic assignment is controlled by
+                    the Paperless tag; offering "delete" here would be
+                    misleading because the next sync would restore it. */}
+                {doc.linkOriginTag && !doc.linkOriginManual ? (
+                  <span className="badge badge-neutral" style={{ alignSelf: 'center' }}>
+                    {t('policies.paperlessAutoManagedHint')}
+                  </span>
+                ) : (
+                  <Button variant="danger" size="sm" onClick={() => handleDelete(doc.id)}>{t('policies.deleteDocument')}</Button>
+                )}
               </div>
             </div>
           ))}

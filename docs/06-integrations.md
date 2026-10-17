@@ -23,6 +23,71 @@ Mögliche Modi:
 - Referenzierte Anzeige im Policy-Kontext
 - Optionaler Importvorschlag anhand Tags/ASN/Document Type
 
+### Umsetzungsstand (AP-22 – tag-basierte Dokumentzuordnung)
+- **Konfiguration je Versicherung:** `PolicyPaperlessTag` (1:1 zur Versicherung)
+  speichert die externe `paperlessTagId` als stabile Referenz, den Anzeigenamen
+  als Cache, eine `configVersion` (Stale-Schutz), `lastSyncedAt`, `syncStatus`
+  und einen nicht sensitiven `syncErrorCode`. `connectionRef` hält die zum
+  Konfigurationszeitpunkt verwendete, effektive `PAPERLESS_URL` (ohne
+  Zugangsdaten).
+- **REST-API:** `GET /households/:id/paperless-tags` (serverseitige Suche in
+  Paperless), `POST /households/:id/paperless-tags` (Tag anlegen, idempotent),
+  `GET|PUT|DELETE /households/:id/policies/:id/paperless-tag` (lesen, setzen/
+  wechseln, entfernen), `GET .../paperless-tag/status`,
+  `POST .../paperless-tag/sync` (Sofortabgleich),
+  `POST .../paperless-tag/retry` (fehlgeschlagene Tag-Zuweisung wiederholen).
+  Lesende Rollen dürfen den Zustand sehen, Änderungen sind `USER`/`ADMIN`.
+- **Outbox + Worker:** Die Änderung und die dauerhafte Job-Zeile
+  (`paperless_tag_jobs`) entstehen in **einer** Transaktion; danach wird der
+  Job in die Queue `paperless-tag-sync` eingereiht. Ein fehlgeschlagener
+  Enqueue bleibt `PENDING` und wird vom periodischen Abgleich (`reconcile`)
+  erneut zugestellt. Der Worker führt `sync-policy`, `tag-document` und
+  `reconcile` aus.
+- **Stale-Schutz:** Jeder Job trägt die `configVersion`. Wird der Tag geändert
+  oder entfernt, werden offene Jobs als `SKIPPED` verworfen und können die
+  neue Konfiguration nicht überschreiben. Zeigt `PAPERLESS_URL` auf einen
+  anderen Server als `connectionRef`, werden Jobs als `CONNECTION_CHANGED`
+  beendet und die Zuordnungen bleiben unangetastet (kein stilles Verschieben
+  auf einen fremden Server).
+- **Abgleich-Semantik:** Der Tag-Abgleich führt nur nach einem vollständig
+  erfolgreichen Seitenlauf Änderungen aus. Ein unerreichbares Paperless oder
+  eine fehlgeschlagene Seite führt zu einem Retry (bounded, über die outbox)
+  und entfernt **nie** bestehende Zuordnungen. Verliert ein manuell
+  verknüpftes Dokument den Tag, entfällt nur die automatische Herkunft
+  (`linkOriginTag`); rein automatisch zugeordnete Dokumente werden archiviert,
+  nicht gelöscht.
+- **Manuelle Verknüpfungen:** Das bestehende Verlinken (BugFix-07) bleibt
+  unverändert nutzbar und setzt zusätzlich `linkOriginManual`. Ist ein Tag
+  konfiguriert, wird der Tag additiv auf dem Dokument ergänzt und sein Erfolg
+  durch erneutes Lesen in Paperless bestätigt (`taggingStatus`
+  `PENDING`/`APPLIED`/`FAILED`, inkl. `taggingErrorCode`).
+- **Bewusste Grenzen:** Es wird ausschließlich der Tag additiv gesetzt; keine
+  Dokumentdateien werden übertragen oder verändert, keine Tags oder Dokumente
+  in Paperless gelöscht. Der Abgleich erfolgt pollend
+  (`PAPERLESS_TAG_SYNC_INTERVAL_MS`, Default 5 Minuten), es gibt keine
+  Paperless-Webhooks.
+- **Benötigte Paperless-Rechte:** Der verwendete API-Token muss
+  (a) Tags **lesen** (`GET /api/tags/`), (b) Tags **anlegen** (`POST /api/tags/`)
+  – nur nötig, wenn der Nutzer einen neuen Tag erzeugt, (c) Dokumente **lesen**
+  (`GET /api/documents/`) und (d) Dokumente **ändern** (`POST /api/bulk_edit/`
+  bzw. `PATCH /api/documents/:id/`), um den Tag zu ergänzen. Ein Token ohne
+  Änderungsrecht funktioniert für die reine Anzeige, manuell verknüpfte
+  Dokumente bleiben dann im Zustand `FAILED` (erneut ausführbar über
+  „Tag-Zuweisung wiederholen“).
+- **Unterstützte Paperless-Versionen:** Die REST-Endpunkte
+  `/api/tags/`, `/api/documents/` und `/api/bulk_edit/` sind seit
+  Paperless-ngx **1.7** stabil und in den 2.x-Releases unverändert. Der
+  additive Bulk-Edit ist der bevorzugte Weg; antwortet die Instanz mit
+  `404`/`405`, fällt der Adapter auf ein lesend-verschmelzendes
+  `PATCH /api/documents/:id/` zurück. Getestet wird gegen die minimale
+  unterstützte Version **2.0** (ältere Versionen sind nicht Teil der
+  Support-Matrix).
+- **Archivierte Versicherungen:** Wird eine Versicherung archiviert, sind
+  zugehörige Job-Zeilen veraltet; der Worker verwirft laufende/pending Jobs
+  (`POLICY_ARCHIVED`), der periodische Abgleich überspringt archivierte
+  Policen. Beim harten Löschen entfernt der Fremdschlüssel
+  (`ON DELETE CASCADE`) Konfiguration und Job-Zeilen.
+
 ## Versicherungsportale
 Technisch realistisch in Stufen:
 - Stufe 1: Manuelle Deeplinks und Zugangshinweise

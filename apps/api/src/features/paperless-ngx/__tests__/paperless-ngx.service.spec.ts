@@ -23,11 +23,15 @@ function createMockSettings(values: MockSettingsValues = {}) {
   } as unknown as SettingsResolverService;
 }
 
-type MockHttpService = HttpService & { get: ReturnType<typeof vi.fn> };
+type MockHttpService = HttpService & {
+  get: ReturnType<typeof vi.fn>;
+  request: ReturnType<typeof vi.fn>;
+};
 
 function createMockHttpService(): MockHttpService {
   return {
     get: vi.fn(),
+    request: vi.fn(),
   } as unknown as MockHttpService;
 }
 
@@ -535,6 +539,334 @@ describe('PaperlessNgxService', () => {
       expect(result).toBe(false);
 
       expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('does not use HTTPS'));
+    });
+  });
+
+  describe('Tag-API methods (AP-22)', () => {
+    type HttpResult = { status: number; data: unknown };
+
+    /**
+     * Routes the tag/document adapter calls to per-URL handlers. The dialect
+     * probe (GET /documents/?page_size=1) is answered separately because it
+     * always happens first and must resolve as a definitive v2 response.
+     */
+    function routeTagHttp(
+      get: (url: string) => HttpResult,
+      request?: (opts: { url: string; method?: string; data?: unknown }) => HttpResult,
+    ) {
+      mockHttp.get = vi.fn((url: string) =>
+        url.endsWith('/documents/?page_size=1') ? of({ status: 200, data: {} }) : of(get(url)),
+      ) as unknown as typeof mockHttp.get;
+      mockHttp.request = vi.fn((opts) =>
+        of(request ? request(opts) : { status: 404, data: {} }),
+      ) as unknown as typeof mockHttp.request;
+    }
+
+    function tagPage(results: Array<{ id: number; name: string }>, count = results.length) {
+      return { status: 200, data: { results, next: null, previous: null, count } };
+    }
+
+    describe('searchTags', () => {
+      it('maps and client-side filters the server result', async () => {
+        let calls = 0;
+        routeTagHttp(() => {
+          calls += 1;
+          return tagPage([
+            { id: 1, name: 'KFZ' },
+            { id: 2, name: 'Hausrat' },
+            { id: 3, name: 'KFZ-Versicherung' },
+          ]);
+        });
+
+        const page = await service.searchTags('kfz', 1, 20);
+
+        expect(page.items).toEqual([
+          { tagId: 1, name: 'KFZ' },
+          { tagId: 3, name: 'KFZ-Versicherung' },
+        ]);
+        expect(page.pageCount).toBe(1);
+        expect(calls).toBe(1);
+        // The server filter is requested, but never trusted on its own.
+        expect(mockHttp.get).toHaveBeenCalledWith(
+          expect.stringContaining('name__icontains=kfz'),
+          expect.anything(),
+        );
+      });
+
+      it('drops tags that do not match even when the server ignored the filter', async () => {
+        routeTagHttp(() => tagPage([{ id: 9, name: 'Unrelated' }]));
+
+        const page = await service.searchTags('kfz', 1, 20);
+
+        expect(page.items).toEqual([]);
+      });
+
+      it('returns an empty page for an unusable response', async () => {
+        routeTagHttp(() => ({ status: 500, data: { detail: 'boom' } }));
+
+        await expect(service.searchTags('kfz', 1, 20)).resolves.toEqual({
+          items: [],
+          page: 1,
+          pageCount: 0,
+        });
+      });
+    });
+
+    describe('getTag', () => {
+      it('returns the tag on a successful lookup', async () => {
+        routeTagHttp(() => ({ status: 200, data: { id: 7, name: 'KFZ' } }));
+
+        await expect(service.getTag(7)).resolves.toEqual({
+          ok: true,
+          tag: { tagId: 7, name: 'KFZ' },
+        });
+      });
+
+      it('distinguishes a deleted tag from an auth failure', async () => {
+        routeTagHttp(() => ({ status: 404, data: { detail: 'Not found.' } }));
+        await expect(service.getTag(7)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'NOT_FOUND' },
+        });
+
+        routeTagHttp(() => ({ status: 401, data: { detail: 'invalid token' } }));
+        await expect(service.getTag(7)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'AUTH_FAILED' },
+        });
+      });
+
+      it('reports an unusable payload as unreachable', async () => {
+        routeTagHttp(() => ({ status: 200, data: { unexpected: true } }));
+
+        await expect(service.getTag(7)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'UNREACHABLE' },
+        });
+      });
+    });
+
+    describe('createTag', () => {
+      it('rejects an empty name without calling Paperless', async () => {
+        routeTagHttp(() => tagPage([]));
+
+        await expect(service.createTag('   ')).resolves.toBeNull();
+        expect(mockHttp.get).not.toHaveBeenCalled();
+      });
+
+      it('reuses an existing tag instead of creating a duplicate', async () => {
+        routeTagHttp(() => tagPage([{ id: 7, name: 'KFZ' }]));
+
+        await expect(service.createTag('KFZ')).resolves.toEqual({ tagId: 7, name: 'KFZ' });
+        expect(mockHttp.request).not.toHaveBeenCalled();
+      });
+
+      it('creates a new tag when the name is unused', async () => {
+        routeTagHttp(
+          (url) => (url.includes('/tags/') ? tagPage([]) : { status: 404, data: {} }),
+          (opts) => {
+            expect(opts.url).toContain('/tags/');
+            expect(opts.data).toEqual({ name: 'Neu' });
+            return { status: 201, data: { id: 42, name: 'Neu' } };
+          },
+        );
+
+        await expect(service.createTag('Neu')).resolves.toEqual({ tagId: 42, name: 'Neu' });
+      });
+
+      it('resolves a parallel-creation race idempotently', async () => {
+        let lookups = 0;
+        routeTagHttp(
+          (url) => {
+            if (!url.includes('/tags/')) return { status: 404, data: {} };
+            lookups += 1;
+            // 1st lookup: not there yet; 2nd (after the 400): already created
+            // concurrently by another request.
+            return lookups === 1 ? tagPage([]) : tagPage([{ id: 42, name: 'Neu' }]);
+          },
+          () => ({
+            status: 400,
+            data: { name: ['tag with this name already exists'] },
+          }),
+        );
+
+        await expect(service.createTag('Neu')).resolves.toEqual({ tagId: 42, name: 'Neu' });
+        expect(lookups).toBe(2);
+      });
+    });
+
+    describe('listDocumentsByTag', () => {
+      it('walks all pages and deduplicates documents', async () => {
+        let pageNo = 0;
+        routeTagHttp((url) => {
+          if (!url.includes('/documents/')) return { status: 404, data: {} };
+          pageNo += 1;
+          if (pageNo === 1) {
+            return {
+              status: 200,
+              data: {
+                results: [
+                  { id: 1, title: 'A' },
+                  { id: 2, title: 'B' },
+                ],
+                next: 'http://paperless:8000/api/documents/?page=2',
+                previous: null,
+                count: 3,
+              },
+            };
+          }
+          return {
+            status: 200,
+            data: {
+              results: [
+                { id: 2, title: 'B duplicated' },
+                { id: 3, title: 'C' },
+              ],
+              next: null,
+              previous: null,
+              count: 3,
+            },
+          };
+        });
+
+        const docs = await service.listDocumentsByTag(7);
+
+        // First occurrence wins for a duplicate id.
+        expect(docs).toEqual([
+          { paperlessId: 1, title: 'A' },
+          { paperlessId: 2, title: 'B' },
+          { paperlessId: 3, title: 'C' },
+        ]);
+        expect(pageNo).toBe(2);
+      });
+
+      it('returns null when a later page fails so no assignment is removed', async () => {
+        let pageNo = 0;
+        routeTagHttp((url) => {
+          if (!url.includes('/documents/')) return { status: 404, data: {} };
+          pageNo += 1;
+          return pageNo === 1
+            ? {
+                status: 200,
+                data: {
+                  results: [{ id: 1, title: 'A' }],
+                  next: 'http://paperless:8000/api/documents/?page=2',
+                  previous: null,
+                  count: 500,
+                },
+              }
+            : { status: 500, data: { detail: 'boom' } };
+        });
+
+        await expect(service.listDocumentsByTag(7)).resolves.toBeNull();
+      });
+    });
+
+    describe('assignTagToDocument', () => {
+      it('is a no-op when the tag is already present', async () => {
+        routeTagHttp((url) =>
+          url.includes('/documents/42/')
+            ? { status: 200, data: { id: 42, tags: [7] } }
+            : { status: 404, data: {} },
+        );
+
+        await expect(service.assignTagToDocument(42, 7)).resolves.toEqual({
+          success: true,
+          verified: true,
+        });
+        expect(mockHttp.request).not.toHaveBeenCalled();
+      });
+
+      it('adds the tag additively through bulk_edit and verifies it', async () => {
+        let docReads = 0;
+        routeTagHttp(
+          (url) => {
+            if (!url.includes('/documents/42/')) return { status: 404, data: {} };
+            docReads += 1;
+            return docReads === 1
+              ? { status: 200, data: { id: 42, tags: [1] } }
+              : { status: 200, data: { id: 42, tags: [1, 7] } };
+          },
+          (opts) => {
+            expect(opts.url).toContain('/bulk_edit/');
+            expect(opts.data).toEqual({
+              documents: [42],
+              method: 'modify_tags',
+              parameters: { added_tags: [7] },
+            });
+            return { status: 200, data: { result: 'OK' } };
+          },
+        );
+
+        await expect(service.assignTagToDocument(42, 7)).resolves.toEqual({
+          success: true,
+          verified: true,
+        });
+      });
+
+      it('falls back to read-merge-write when bulk_edit is unavailable', async () => {
+        let docReads = 0;
+        routeTagHttp(
+          (url) => {
+            if (!url.includes('/documents/42/')) return { status: 404, data: {} };
+            docReads += 1;
+            return docReads === 1
+              ? { status: 200, data: { id: 42, tags: [1] } }
+              : { status: 200, data: { id: 42, tags: [1, 7] } };
+          },
+          (opts) => {
+            if (opts.url.includes('/bulk_edit/')) {
+              return { status: 404, data: { detail: 'Not found.' } };
+            }
+            expect(opts.method).toBe('PATCH');
+            // Existing tags are merged, never replaced wholesale.
+            expect(opts.data).toEqual({ tags: [1, 7] });
+            return { status: 200, data: { id: 42, tags: [1, 7] } };
+          },
+        );
+
+        await expect(service.assignTagToDocument(42, 7)).resolves.toEqual({
+          success: true,
+          verified: true,
+        });
+      });
+
+      it('reports DOCUMENT_NOT_FOUND for a missing document', async () => {
+        routeTagHttp((url) =>
+          url.includes('/documents/42/')
+            ? { status: 404, data: { detail: 'Not found.' } }
+            : { status: 404, data: {} },
+        );
+
+        await expect(service.assignTagToDocument(42, 7)).resolves.toEqual({
+          success: false,
+          verified: false,
+          errorCode: 'DOCUMENT_NOT_FOUND',
+        });
+      });
+
+      it('reports VERIFY_FAILED when the document cannot be re-read', async () => {
+        let docReads = 0;
+        mockHttp.get = vi.fn((url: string) => {
+          if (url.endsWith('/documents/?page_size=1')) return of({ status: 200, data: {} });
+          if (url.includes('/documents/42/')) {
+            docReads += 1;
+            return docReads === 1
+              ? of({ status: 200, data: { id: 42, tags: [] } })
+              : throwError(() => new Error('connection reset'));
+          }
+          return of({ status: 404, data: {} });
+        }) as unknown as typeof mockHttp.get;
+        mockHttp.request = vi.fn(() =>
+          of({ status: 200, data: { result: 'OK' } }),
+        ) as unknown as typeof mockHttp.request;
+
+        await expect(service.assignTagToDocument(42, 7)).resolves.toEqual({
+          success: false,
+          verified: false,
+          errorCode: 'VERIFY_FAILED',
+        });
+      });
     });
   });
 });

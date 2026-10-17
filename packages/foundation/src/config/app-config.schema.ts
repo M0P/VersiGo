@@ -162,6 +162,7 @@ export const appConfigSchema = z
     PAPERLESS_ENABLED: booleanFromEnv.default(false),
     PAPERLESS_URL: z.string().optional(),
     PAPERLESS_API_TOKEN: z.string().optional(),
+    PAPERLESS_TAG_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(300_000),
 
     // BugFix-05: family sharing (household sharing) is enabled by default
     // (existing behavior); admins can disable it in the feature management

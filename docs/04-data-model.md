@@ -89,6 +89,52 @@
 - storageRef
 - documentDate
 - category
+- linkOriginManual (AP-22; bool, Default `false` – Dokument wurde manuell verknüpft)
+- linkOriginTag (AP-22; bool, Default `false` – Dokument trägt den konfigurierten Paperless-Tag)
+- taggingStatus (AP-22; nullable `PENDING` | `APPLIED` | `FAILED` – Stand der externen Tag-Zuweisung)
+- taggingErrorCode (AP-22; nullable, nicht sensitiver Fehlercode der Tag-Zuweisung)
+
+### PolicyPaperlessTag (AP-22)
+- id
+- policyId (FK -> insurance_policies.id, **unique** – max. ein Tag je Versicherung, cascading delete)
+- connectionRef (nullable; effektive `PAPERLESS_URL` zum Konfigurationszeitpunkt, ohne Zugangsdaten – erkennt einen Serverwechsel)
+- paperlessTagId (externe, stabile Tag-Referenz)
+- paperlessTagName (Anzeige-Cache; maßgeblich ist Paperless)
+- configVersion (Default `1`; wird bei jeder Änderung erhöht und von jedem Job mitgeführt → Stale-Schutz)
+- lastSyncedAt (nullable; Zeitpunkt des letzten vollständig erfolgreichen Abgleichs)
+- syncStatus (`SyncStatus`: `PENDING` | `ACTIVE` | `ERROR` | `DISABLED`)
+- syncErrorCode (nullable; nicht sensitiver Fehlercode)
+- createdAt
+- updatedAt
+
+### PaperlessTagJob (AP-22, Outbox-Äquivalent)
+- id
+- policyId (FK -> insurance_policies.id, cascading delete)
+- documentId (nullable; bei `TAG_DOCUMENT` gesetzt)
+- kind (`SYNC_POLICY` | `TAG_DOCUMENT`)
+- status (`AiJobStatus`-Enum: `PENDING` | `RUNNING` | `COMPLETED` | `FAILED` | `SKIPPED`)
+- configVersion (Version der Konfiguration, für die der Job gedacht war)
+- retryCount (Default `0`), maxRetries (Default `3`)
+- errorCode (nullable; siehe Code-Liste unten), completedAt
+- Modellregel (AP-22): Die Zeile entsteht in derselben Transaktion wie die
+  Datenänderung und ist damit die dauerhafte Quelle; BullMQ ist nur Transport.
+  Der BullMQ-`jobId` entspricht der Zeilen-`id` (idempotente Wiederzustellung).
+- Vollständige `errorCode`-Liste (identisch für `PaperlessTagJob.errorCode`
+  und `PolicyDocument.taggingErrorCode`; geschrieben vom Worker bzw. von den
+  Paperless-Adapter-Aufrufen):
+  - Konfiguration/Lebenszyklus: `STALE_CONFIG`, `CONNECTION_CHANGED`,
+    `TAG_REMOVED`, `POLICY_ARCHIVED`, `SUPERSEDED`, `NOT_CONFIGURED`
+  - Verbindung/API: `UNREACHABLE`, `AUTH_FAILED`, `API_ERROR`, `UNKNOWN`
+  - Sync: `SYNC_FAILED`
+  - Tag-Lookup: `NOT_FOUND` (der konfigurierte Tag existiert in Paperless nicht mehr)
+  - Dokumentzuordnung: `DOCUMENT_NOT_FOUND` (das Paperless-Dokument existiert
+    nicht mehr), `DOCUMENT_GONE` (der lokale Link-Datensatz fehlt oder ist kein
+    Paperless-Link), `VERIFY_FAILED` (Tag konnte nach dem Schreiben nicht
+    bestätigt werden)
+  Ein `SKIPPED`-Job trägt immer einen dieser Codes; `null` bedeutet „kein
+  Fehler" (erfolgreich bzw. noch nicht gelaufen). `DOCUMENT_NOT_FOUND` und
+  `DOCUMENT_GONE` sind bewusst getrennt, damit ein gelöschtes Remote-Dokument
+  von einem veralteten lokalen Link unterscheidbar bleibt.
 
 ### PortalAccountLink (AP-18)
 - id

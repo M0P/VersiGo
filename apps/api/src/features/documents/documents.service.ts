@@ -7,7 +7,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { DatabaseService, AppConfigService } from '@versigo/foundation';
-import type { Prisma } from '@prisma/client';
+import type { PolicyDocument, Prisma } from '@prisma/client';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -15,6 +15,8 @@ import { UploadDocumentDto, UpdateDocumentMetadataDto } from './dto/documents.dt
 import { UploadedFile } from './documents.types';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { PAPERLESS_ADAPTER, IPaperlessAdapter } from '../paperless-ngx/paperless-ngx.interface';
+import { PaperlessTagService } from '../paperless-ngx/paperless-tag.service';
+import { PAPERLESS_TAG_TAG_DOCUMENT_JOB } from '../paperless-ngx/paperless-tag.constants';
 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -60,6 +62,8 @@ export class DocumentsService {
     // BugFix-07 (Q3): adapter for Paperless links. Degrades itself in a
     // controlled way (null/empty results) when Paperless is disabled.
     @Inject(PAPERLESS_ADAPTER) private readonly paperless: IPaperlessAdapter,
+    // AP-22: durable tag-job outbox for manual Paperless links.
+    private readonly paperlessTags: PaperlessTagService,
   ) {
     this.storagePath = path.resolve(config.get('DOCUMENTS_STORAGE_PATH'));
   }
@@ -295,6 +299,12 @@ export class DocumentsService {
    * returns the existing entry. The document must exist in Paperless and
    * the adapter must be configured.
    *
+   * AP-22: the link is additionally recorded as a `MANUAL` origin. When a
+   * policy tag is configured, a durable TAG_DOCUMENT outbox row is created
+   * in the SAME transaction as the link (no job can be lost between the DB
+   * change and the queue insertion) and the external tag assignment is
+   * marked PENDING until the worker confirms it.
+   *
    * Race-safe (BugFix-07, code review): check-then-insert runs inside ONE
    * transaction. Concurrently linked requests that both pass the check are
    * caught by the partial unique index (policyId, storageRef) WHERE
@@ -317,8 +327,9 @@ export class DocumentsService {
       );
     }
 
+    let linked: { document: PolicyDocument; tagJobId: string | null } | null = null;
     try {
-      return await this.db.$transaction(async (tx) => {
+      linked = await this.db.$transaction(async (tx) => {
         const existing = await tx.policyDocument.findFirst({
           where: {
             policyId,
@@ -327,7 +338,7 @@ export class DocumentsService {
             archivedAt: null,
           },
         });
-        if (existing) return existing;
+        if (existing) return this.applyManualLinkOrigin(tx, policyId, existing);
 
         const document = await tx.policyDocument.create({
           data: {
@@ -340,6 +351,7 @@ export class DocumentsService {
             category: metadata.documentType,
             documentDate: metadata.createdAt ? new Date(metadata.createdAt) : null,
             createdByUserId: userId,
+            linkOriginManual: true,
           },
         });
 
@@ -358,7 +370,7 @@ export class DocumentsService {
           },
         });
 
-        return document;
+        return this.applyManualLinkOrigin(tx, policyId, document);
       });
     } catch (error) {
       // P2002 (unique violation of the partial index) = a parallel request
@@ -372,10 +384,94 @@ export class DocumentsService {
             archivedAt: null,
           },
         });
-        if (existing) return existing;
+        if (existing) {
+          linked = await this.db.$transaction((tx) =>
+            this.applyManualLinkOrigin(tx, policyId, existing),
+          );
+        }
       }
-      throw error;
+      if (!linked) throw error;
     }
+
+    if (linked.tagJobId) {
+      await this.paperlessTags.enqueue(
+        PAPERLESS_TAG_TAG_DOCUMENT_JOB,
+        linked.tagJobId,
+        policyId,
+      );
+    }
+    return linked.document;
+  }
+
+  /**
+   * AP-22: ensures the MANUAL origin is recorded and – when a policy tag is
+   * configured – a durable TAG_DOCUMENT outbox row exists so the document
+   * receives the tag in Paperless. Runs inside the caller's transaction so
+   * the link and the job row are atomic.
+   */
+  private async applyManualLinkOrigin(
+    tx: Prisma.TransactionClient,
+    policyId: string,
+    document: PolicyDocument,
+  ): Promise<{ document: PolicyDocument; tagJobId: string | null }> {
+    const tagConfig = await tx.policyPaperlessTag.findUnique({ where: { policyId } });
+
+    if (!tagConfig) {
+      // Without a configured tag the manual link behaves exactly as before.
+      const updated = document.linkOriginManual
+        ? document
+        : await tx.policyDocument.update({
+            where: { id: document.id },
+            data: { linkOriginManual: true },
+          });
+      return { document: updated, tagJobId: null };
+    }
+
+    // NOTE (round-4/round-5 review): neither `linkOriginTag` nor a previous
+    // `taggingStatus === 'APPLIED'` may skip the assignment. Both are merely
+    // *observations* that some earlier sync applied a tag – they do not record
+    // which tag/configuration version they were verified against. Rows can
+    // legitimately be APPLIED for a tag that has since been removed or
+    // replaced (e.g. the manual origin was dropped, so `setTag`'s reset no
+    // longer matches them), and such a row would then be excluded from
+    // `scheduleManualLinkBackfill` and from `retryTagging` forever – it would
+    // never receive the newly configured tag. Always queueing the assignment
+    // is safe: the worker's `assignTagToDocument` verifies the tag and
+    // short-circuits when it is already present, so the worst case is one
+    // extra read.
+    //
+    // Reuse an already pending assignment instead of creating duplicates.
+    const activeJob = await tx.paperlessTagJob.findFirst({
+      where: {
+        policyId,
+        documentId: document.id,
+        kind: 'TAG_DOCUMENT',
+        status: { in: ['PENDING', 'RUNNING'] },
+      },
+    });
+
+    const updated = await tx.policyDocument.update({
+      where: { id: document.id },
+      data: {
+        linkOriginManual: true,
+        taggingStatus: 'PENDING',
+        taggingErrorCode: null,
+      },
+    });
+
+    if (activeJob) return { document: updated, tagJobId: null };
+
+    const job = await tx.paperlessTagJob.create({
+      data: {
+        policyId,
+        documentId: document.id,
+        kind: 'TAG_DOCUMENT',
+        status: 'PENDING',
+        configVersion: tagConfig.configVersion,
+      },
+    });
+
+    return { document: updated, tagJobId: job.id };
   }
 
   async findOne(householdId: string, user: AuthenticatedUser, policyId: string, docId: string) {
@@ -472,6 +568,30 @@ export class DocumentsService {
 
       if (!existing) {
         throw new NotFoundException('Document not found');
+      }
+
+      // AP-22: If the row carries both origins, only remove the manual link –
+      // the automatic assignment (linkOriginTag) must survive and the document
+      // stays visible until the next sync. Archive the row only when no
+      // automatic origin remains.
+      if (existing.linkOriginTag && existing.linkOriginManual) {
+        await tx.policyDocument.update({
+          where: { id: docId },
+          data: { linkOriginManual: false },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorUserId: userId,
+            entityType: 'PolicyDocument',
+            entityId: docId,
+            action: 'UNLINK_MANUAL',
+            diffJson: {
+              linkOriginManual: false,
+              linkOriginTag: existing.linkOriginTag,
+            },
+          },
+        });
+        return { success: true };
       }
 
       await tx.policyDocument.update({

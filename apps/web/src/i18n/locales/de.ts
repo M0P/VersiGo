@@ -259,6 +259,8 @@ export const de = {
     paperlessConnectTitle: 'Paperless-Dokumente verknüpfen',
     paperlessConnectBody:
       'Suchen Sie in Paperless-ngx und verknüpfen Sie Dokumente mit dieser Versicherung.',
+    paperlessLinkAddsTag:
+      'Dem verknüpften Dokument wird in Paperless-ngx zusätzlich der Tag „{tag}“ hinzugefügt.',
     paperlessSearchPlaceholder: 'In Paperless suchen...',
     paperlessSearchHint: 'Mindestens 2 Zeichen eingeben, um zu suchen.',
     paperlessNoResults: 'Keine passenden Dokumente gefunden.',
@@ -270,6 +272,69 @@ export const de = {
     paperlessAlreadyLinked: 'Bereits verbunden',
     paperlessOpenInPaperless: 'In Paperless öffnen',
     paperlessLinkedDocument: 'Paperless-Dokument',
+    // AP-22: tag-basierte Dokumentzuordnung
+    paperlessTagTitle: 'Paperless-ngx-Dokumentzuordnung',
+    paperlessTagBody:
+      'Alle Paperless-Dokumente mit dem hier gewählten Tag erscheinen automatisch bei dieser Versicherung.',
+    paperlessTagConnection: 'Verwendete Verbindung',
+    paperlessTagConnectionUnknown: 'Standardverbindung',
+    paperlessTagConnectionChanged:
+      'Die Paperless-Verbindung wurde geändert. Der bestehende Abgleich gehört zu einem anderen Server; die Zuordnung wird nicht automatisch übertragen. Bitte die Verbindung prüfen und den Tag neu zuordnen.',
+    paperlessTagSearchLabel: 'Tag suchen',
+    paperlessTagSearchPlaceholder: 'Vorhandenen Tag suchen...',
+    paperlessTagSearchHint: 'Mindestens 2 Zeichen eingeben. Es wird serverseitig in Paperless gesucht.',
+    paperlessTagNoResults: 'Kein passender Tag gefunden.',
+    paperlessTagSearchError: 'Die Tag-Suche ist derzeit nicht verfügbar.',
+    paperlessTagCreate: 'Neuen Tag erstellen',
+    paperlessTagCreateName: 'Name des neuen Tags',
+    paperlessTagCreateHint:
+      'Der Tag wird in Paperless-ngx angelegt. Ein Tag wird nur nach ausdrücklicher Bestätigung erstellt.',
+    paperlessTagCreateButton: 'Tag anlegen und zuordnen',
+    paperlessTagCreating: 'Lege Tag an…',
+    paperlessTagSelected: 'Zugeordneter Tag',
+    paperlessTagId: 'Externe Tag-ID',
+    paperlessTagChange: 'Tag wechseln',
+    paperlessTagRemove: 'Zuordnung entfernen',
+    paperlessTagRemoveConfirm:
+      'Automatische Zuordnung für diese Versicherung deaktivieren? Manuell verlinkte Dokumente bleiben erhalten. Der Tag und die Dokumente in Paperless-ngx werden nicht gelöscht.',
+    paperlessTagChangeWarning:
+      'Beim Wechsel werden die automatischen Zuordnungen anhand des neuen Tags neu ermittelt. Der alte Tag wird in Paperless-ngx nicht entfernt. Manuelle Verknüpfungen bleiben erhalten und erhalten zusätzlich den neuen Tag.',
+    paperlessTagSharedWarning:
+      'Hinweis: Derselbe Tag kann mehreren Versicherungen zugeordnet werden. Dann erscheinen dieselben Dokumente automatisch bei mehreren Versicherungen.',
+    paperlessTagLastSync: 'Letzter erfolgreicher Abgleich',
+    paperlessTagNeverSynced: 'Noch nicht abgeglichen',
+    paperlessTagRefresh: 'Jetzt aktualisieren',
+    paperlessTagRefreshing: 'Aktualisiere…',
+    paperlessTagLoadError: 'Die Paperless-Zuordnung konnte nicht geladen werden.',
+    paperlessTagSaveError: 'Die Paperless-Zuordnung konnte nicht gespeichert werden.',
+    paperlessTagSyncQueued: 'Abgleich wurde gestartet.',
+    paperlessTagStatusPENDING: 'Abgleich ausstehend',
+    paperlessTagStatusACTIVE: 'Aktiv',
+    paperlessTagStatusERROR: 'Fehler beim letzten Abgleich',
+    paperlessTagErrorTAG_DELETED: 'Der Tag existiert in Paperless-ngx nicht mehr.',
+    paperlessTagErrorAUTH_FAILED: 'Paperless-ngx hat den Zugriff abgelehnt (Berechtigungen prüfen).',
+    paperlessTagErrorNOT_CONFIGURED: 'Paperless-ngx ist nicht konfiguriert.',
+    paperlessTagErrorUNREACHABLE: 'Paperless-ngx ist derzeit nicht erreichbar.',
+    paperlessTagErrorSYNC_FAILED: 'Der Abgleich konnte nicht vollständig durchgeführt werden.',
+    paperlessTagErrorCONNECTION_CHANGED:
+      'Die Paperless-Verbindung wurde geändert. Bitte den Tag neu auswählen.',
+    paperlessTagErrorUnknown: 'Unbekannter Fehler beim Abgleich.',
+    paperlessTagPendingBadge: 'Tag-Zuweisung ausstehend',
+    paperlessTagFailedBadge: 'Tag-Zuweisung fehlgeschlagen',
+    paperlessTagFailedHint:
+      'Das Dokument bleibt manuell verlinkt. Die Tag-Zuweisung kann erneut angestoßen werden.',
+    paperlessTagRetry: 'Tag-Zuweisung wiederholen',
+    paperlessOriginAuto: 'Automatisch über Tag',
+    paperlessOriginManual: 'Manuell verlinkt',
+    paperlessOriginBoth: 'Automatisch über Tag und manuell verlinkt',
+    paperlessAutoManagedHint:
+      'Die automatische Zuordnung wird über den Tag in Paperless-ngx gesteuert und kann hier nicht einzeln entfernt werden.',
+    paperlessDeleteAutoConfirm:
+      'Dieses Dokument ist über den Paperless-Tag automatisch zugeordnet. Es erscheint wieder, solange es den Tag trägt. Manuelle Verknüpfungen bleiben erhalten. Fortfahren?',
+    paperlessDeleteManualConfirm:
+      'Manuelle Verknüpfung entfernen? Trägt das Dokument weiterhin den Versicherungs-Tag, bleibt es automatisch sichtbar. Der Tag wird nicht aus Paperless-ngx entfernt.',
+    paperlessDeleteBothConfirm:
+      'Dieses Dokument ist automatisch über den Tag und manuell verknüpft. Es wird nur die manuelle Verknüpfung entfernt; die automatische Zuordnung über den Tag bleibt. Der Tag wird nicht aus Paperless-ngx entfernt. Fortfahren?',
     // Portal links
     addPortalLink: 'Portal-Link hinzufügen',
     providerKey: 'Anbieter',

@@ -8,6 +8,19 @@ Kernfeature zur Verwaltung von Versicherungsverträgen, Versicherern, versichert
 
 ## 3. Documents
 Interne Dokumentenablage, Metadaten, Versionierung und Vorschau. Optionaler Adapter zu Paperless-ngx.
+- **AP-22:** Tag-basierte Paperless-Dokumentzuordnung. Je Versicherung kann ein
+  Paperless-Tag konfiguriert werden (`/households/:id/policies/:id/paperless-tag`);
+  alle Dokumente mit diesem Tag erscheinen automatisch bei der Versicherung.
+  Manuelle Verknüpfungen (BugFix-07) bleiben unverändert nutzbar und erhalten
+  zusätzlich den Tag. Die beiden Herkünfte `linkOriginManual` und
+  `linkOriginTag` sind unabhängig; das Entfernen der Tag-Konfiguration löscht
+  ausschließlich die automatische Herkunft. Der externe Abgleich läuft über
+  einen dauerhaften Outbox-Job (`paperless_tag_jobs`) + BullMQ-Queue
+  `paperless-tag-sync` im Worker. Jobs tragen die Konfigurationsversion und
+  werden bei Änderung/Entfernung des Tags verworfen (Stale-Schutz); ein
+  Teilfehler entfernt nie bestehende Zuordnungen. Weder Tag noch Dokumente
+  werden in Paperless gelöscht oder verändert, außer dem additiven Hinzufügen
+  des Tags zu manuell verknüpften Dokumenten.
 
 ## 4. Cost Tracking
 Pflege von Beiträgen, Zahlintervallen, Historien und Jahresauswertungen.

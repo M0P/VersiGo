@@ -143,7 +143,44 @@ Guidelines:
 - The files are only read at **build time** – changing them without a rebuild
   has no effect.
 
-## 10. Troubleshooting
+## 10. Paperless document assignment (optional)
+
+If you run a [Paperless-ngx](https://docs.paperless-ngx.com/) instance, VersiGo
+can show your Paperless documents directly in the policy context. Two ways
+exist and they can be combined:
+
+| Way | How it works |
+|-----|--------------|
+| **Manual link** | In a policy, open **Documents → Link Paperless document**, search Paperless and link a document. Only that one policy shows it. |
+| **Automatic via tag** | On the policy edit page, section **Paperless-ngx document assignment**, pick or create a tag. *Every* Paperless document carrying that tag appears automatically for the policy. |
+
+Setup:
+
+1. In `.env` (or in **Admin → Settings**) set `PAPERLESS_ENABLED=true`,
+   `PAPERLESS_URL` (for example `https://paperless.example.com`) and
+   `PAPERLESS_API_TOKEN` (create the token in Paperless under
+   *Settings → Users & Groups → My Profile → API Token*).
+2. Restart the stack (`docker compose up -d`).
+3. Open a policy, edit it and choose the tag under
+   **Paperless-ngx document assignment**.
+
+Good to know:
+
+- VersiGo **never deletes** anything in Paperless. It only *adds* the chosen
+  tag to the documents you linked manually.
+- The same tag may be used for several policies – the same documents then
+  appear for each of them.
+- The assignment is refreshed in the background (by default every 5 minutes,
+  `PAPERLESS_TAG_SYNC_INTERVAL_MS`). Use **Refresh now** to sync immediately.
+- Removing the tag assignment hides only the *automatically* assigned
+  documents. Documents you linked manually stay, and their tag stays in
+  Paperless.
+- If Paperless is unreachable, nothing is removed – the last known state is
+  kept and VersiGo retries automatically.
+- Documents that are *only* assigned through the tag cannot be deleted in
+  VersiGo; they disappear when the tag is removed in Paperless.
+
+## 11. Troubleshooting
 
 | Symptom | What to check |
 |---------|---------------|

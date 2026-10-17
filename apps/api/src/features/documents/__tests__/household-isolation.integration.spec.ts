@@ -17,11 +17,24 @@ function createMockDb() {
     insurancePolicy: { findFirst: ReturnType<typeof vi.fn> };
     policyDocument: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
     auditEvent: { create: ReturnType<typeof vi.fn> };
+    policyPaperlessTag: { findUnique: ReturnType<typeof vi.fn> };
+    paperlessTagJob: { create: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   } = {
     householdMembership: { findUnique: vi.fn() },
     insurancePolicy: { findFirst: vi.fn() },
-    policyDocument: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    policyDocument: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn((args: { where: { id: string }; data: Record<string, unknown> }) =>
+        Promise.resolve({ id: args.where.id, ...args.data }),
+      ),
+      delete: vi.fn(),
+    },
     auditEvent: { create: vi.fn() },
+    policyPaperlessTag: { findUnique: vi.fn() },
+    paperlessTagJob: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue(null) },
   };
   db.$transaction = vi.fn((cb: (tx: typeof db) => unknown) => cb(db));
   return db;
@@ -93,6 +106,8 @@ describe('Documents Household-Isolation (Integration)', () => {
       new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
       // BugFix-07 (Q3): Paperless adapter – only needed as a dummy here.
       { getDeepLink: vi.fn(), getDocumentMetadata: vi.fn(), syncDocument: vi.fn(), searchDocuments: vi.fn(), healthCheck: vi.fn() } as never,
+      // AP-22: durable tag-job outbox – dummy here.
+      { enqueue: vi.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

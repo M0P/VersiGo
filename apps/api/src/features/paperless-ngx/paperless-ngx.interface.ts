@@ -45,6 +45,56 @@ export interface PaperlessSearchResult {
   correspondent: string | null;
 }
 
+/** AP-22: summary of a Paperless tag (ID is the stable reference). */
+export interface PaperlessTagSummary {
+  tagId: number;
+  name: string;
+}
+
+/** AP-22: paginated page of tag search results. */
+export interface PaperlessTagPage {
+  items: PaperlessTagSummary[];
+  /** Page number of this page (1-based). */
+  page: number;
+  /** Total number of pages according to the API. */
+  pageCount: number;
+}
+
+/** AP-22: minimal document reference used by the tag sync. */
+export interface PaperlessTagDocumentRef {
+  paperlessId: number;
+  title: string | null;
+}
+
+/**
+ * AP-22: how the Paperless API reported a tag lookup failure. Lets the
+ * caller distinguish "missing permissions" from "really deleted".
+ */
+export type PaperlessTagLookupError =
+  | { kind: 'NOT_FOUND' }
+  | { kind: 'AUTH_FAILED' }
+  | { kind: 'UNREACHABLE' }
+  | { kind: 'NOT_CONFIGURED' };
+
+/** AP-22: result of a single tag lookup with explicit failure kind. */
+export type PaperlessTagLookupResult =
+  | { ok: true; tag: PaperlessTagSummary }
+  | { ok: false; error: PaperlessTagLookupError };
+
+/** AP-22: result of an additive tag assignment onto a document. */
+export interface PaperlessTagAssignmentResult {
+  success: boolean;
+  /** True only after the tag was verified present on the document. */
+  verified: boolean;
+  /**
+   * Non-sensitive error code (NOT_CONFIGURED, DOCUMENT_NOT_FOUND,
+   * AUTH_FAILED, VERIFY_FAILED, …). Kept identical to the worker client's
+   * `TagAssignmentResult.errorCode` so a stored `taggingErrorCode` means the
+   * same thing regardless of which process produced it.
+   */
+  errorCode?: string;
+}
+
 export interface IPaperlessAdapter {
   /**
    * Builds a deep link from a Paperless document reference.
@@ -70,6 +120,43 @@ export interface IPaperlessAdapter {
    * sets pagination should be implemented.
    */
   searchDocuments(query: string): Promise<PaperlessSearchResult[]>;
+
+  // --- AP-22: tag-based document assignment -------------------------------
+
+  /**
+   * Searches Paperless tags by name (paginated). An empty query lists all
+   * tags in stable (ID) order. Returns an empty page when Paperless is
+   * disabled/unreachable.
+   */
+  searchTags(query: string, page: number, pageSize: number): Promise<PaperlessTagPage>;
+
+  /**
+   * Fetches a single tag by its external ID. The result distinguishes
+   * NOT_FOUND (really deleted) from AUTH_FAILED (missing permissions)
+   * and UNREACHABLE (network/outage) so callers can react differently.
+   */
+  getTag(tagId: number): Promise<PaperlessTagLookupResult>;
+
+  /**
+   * Creates a new tag with the given name. Returns the created tag, or
+   * null on failure. When a tag with the identical name already exists,
+   * returns that existing tag instead of failing (idempotent).
+   */
+  createTag(name: string): Promise<PaperlessTagSummary | null>;
+
+  /**
+   * Lists all document IDs (with titles) carrying the given tag, walking
+   * ALL result pages in stable order. Returns null on any failure so the
+   * caller can keep the previous assignment state (no partial results).
+   */
+  listDocumentsByTag(tagId: number): Promise<PaperlessTagDocumentRef[] | null>;
+
+  /**
+   * Additively assigns a tag to a document (existing tags are preserved)
+   * and verifies the result by re-reading the document. A merely accepted
+   * job is NOT reported as success – only a verified tag presence is.
+   */
+  assignTagToDocument(paperlessDocumentId: number, tagId: number): Promise<PaperlessTagAssignmentResult>;
 
   /**
    * Checks the connection to the Paperless API.

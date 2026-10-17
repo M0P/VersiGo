@@ -17,14 +17,34 @@ function createMockDb() {
     insurancePolicy: { findFirst: ReturnType<typeof vi.fn> };
     policyDocument: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
     auditEvent: { create: ReturnType<typeof vi.fn> };
+    // AP-22: tag configuration + durable outbox
+    policyPaperlessTag: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+    paperlessTagJob: { create: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
   } = {
     householdMembership: { findUnique: vi.fn() },
     insurancePolicy: { findFirst: vi.fn() },
-    policyDocument: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    policyDocument: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      // Realistic default: a Prisma `update` returns the updated row.
+      update: vi.fn((args: { where: { id: string }; data: Record<string, unknown> }) =>
+        Promise.resolve({ id: args.where.id, ...args.data }),
+      ),
+      delete: vi.fn(),
+    },
     auditEvent: { create: vi.fn() },
+    policyPaperlessTag: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+    paperlessTagJob: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue(null), updateMany: vi.fn() },
   };
   db.$transaction = vi.fn((cb: (tx: typeof db) => unknown) => cb(db));
   return db;
+}
+
+/** AP-22: mock of the PaperlessTagService (durable job enqueue). */
+function createMockPaperlessTags() {
+  return { enqueue: vi.fn().mockResolvedValue(undefined) };
 }
 
 function createMockConfig() {
@@ -46,6 +66,12 @@ function createMockPaperless() {
     syncDocument: vi.fn(),
     searchDocuments: vi.fn().mockResolvedValue([]),
     healthCheck: vi.fn().mockResolvedValue(false),
+    // AP-22: tag catalogue (not used by DocumentsService).
+    searchTags: vi.fn().mockResolvedValue({ items: [], page: 1, pageCount: 0 }),
+    getTag: vi.fn(),
+    createTag: vi.fn(),
+    listDocumentsByTag: vi.fn(),
+    assignTagToDocument: vi.fn(),
   };
 }
 
@@ -84,6 +110,7 @@ describe('DocumentsService', () => {
       createMockConfig() as never,
       new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
       createMockPaperless(),
+      createMockPaperlessTags() as never,
     );
   });
 
@@ -258,6 +285,7 @@ describe('DocumentsService', () => {
         createMockConfig() as never,
         new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
         paperless,
+        createMockPaperlessTags() as never,
       );
       mockDb.policyDocument.findFirst.mockResolvedValue(null);
       mockDb.policyDocument.create.mockResolvedValue({
@@ -306,8 +334,16 @@ describe('DocumentsService', () => {
         createMockConfig() as never,
         new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
         paperless,
+        createMockPaperlessTags() as never,
       );
-      const existing = { id: 'link-1', policyId, storageType: 'PAPERLESS_LINK', storageRef: '42' };
+      const existing = {
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+        // AP-22: already recorded as a manual link – re-linking is a no-op.
+        linkOriginManual: true,
+      };
       mockDb.policyDocument.findFirst.mockResolvedValue(existing);
 
       const result = await serviceWithPaperless.linkPaperlessDocument(householdId, userId, policyId, 42);
@@ -326,6 +362,7 @@ describe('DocumentsService', () => {
         createMockConfig() as never,
         new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
         paperless,
+        createMockPaperlessTags() as never,
       );
 
       await expect(
@@ -352,13 +389,21 @@ describe('DocumentsService', () => {
         createMockConfig() as never,
         new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
         paperless,
+        createMockPaperlessTags() as never,
       );
 
       // Check-then-insert: the first check (inside the transaction) finds
       // nothing; the parallel request wins the race and causes a P2002 on
       // create (partial unique index from the migration
       // 20260806140000_bugfix07_paperless_link_dedupe).
-      const existing = { id: 'link-1', policyId, storageType: 'PAPERLESS_LINK', storageRef: '42' };
+      const existing = {
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+        // AP-22: already recorded as a manual link – re-linking is a no-op.
+        linkOriginManual: true,
+      };
       mockDb.policyDocument.findFirst
         .mockResolvedValueOnce(null) // transaction check: nothing present
         .mockResolvedValueOnce(existing); // P2002-Rueckgriff: Sieger gefunden
@@ -462,6 +507,33 @@ describe('DocumentsService', () => {
         service.remove(householdId, userId, policyId, docId),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('AP-22: only unlinks the manual origin when the document is also tag-assigned', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: docId,
+        policyId,
+        archivedAt: null,
+        linkOriginManual: true,
+        linkOriginTag: true,
+      });
+      mockDb.policyDocument.update.mockResolvedValue({ id: docId, linkOriginManual: false });
+
+      const result = await service.remove(householdId, userId, policyId, docId);
+
+      expect(result.success).toBe(true);
+      // The row must survive – only the manual link is removed.
+      expect(mockDb.policyDocument.update).toHaveBeenCalledWith({
+        where: { id: docId },
+        data: { linkOriginManual: false },
+      });
+      expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ entityId: docId, action: 'UNLINK_MANUAL' }),
+        }),
+      );
+    });
   });
 
   describe('Household-Isolation', () => {
@@ -495,6 +567,174 @@ describe('DocumentsService', () => {
       await expect(
         service.remove(householdId, userId, policyId, docId),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  // AP-22: manual links additionally receive the configured Paperless tag.
+  describe('linkPaperlessDocument – tag assignment (AP-22)', () => {
+    function setupPaperless(title = 'KFZ-Versicherung 2026') {
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue({
+        title,
+        tags: [],
+        correspondent: null,
+        documentType: null,
+        notes: null,
+        createdAt: null,
+        modifiedAt: null,
+      });
+      return paperless;
+    }
+
+    function buildService(paperless: ReturnType<typeof createMockPaperless>, tags = createMockPaperlessTags()) {
+      const svc = new DocumentsService(
+        mockDb as never,
+        createMockConfig() as never,
+        new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+        paperless as never,
+        tags as never,
+      );
+      return { svc, tags };
+    }
+
+    beforeEach(() => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findFirst.mockResolvedValue(null);
+    });
+
+    it('records the manual origin but creates no job when no tag is configured', async () => {
+      mockDb.policyPaperlessTag.findUnique.mockResolvedValue(null);
+      mockDb.policyDocument.create.mockResolvedValue({ id: 'link-1', policyId });
+      const { svc, tags } = buildService(setupPaperless());
+
+      const result = await svc.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      expect(mockDb.policyDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ linkOriginManual: true }),
+        }),
+      );
+      expect(mockDb.paperlessTagJob.create).not.toHaveBeenCalled();
+      expect(tags.enqueue).not.toHaveBeenCalled();
+      expect(result.id).toBe('link-1');
+    });
+
+    it('creates a durable TAG_DOCUMENT job and marks the tagging as pending when a tag exists', async () => {
+      mockDb.policyPaperlessTag.findUnique.mockResolvedValue({ policyId, configVersion: 4 });
+      mockDb.policyDocument.create.mockResolvedValue({ id: 'link-1', policyId });
+      mockDb.paperlessTagJob.findFirst.mockResolvedValue(null);
+      mockDb.paperlessTagJob.create.mockResolvedValue({ id: 'job-1' });
+      const { svc, tags } = buildService(setupPaperless());
+
+      await svc.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      expect(mockDb.policyDocument.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'link-1' },
+          data: expect.objectContaining({ linkOriginManual: true, taggingStatus: 'PENDING' }),
+        }),
+      );
+      expect(mockDb.paperlessTagJob.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            policyId,
+            documentId: 'link-1',
+            kind: 'TAG_DOCUMENT',
+            status: 'PENDING',
+            configVersion: 4,
+          }),
+        }),
+      );
+      // Enqueued only after the transaction committed.
+      expect(tags.enqueue).toHaveBeenCalledWith('tag-document', 'job-1', policyId);
+    });
+
+    it('reuses an already pending assignment instead of creating a duplicate job', async () => {
+      mockDb.policyPaperlessTag.findUnique.mockResolvedValue({ policyId, configVersion: 4 });
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+        linkOriginManual: false,
+        taggingStatus: 'PENDING',
+      });
+      mockDb.paperlessTagJob.findFirst.mockResolvedValue({ id: 'job-existing', status: 'PENDING' });
+      const { svc, tags } = buildService(setupPaperless());
+
+      const result = await svc.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      expect(mockDb.paperlessTagJob.create).not.toHaveBeenCalled();
+      expect(tags.enqueue).not.toHaveBeenCalled();
+      expect(result.id).toBe('link-1');
+    });
+
+    it('round-5 fix: an APPLIED row is still re-assigned because the state is not tag-version aware', async () => {
+      mockDb.policyPaperlessTag.findUnique.mockResolvedValue({ policyId, configVersion: 4 });
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+        linkOriginManual: true,
+        taggingStatus: 'APPLIED',
+      });
+      mockDb.paperlessTagJob.findFirst.mockResolvedValue(null);
+      mockDb.policyDocument.update.mockResolvedValue({ id: 'link-1' });
+      mockDb.paperlessTagJob.create.mockResolvedValue({ id: 'job-1' });
+      const { svc, tags } = buildService(setupPaperless());
+
+      await svc.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      // `APPLIED` only records that *some* earlier sync applied a tag; it does
+      // not prove the currently configured tag is present (the manual origin
+      // may have been dropped, in which case setTag's reset no longer matches
+      // the row). The durable assignment is therefore queued again and the
+      // worker's assignTagToDocument is the cheap no-op path.
+      expect(mockDb.policyDocument.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'link-1' },
+          data: expect.objectContaining({ taggingStatus: 'PENDING' }),
+        }),
+      );
+      expect(mockDb.paperlessTagJob.create).toHaveBeenCalled();
+      expect(tags.enqueue).toHaveBeenCalledWith('tag-document', 'job-1', policyId);
+    });
+
+    it('round-4 fix: a tag-origin row is not assumed to carry the *current* tag', async () => {
+      mockDb.policyPaperlessTag.findUnique.mockResolvedValue({ policyId, configVersion: 4 });
+      // The row was created by a sync of some tag; that does not prove the
+      // currently configured tag (or connection) is the same one.
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+        linkOriginManual: false,
+        linkOriginTag: true,
+        taggingStatus: null,
+      });
+      mockDb.paperlessTagJob.findFirst.mockResolvedValue(null);
+      mockDb.policyDocument.update.mockResolvedValue({ id: 'link-1' });
+      mockDb.paperlessTagJob.create.mockResolvedValue({ id: 'job-1' });
+      const { svc, tags } = buildService(setupPaperless());
+
+      await svc.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      // The assignment is queued for the current tag; the worker's
+      // assignTagToDocument is the cheap no-op path when the tag is present.
+      expect(mockDb.policyDocument.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'link-1' },
+          data: expect.objectContaining({
+            linkOriginManual: true,
+            taggingStatus: 'PENDING',
+          }),
+        }),
+      );
+      expect(mockDb.paperlessTagJob.create).toHaveBeenCalled();
+      expect(tags.enqueue).toHaveBeenCalledWith('tag-document', 'job-1', policyId);
     });
   });
 });
