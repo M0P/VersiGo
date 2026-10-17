@@ -118,6 +118,37 @@ Mögliche Modi:
   (`POLICY_ARCHIVED`), der periodische Abgleich überspringt archivierte
   Policen. Beim harten Löschen entfernt der Fremdschlüssel
   (`ON DELETE CASCADE`) Konfiguration und Job-Zeilen.
+- **Kein Live-Abruf der Dokumentliste (BugFix-21):** Der Deep-Link wird im
+  Adapter ausschließlich lokal aus der effektiven `PAPERLESS_URL` berechnet
+  (`PaperlessNgxService.getDeepLink` ruft Paperless **nicht** auf). Zuvor las
+  die Dokumentliste pro verknüpftem Dokument `GET /api/documents/:id/` – das
+  Öffnen einer Versicherung erzeugte damit N Paperless-Anfragen. Preis dieser
+  Änderung: der Link wird auch für ein in Paperless gelöschtes Dokument
+  angezeigt (er führt dann ins Leere).
+- **Metadaten aus dem Abgleich (BugFix-21):** Der Tag-Abgleich liest
+  `id, title, created, mime_type` (`PaperlessTagClient.listDocumentsByTag`);
+  lehnt eine Instanz diese Feldliste ab, fällt der Aufruf auf `id, title`
+  zurück, damit der Sync nicht scheitert. Automatisch über den Tag zugeordnete
+  Dokumente werden bei jedem Sync aktualisiert (Titel, `documentDate`,
+  `mimeType`); manuell verknüpfte Dokumente werden nur **lückenhaft ergänzt**
+  (vorhandene Werte werden nie überschrieben). Zusätzlich speichert die
+  manuelle Verknüpfung den MIME-Typ (`documents.service.ts`).
+  **Bekannte Grenze:** Für Dokumente, die vor BugFix-21 automatisch zugeordnet
+  wurden, fehlen Datum und MIME-Typ, bis der erste erfolgreiche Abgleich
+  gelaufen ist.
+- **Anzeige in der Dokumentliste:** Pro Dokument zeigt die UI den Dokumenttyp
+  als Symbol (PDF/Bild/Dokument/Tabelle/sonstiges, `apps/web/src/lib/document-type.ts`),
+  das Dokumentdatum und – bei verknüpften Dokumenten – die URL des Dokuments in
+  Paperless. Der Upload-Zeitstempel wird nicht mehr angezeigt; die Bezeichnung
+  „Paperless-Dokument“ erscheint nur noch einmal pro Zeile.
+  Beim manuellen Verknüpfen werden noch fehlende Metadaten (`mimeType`,
+  `documentDate`) eines bereits vorhandenen Eintrags ergänzt; vorhandene Werte
+  werden nie überschrieben.
+  **Bewusste Grenze:** Für automatisch über den Tag zugeordnete Dokumente
+  bestimmt Paperless die Metadaten (Titel, Datum, MIME-Typ). Werden sie über die
+  API (`PATCH …/documents/:id`, z. B. Umbenennen) geändert, überschreibt der
+  nächste Abgleich diese Änderung wieder. Eine manuelle Verknüpfung
+  (`linkOriginManual`) ist davon nicht betroffen.
 
 ## Versicherungsportale
 Technisch realistisch in Stufen:

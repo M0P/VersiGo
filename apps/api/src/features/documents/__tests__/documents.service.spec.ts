@@ -279,6 +279,9 @@ describe('DocumentsService', () => {
         notes: null,
         createdAt: '2026-01-15T10:00:00.000Z',
         modifiedAt: null,
+        // BugFix-21: the MIME type is persisted so the UI can show a
+        // document-type icon without querying Paperless again.
+        mimeType: 'application/pdf',
       });
       const serviceWithPaperless = new DocumentsService(
         mockDb as never,
@@ -313,6 +316,8 @@ describe('DocumentsService', () => {
             storageType: 'PAPERLESS_LINK',
             storageRef: '42',
             category: 'Vertrag',
+            // BugFix-21: MIME type from Paperless (drives the type icon).
+            mimeType: 'application/pdf',
           }),
         }),
       );
@@ -320,6 +325,40 @@ describe('DocumentsService', () => {
       expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ action: 'PAPERLESS_LINK_CREATED' }),
+        }),
+      );
+    });
+
+    it('persists no document date when Paperless reports an unusable one (BugFix-21 review #3)', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue({
+        title: 'KFZ-Versicherung 2026',
+        tags: [],
+        correspondent: null,
+        documentType: null,
+        notes: null,
+        createdAt: 'not-a-date',
+        modifiedAt: null,
+        mimeType: 'application/pdf',
+      });
+      const serviceWithPaperless = new DocumentsService(
+        mockDb as never,
+        createMockConfig() as never,
+        new AuthService(mockDb as never, { hash: vi.fn(), verify: vi.fn() } as never),
+        paperless,
+        createMockPaperlessTags() as never,
+      );
+      mockDb.policyDocument.findFirst.mockResolvedValue(null);
+      mockDb.policyDocument.create.mockResolvedValue({ id: 'link-1', policyId });
+
+      await serviceWithPaperless.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      // An invalid external date is dropped instead of being persisted.
+      expect(mockDb.policyDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ documentDate: null }),
         }),
       );
     });
@@ -601,6 +640,112 @@ describe('DocumentsService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyDocument.findFirst.mockResolvedValue(null);
+    });
+
+    it('fills missing metadata of an existing link when no tag is configured (BugFix-21 review #1)', async () => {
+      mockDb.policyPaperlessTag.findUnique.mockResolvedValue(null);
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue({
+        title: 'KFZ-Versicherung 2026',
+        tags: [],
+        correspondent: null,
+        documentType: null,
+        notes: null,
+        createdAt: '2026-05-02T00:00:00.000Z',
+        modifiedAt: null,
+        mimeType: 'application/pdf',
+      });
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+        linkOriginManual: true,
+        // Linked before the metadata sync existed – both fields are still NULL.
+        mimeType: null,
+        documentDate: null,
+      });
+      mockDb.policyDocument.update.mockResolvedValue({ id: 'link-1', policyId });
+      const { svc, tags } = buildService(paperless);
+
+      const result = await svc.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      // Only the gaps are written; the user's own title/fileName is untouched.
+      expect(mockDb.policyDocument.update).toHaveBeenCalledWith({
+        where: { id: 'link-1' },
+        data: {
+          mimeType: 'application/pdf',
+          documentDate: new Date('2026-05-02T00:00:00.000Z'),
+        },
+      });
+      expect(mockDb.policyDocument.create).not.toHaveBeenCalled();
+      expect(tags.enqueue).not.toHaveBeenCalled();
+      expect(result.id).toBe('link-1');
+    });
+
+    it('never overwrites metadata that is already present', async () => {
+      mockDb.policyPaperlessTag.findUnique.mockResolvedValue(null);
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue({
+        title: 'KFZ-Versicherung 2026',
+        tags: [],
+        correspondent: null,
+        documentType: null,
+        notes: null,
+        createdAt: '2026-05-02T00:00:00.000Z',
+        modifiedAt: null,
+        mimeType: 'application/pdf',
+      });
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+        linkOriginManual: true,
+        mimeType: 'image/png',
+        documentDate: new Date('2020-01-01T00:00:00.000Z'),
+      });
+      const { svc } = buildService(paperless);
+
+      await svc.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      // Nothing to fill -> the idempotent path must not write at all.
+      expect(mockDb.policyDocument.update).not.toHaveBeenCalled();
+      expect(mockDb.policyDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('skips an unusable Paperless date instead of persisting it (BugFix-21 review #2)', async () => {
+      mockDb.policyPaperlessTag.findUnique.mockResolvedValue(null);
+      const paperless = createMockPaperless();
+      paperless.getDocumentMetadata.mockResolvedValue({
+        title: 'KFZ-Versicherung 2026',
+        tags: [],
+        correspondent: null,
+        documentType: null,
+        notes: null,
+        createdAt: 'not-a-date',
+        modifiedAt: null,
+        mimeType: 'application/pdf',
+      });
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: 'link-1',
+        policyId,
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+        linkOriginManual: true,
+        mimeType: null,
+        documentDate: null,
+      });
+      mockDb.policyDocument.update.mockResolvedValue({ id: 'link-1', policyId });
+      const { svc } = buildService(paperless);
+
+      await svc.linkPaperlessDocument(householdId, userId, policyId, 42);
+
+      // The MIME type is filled, the unusable date is not written at all.
+      expect(mockDb.policyDocument.update).toHaveBeenCalledWith({
+        where: { id: 'link-1' },
+        data: { mimeType: 'application/pdf' },
+      });
     });
 
     it('records the manual origin but creates no job when no tag is configured', async () => {

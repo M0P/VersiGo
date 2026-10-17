@@ -27,6 +27,8 @@ interface PaperlessApiDocument {
   notes: Array<{ note: string }> | null;
   created: string;
   modified: string;
+  /** BugFix-21: reported by Paperless; may be absent on legacy servers. */
+  mime_type?: string | null;
 }
 
 interface PaperlessApiCorrespondent {
@@ -293,13 +295,16 @@ export class PaperlessNgxService implements IPaperlessAdapter {
     }
   }
 
+  /**
+   * BugFix-21: the deep link is derived locally from the configured base URL
+   * instead of reading the document from Paperless first. The document list
+   * called this method once per linked document on every load, which turned
+   * opening a policy's documents into N Paperless requests.
+   */
   async getDeepLink(paperlessId: number): Promise<string | null> {
     if (!(await this.isConfigured())) return null;
 
-    const doc = await this.get<PaperlessApiDocument>(`/documents/${paperlessId}/`);
-    if (!doc) return null;
-
-    return this.buildDeepLink(doc.id);
+    return this.buildDeepLink(paperlessId);
   }
 
   async getDocumentMetadata(paperlessId: number): Promise<PaperlessDocumentMetadata | null> {
@@ -333,6 +338,8 @@ export class PaperlessNgxService implements IPaperlessAdapter {
       notes: notesText,
       createdAt: doc.created ?? null,
       modifiedAt: doc.modified ?? null,
+      // BugFix-21: only a real string counts as a MIME type.
+      mimeType: typeof doc.mime_type === 'string' ? doc.mime_type : null,
     };
   }
 
@@ -646,6 +653,19 @@ export class PaperlessNgxService implements IPaperlessAdapter {
   private static readonly MAX_TAG_SYNC_PAGES = 50;
   private static readonly TAG_SYNC_PAGE_SIZE = 100;
 
+  /**
+   * AP-22: lists document references carrying a tag. Currently unused by
+   * production code; the tag sync runs through the worker client.
+   *
+   * NOTE (BugFix-21 review #1): the tag sync in production runs exclusively
+   * through the worker's `PaperlessTagClient.listDocumentsByTag`, which
+   * requests `id,title,created,mime_type`. This API-side counterpart is kept
+   * for interface/DI compatibility and still uses the minimal `id,title` field
+   * list – switching the sync over to it would silently drop the document
+   * date and MIME type (`createdAt`/`mimeType` are therefore also absent from
+   * `PaperlessTagDocumentRef`). Do not use it as a sync source without
+   * extending the field list.
+   */
   async listDocumentsByTag(tagId: number): Promise<PaperlessTagDocumentRef[] | null> {
     if (!(await this.isConfigured())) return null;
 

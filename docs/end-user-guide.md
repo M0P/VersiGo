@@ -179,6 +179,13 @@ Good to know:
   kept and VersiGo retries automatically.
 - Documents that are *only* assigned through the tag cannot be deleted in
   VersiGo; they disappear when the tag is removed in Paperless.
+- Every document row shows the document type as an icon, the document date and
+  – for linked Paperless documents – the document URL in Paperless. The upload
+  timestamp is not shown.
+- VersiGo does **not** ask Paperless every time you open the document list; it
+  shows the metadata stored by the last sync. Data of newly tagged documents
+  therefore appears after the next sync (or right away if you use
+  **Refresh now**).
 
 ## 11. Troubleshooting
 

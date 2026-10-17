@@ -28,6 +28,11 @@ export interface PaperlessDocumentMetadata {
   notes: string | null;
   createdAt: string | null;
   modifiedAt: string | null;
+  /**
+   * BugFix-21: MIME type reported by Paperless. Stored with a manual link so
+   * the UI can show a document-type icon without querying Paperless again.
+   */
+  mimeType: string | null;
 }
 
 export interface PaperlessSyncResult {
@@ -65,7 +70,6 @@ export interface PaperlessTagDocumentRef {
   paperlessId: number;
   title: string | null;
 }
-
 /**
  * AP-22: how the Paperless API reported a tag lookup failure. Lets the
  * caller distinguish "missing permissions" from "really deleted".
@@ -122,8 +126,15 @@ export interface PaperlessTagAssignmentResult {
 
 export interface IPaperlessAdapter {
   /**
-   * Builds a deep link from a Paperless document reference.
-   * Returns null if the document does not exist in Paperless.
+   * Builds the deep link of a Paperless document from the configured base
+   * URL.
+   *
+   * BugFix-21: this is a pure local computation – it performs **no**
+   * Paperless request. Documents are listed from the locally synced state,
+   * so opening the document list must never trigger one API call per
+   * document. The link is therefore also returned for a document that has
+   * been removed from Paperless (the link then simply leads nowhere).
+   * Returns null when Paperless is not configured.
    */
   getDeepLink(paperlessId: number): Promise<string | null>;
 

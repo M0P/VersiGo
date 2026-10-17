@@ -281,6 +281,12 @@ export const en = {
     paperlessAlreadyLinked: 'Already linked',
     paperlessOpenInPaperless: 'Open in Paperless',
     paperlessLinkedDocument: 'Paperless document',
+    // BugFix-21: document type as icon (accessible name)
+    documentTypeKindPdf: 'PDF',
+    documentTypeKindImage: 'Image',
+    documentTypeKindDocument: 'Document',
+    documentTypeKindSpreadsheet: 'Spreadsheet',
+    documentTypeKindOther: 'File',
     // AP-22: tag-based document assignment
     paperlessTagTitle: 'Paperless-ngx document assignment',
     paperlessTagBody:

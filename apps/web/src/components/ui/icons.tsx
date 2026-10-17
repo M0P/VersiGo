@@ -13,7 +13,13 @@ export type IconName =
   | 'admin'
   | 'users'
   | 'audit'
-  | 'monitoring';
+  | 'monitoring'
+  // BugFix-21: document types in the document list.
+  | 'filePdf'
+  | 'fileImage'
+  | 'fileDocument'
+  | 'fileSpreadsheet'
+  | 'fileGeneric';
 
 const ICON_PATHS: Record<IconName, string> = {
   home: 'M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5',
@@ -32,6 +38,13 @@ const ICON_PATHS: Record<IconName, string> = {
   // Audit-Log: Dokument/Liste mit Zeile (Ereignisprotokoll)
   audit:
     'M8 2h8v3H8V2ZM4 5h16v17H4V5Zm4 4v2m8-2v2m-8 5h8M4 9h2m12 0h2',
+  // BugFix-21: Dokumenttypen (Blatt mit umgeknickter Ecke + Typ-Merkmal)
+  fileGeneric: 'M6 2h8l4 4v16H6V2Zm8 0v4h4',
+  fileDocument: 'M6 2h8l4 4v16H6V2Zm8 0v4h4M9 12h6M9 15h6M9 18h4',
+  fileSpreadsheet: 'M6 2h8l4 4v16H6V2Zm8 0v4h4M8.5 13h7M8.5 17h7M12 11v10',
+  fileImage:
+    'M6 2h8l4 4v16H6V2Zm8 0v4h4M8.6 17.2l2.4-3.2 2 2.5 1.1-1.2 1.5 1.9H8.6ZM14.4 13.6a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Z',
+  filePdf: 'M6 2h8l4 4v16H6V2Zm8 0v4h4M10 18.5v-5h1.5a1.5 1.5 0 0 1 0 3H10',
   // Monitoring: Puls-/EKG-Linie (Betriebsstatus)
   monitoring:
     'M2 12h4l3-7 4 14 3-7h6',

@@ -135,24 +135,28 @@ describe('PaperlessNgxService', () => {
   });
 
   describe('getDeepLink', () => {
-    it('returns the deep-link URL for an existing document', async () => {
-      mockHttp.get = vi.fn().mockReturnValue(
-        of({
-          data: { id: 42, title: 'Testdokument.pdf' },
-        }),
-      );
+    // BugFix-21: the deep link is derived locally from the configured base
+    // URL. Loading the document list must never trigger a Paperless request
+    // per document.
+    it('builds the deep-link URL without any Paperless request', async () => {
+      mockHttp.get = vi.fn();
+      mockHttp.request = vi.fn();
 
       const result = await service.getDeepLink(42);
+
       expect(result).toBe('http://paperless:8000/documents/42/');
+      expect(mockHttp.get).not.toHaveBeenCalled();
+      expect(mockHttp.request).not.toHaveBeenCalled();
     });
 
-    it('returns null for a missing document', async () => {
+    it('builds the same link for a document that no longer exists', async () => {
       mockHttp.get = vi.fn().mockReturnValue(
         throwError(() => new AxiosError('Not Found', 'ERR_BAD_REQUEST', undefined, undefined, { data: {}, status: 404, statusText: 'Not Found', headers: {}, config: {} } as AxiosResponse)),
       );
 
       const result = await service.getDeepLink(42);
-      expect(result).toBeNull();
+      expect(result).toBe('http://paperless:8000/documents/42/');
+      expect(mockHttp.get).not.toHaveBeenCalled();
     });
 
     it('returns null when disabled', async () => {
@@ -180,6 +184,7 @@ describe('PaperlessNgxService', () => {
               notes: [{ note: 'Wichtiger Hinweis' }],
               created: '2024-01-15T10:00:00Z',
               modified: '2024-06-20T12:00:00Z',
+              mime_type: 'application/pdf',
             },
           });
         }
@@ -207,6 +212,34 @@ describe('PaperlessNgxService', () => {
       expect(result!.documentType).toBe('Versicherungsschein');
       expect(result!.notes).toBe('Wichtiger Hinweis');
       expect(result!.createdAt).toBe('2024-01-15T10:00:00Z');
+      // BugFix-21: the MIME type is stored with a manual link and drives the
+      // document-type icon in the UI.
+      expect(result!.mimeType).toBe('application/pdf');
+    });
+
+    it('reports a missing MIME type as null (BugFix-21)', async () => {
+      mockHttp.get = vi.fn().mockImplementation((url: string) => {
+        if (url === 'http://paperless:8000/api/documents/42/') {
+          return of({
+            data: {
+              id: 42,
+              title: 'Ohne Typ',
+              tags: [],
+              correspondent: null,
+              document_type: null,
+              notes: null,
+              created: '2024-01-15T10:00:00Z',
+              modified: '2024-06-20T12:00:00Z',
+            },
+          });
+        }
+        return of({ data: {} });
+      });
+
+      const result = await service.getDocumentMetadata(42);
+
+      expect(result).not.toBeNull();
+      expect(result!.mimeType).toBeNull();
     });
 
     it('returns null on API error', async () => {

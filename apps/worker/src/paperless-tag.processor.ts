@@ -19,6 +19,80 @@ interface TagJobData {
 }
 
 /**
+ * BugFix-21: metadata of an already existing tag link, as far as the
+ * reconciliation needs it to decide what to write.
+ */
+export interface ExistingTagLinkMetadata {
+  linkOriginManual: boolean;
+  fileName: string | null;
+  documentDate: Date | null;
+  mimeType: string | null;
+}
+
+/** BugFix-21: the metadata fields the sync writes for one document. */
+export interface TagLinkMetadataUpdate {
+  fileName?: string;
+  documentDate?: Date;
+  mimeType?: string;
+}
+
+/**
+ * BugFix-21: parses a Paperless date/time string. Unusable values yield null
+ * so no garbage date is stored (the UI then simply shows no date).
+ */
+export function parsePaperlessDate(value: string | null | undefined): Date | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * BugFix-21: derives the metadata the sync writes for one tag document.
+ *
+ * Paperless is the source of truth for documents the sync manages on its own
+ * (`!linkOriginManual`): a rename, a corrected document date or a changed MIME
+ * type in Paperless is propagated on the next sync. For a document with a
+ * manual origin the user's values win and only genuinely missing values are
+ * filled – editing a linked document in VersiGo must never be undone by the
+ * background sync.
+ */
+export function deriveTagLinkMetadata(
+  remote: TagDocumentRef,
+  existing: ExistingTagLinkMetadata | null,
+): TagLinkMetadataUpdate {
+  const autoManaged = existing === null || !existing.linkOriginManual;
+  const update: TagLinkMetadataUpdate = {};
+
+  const title = remote.title?.trim();
+  if (title) {
+    const current = (existing?.fileName ?? '').trim();
+    if (autoManaged ? current !== title : current.length === 0) {
+      update.fileName = title;
+    }
+  }
+
+  const documentDate = parsePaperlessDate(remote.createdAt);
+  if (documentDate) {
+    const current = existing?.documentDate ?? null;
+    const mayWrite = autoManaged || current === null;
+    if (mayWrite && (current === null || current.getTime() !== documentDate.getTime())) {
+      update.documentDate = documentDate;
+    }
+  }
+
+  const mimeType = remote.mimeType?.trim();
+  if (mimeType) {
+    const current = existing?.mimeType ?? null;
+    const mayWrite = autoManaged || current === null;
+    if (mayWrite && current !== mimeType) {
+      update.mimeType = mimeType;
+    }
+  }
+
+  return update;
+}
+
+/**
  * AP-22: worker processor for the tag-based Paperless document assignment.
  *
  * Design notes:
@@ -292,7 +366,17 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
 
     const localLinks = await this.db.policyDocument.findMany({
       where: { policyId, storageType: 'PAPERLESS_LINK', archivedAt: null },
-      select: { id: true, storageRef: true, linkOriginManual: true, linkOriginTag: true },
+      select: {
+        id: true,
+        storageRef: true,
+        linkOriginManual: true,
+        linkOriginTag: true,
+        // BugFix-21: the current metadata decides whether the sync may
+        // refresh it (automatically managed) or only fill gaps.
+        fileName: true,
+        documentDate: true,
+        mimeType: true,
+      },
     });
     const localByRef = new Map<string, (typeof localLinks)[number]>();
     for (const link of localLinks) {
@@ -310,24 +394,35 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
 
       const existing = localByRef.get(ref);
       if (existing) {
-        if (!existing.linkOriginTag) {
+        // BugFix-21: refresh the Paperless-derived metadata of automatically
+        // managed documents and fill gaps of manually linked ones. Nothing is
+        // written when nothing changed, so a no-op sync stays cheap.
+        const data: TagLinkMetadataUpdate & { linkOriginTag?: boolean } = {
+          ...deriveTagLinkMetadata(remoteDoc, existing),
+        };
+        if (!existing.linkOriginTag) data.linkOriginTag = true;
+
+        if (Object.keys(data).length > 0) {
           await this.db.policyDocument.update({
             where: { id: existing.id },
-            data: { linkOriginTag: true },
+            data,
           });
         }
         continue;
       }
 
+      const metadata = deriveTagLinkMetadata(remoteDoc, null);
       try {
         await this.db.policyDocument.create({
           data: {
             policyId,
             storageType: 'PAPERLESS_LINK',
-            fileName: remoteDoc.title?.trim() || `Paperless document ${ref}`,
+            fileName: metadata.fileName || `Paperless document ${ref}`,
             storageRef: ref,
             linkOriginTag: true,
             linkOriginManual: false,
+            ...(metadata.documentDate ? { documentDate: metadata.documentDate } : {}),
+            ...(metadata.mimeType ? { mimeType: metadata.mimeType } : {}),
           },
         });
       } catch (err) {

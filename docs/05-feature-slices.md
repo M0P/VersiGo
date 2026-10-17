@@ -27,6 +27,15 @@ Interne Dokumentenablage, Metadaten, Versionierung und Vorschau. Optionaler Adap
   `PAPERLESS_UNREACHABLE`, `PAPERLESS_TAG_SEARCH_FAILED`,
   `PAPERLESS_TAG_CREATE_FAILED`) statt eine leere Trefferliste oder einen
   generischen Fehler ohne Ursache zu zeigen.
+- **BugFix-21:** Die Dokumentliste lädt Paperless-Dokumente nicht mehr live –
+  der Deep-Link wird lokal aus der konfigurierten `PAPERLESS_URL` berechnet.
+  Der gesteuerte Abgleich (periodisch über `PAPERLESS_TAG_SYNC_INTERVAL_MS`,
+  manuell über „Jetzt aktualisieren“) bleibt bestehen und speichert jetzt
+  zusätzlich Titel, Dokumentdatum und MIME-Typ; manuell verknüpfte Dokumente
+  werden dabei nur lückenhaft ergänzt, nicht überschrieben. Die Dokumentliste
+  zeigt Dokumenttyp (Symbol), Dokumentdatum und die Paperless-URL, nicht mehr
+  den Upload-Zeitstempel, und benennt „Paperless-Dokument“ nur noch einmal je
+  Zeile.
 
 ## 4. Cost Tracking
 Pflege von Beiträgen, Zahlintervallen, Historien und Jahresauswertungen.

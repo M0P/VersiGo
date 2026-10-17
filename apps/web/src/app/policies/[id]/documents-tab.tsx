@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactElement, type FormEvent } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icons';
 import { Input, FormField } from '@/components/ui/form-field';
 import { Alert } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -10,6 +11,7 @@ import { InlineSpinner } from '@/components/ui/loading';
 import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import { documentTypeIcon, documentTypeKind, documentTypeLabelKey } from '@/lib/document-type';
 import PaperlessTagSection from './paperless-tag-section';
 
 const API_BASE = getApiBaseUrl();
@@ -21,7 +23,6 @@ type Document = {
   fileSize: number | null;
   documentDate: string | null;
   category: string | null;
-  uploadedAt: string;
   // BugFix-07 (Q3): storage type + deep link for PAPERLESS_LINK documents
   storageType?: string;
   storageRef?: string | null;
@@ -41,6 +42,38 @@ type PaperlessHit = {
   tags: string[];
   correspondent: string | null;
 };
+
+/**
+ * BugFix-21: the document type is shown as an icon instead of the raw MIME
+ * type text. The icon is decorative, its accessible name carries the
+ * localized type ("PDF", "Bild", …).
+ */
+function DocumentTypeIcon({
+  mimeType,
+  fileName,
+}: {
+  mimeType: string | null;
+  fileName: string;
+}): ReactElement {
+  const { t } = useI18n();
+  const kind = documentTypeKind(mimeType, fileName);
+  const label = t(documentTypeLabelKey(kind));
+
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        color: 'var(--versigo-text-muted)',
+      }}
+    >
+      <Icon name={documentTypeIcon(kind)} size={24} />
+    </span>
+  );
+}
 
 export default function DocumentsTab({
   policyId,
@@ -496,7 +529,7 @@ export default function DocumentsTab({
             {documents.map((doc) => (
               <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--versigo-space-3)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--versigo-space-3)' }}>
-                  <span style={{ fontSize: '1.5rem' }}>📄</span>
+                  <DocumentTypeIcon mimeType={doc.mimeType} fileName={doc.fileName} />
                   <div>
                     <strong>{doc.fileName}</strong>
                     {/* AP-22: origin + external tagging status */}
@@ -525,21 +558,34 @@ export default function DocumentsTab({
                       </span>
                     )}
                     <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
-                      {isLinked(doc) && (
+                      {isLinked(doc) ? (
                         <>
                           {t('policies.paperlessLinkedDocument')}
                           {doc.category && ` · ${doc.category}`}
                         </>
-                      )}
-                      {!isLinked(doc) && (
+                      ) : (
                         <>
-                          {doc.mimeType && `${doc.mimeType} · `}
                           {formatFileSize(doc.fileSize)}
                           {doc.category && ` · ${t('policies.documentCategory')}: ${doc.category}`}
                         </>
                       )}
                       {doc.documentDate && ` · ${t('policies.documentDate')}: ${new Date(doc.documentDate).toLocaleDateString()}`}
-                      {' · '}{t('common.uploadedAt', { date: new Date(doc.uploadedAt).toLocaleDateString() })}
+                      {/* BugFix-21: the URL of the document in Paperless.
+                          The upload timestamp is intentionally not shown. */}
+                      {isLinked(doc) && doc.deepLink && (
+                        <>
+                          {' · '}
+                          <a
+                            href={doc.deepLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={t('policies.paperlessOpenInPaperless')}
+                            style={{ wordBreak: 'break-all' }}
+                          >
+                            {doc.deepLink}
+                          </a>
+                        </>
+                      )}
                     </div>
                     {doc.taggingStatus === 'FAILED' && (
                       <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
@@ -551,15 +597,16 @@ export default function DocumentsTab({
                 <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {/* BugFix-07 (Q3): PAPERLESS_LINK documents have no
                       local file content – instead of preview/download the
-                      Paperless deep link is offered. */}
+                      Paperless deep link is offered.
+                      BugFix-21: without a deep link no second
+                      "Paperless-Dokument" badge is rendered – the metadata
+                      line above already names the document type. */}
                   {isLinked(doc) ? (
                     doc.deepLink ? (
                       <a href={doc.deepLink} target="_blank" rel="noopener noreferrer">
                         <Button variant="secondary" size="sm">{t('policies.paperlessOpenInPaperless')}</Button>
                       </a>
-                    ) : (
-                      <span className="badge badge-neutral" style={{ alignSelf: 'center' }}>{t('policies.paperlessLinkedDocument')}</span>
-                    )
+                    ) : null
                   ) : (
                     <>
                       <a href={`${API_BASE}/households/default/policies/${policyId}/documents/${doc.id}/preview`} target="_blank" rel="noopener noreferrer">
