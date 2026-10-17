@@ -104,6 +104,13 @@ do not begin any later package.
   a plain `down` against the test file would disturb the dev stack.
 - Node/pnpm/vitest do not work on the host (missing
   `@rollup/rollup-linux-x64-gnu`); run all gates in the test container.
+- `scripts/compose-smoke-test.sh` is destructive: its final phase (step 12)
+  runs `DROP SCHEMA public CASCADE` on the dev database and bootstraps a
+  production admin. Run it only when losing the current dev data is
+  acceptable (or make a DB dump first), and note that several steps assume a
+  fresh database (e.g. step 8n asserts that the local admin's `users.locale`
+  is `en`). An AP-22-time run aborted there because the long-lived dev DB had
+  `de`; that is a precondition issue, not a product defect.
 - `/var/home` is ~123 GB and fills quickly. Check `df -h /var/home`, use
   `podman system prune -a -f` when needed, never relocate podman storage, and
   delete every scratch file/container/image/volume the session created before
@@ -112,7 +119,18 @@ do not begin any later package.
 
 ## Documentation status (Trilium)
 
-See the final section of the AP-22 session report: the Trilium MCP status is
-recorded there (note/resolved reference or the exact blocker). Repository
-documentation (`docs/04`, `05`, `06`, `13`, end-user-guide,
+Trilium MCP is available and writable. No VersiGo note existed before AP-22,
+so the project note was created and verified during that package:
+
+- Note **"VersiGo (Versicherungsverwaltung)"**, `noteId
+  BRpbPoqTaGKk`, at the Trilium root, labels `#project = versigo`,
+  `#repository = VibeCode/VersiGo`, `#status = in Arbeit`.
+- Content: project overview, verification/process conventions, the
+  destructive-smoke-test warning, and the AP-22 package entry (commit
+  `84e15ea`, handoff `7e4a557`, verification results, the accepted Minor).
+- Writes are verified by reading the note back (`get_note`,
+  `search_notes`). Extend this note for future packages instead of creating a
+  second VersiGo note.
+
+Repository documentation (`docs/04`, `05`, `06`, `13`, end-user-guide,
 ui-control-matrix) is updated and committed with AP-22.
