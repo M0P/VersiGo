@@ -228,6 +228,12 @@ describe('PolicyRegistryService', () => {
       const result = await service.remove(householdId, userId, policyId);
 
       expect(result.success).toBe(true);
+      // docs/ui-control-matrix.md: "Police löschen" sets status=ARCHIVED
+      // (soft delete) in addition to the archivedAt marker.
+      expect(mockDb.insurancePolicy.update).toHaveBeenCalledWith({
+        where: { id: policyId },
+        data: { archivedAt: expect.any(Date), status: 'ARCHIVED' },
+      });
       expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

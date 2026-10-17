@@ -221,9 +221,13 @@ export class PolicyRegistryService {
     }
 
     return this.db.$transaction(async (tx) => {
+      // Soft delete (docs/ui-control-matrix.md "Police löschen"): the policy
+      // is hidden from all lists via archivedAt and its status is set to
+      // ARCHIVED; nothing is physically removed.
+      const archivedAt = new Date();
       await tx.insurancePolicy.update({
         where: { id: policyId },
-        data: { archivedAt: new Date() },
+        data: { archivedAt, status: 'ARCHIVED' },
       });
 
       await tx.auditEvent.create({
@@ -232,7 +236,7 @@ export class PolicyRegistryService {
           entityType: 'InsurancePolicy',
           entityId: policyId,
           action: 'ARCHIVE',
-          diffJson: { archivedAt: new Date().toISOString() },
+          diffJson: { archivedAt: archivedAt.toISOString(), status: 'ARCHIVED' },
         },
       });
 

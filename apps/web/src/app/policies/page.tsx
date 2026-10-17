@@ -32,6 +32,16 @@ export default function PolicyListPage(): ReactElement {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pinningId, setPinningId] = useState<string | null>(null);
+  // Success feedback after a policy was archived on the detail page
+  // (redirect to /policies?archived=1). Dismissible inline notice – there is
+  // no global toast system in the web app.
+  const [archivedNotice, setArchivedNotice] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('archived') === '1') {
+      setArchivedNotice(true);
+    }
+  }, []);
 
   useEffect(() => {
     fetch(`${API_BASE}/households/default/policies`, { credentials: 'include' })
@@ -90,6 +100,17 @@ export default function PolicyListPage(): ReactElement {
         description={t('policies.description')}
         actions={<a href="/policies/new"><Button variant="primary">{t('policies.newPolicy')}</Button></a>}
       />
+
+      {archivedNotice && (
+        <Alert variant="success">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--versigo-space-3)' }}>
+            <span>{t('policies.deleteSuccess')}</span>
+            <Button variant="ghost" size="sm" onClick={() => setArchivedNotice(false)}>
+              {t('common.dismiss')}
+            </Button>
+          </div>
+        </Alert>
+      )}
 
       {policies.length === 0 ? (
         <EmptyState icon="📋" title={t('policies.emptyTitle')}>
