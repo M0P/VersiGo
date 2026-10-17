@@ -35,6 +35,16 @@ export type TagLookupResult =
 export interface TagDocumentRef {
   paperlessId: number;
   title: string | null;
+  /**
+   * BugFix-21: Paperless `created` (the document date) as reported by the
+   * API, or null when the server did not return it.
+   */
+  createdAt: string | null;
+  /**
+   * BugFix-21: Paperless `mime_type`, used for the document-type icon in the
+   * UI. Null when the server did not return it.
+   */
+  mimeType: string | null;
 }
 
 export interface TagAssignmentResult {
@@ -49,8 +59,63 @@ interface RuntimeConfig {
   apiToken: string;
 }
 
+/**
+ * BugFix-21: field selection for the tag-filtered document listing. `created`
+ * is the document date, `mime_type` drives the document-type icon. Both are
+ * stored by the sync so displaying the document list never has to query
+ * Paperless again.
+ */
+export const TAG_DOCUMENT_METADATA_FIELDS = 'id,title,created,mime_type';
+
+/**
+ * BugFix-21: minimal field selection used as a fallback when a server rejects
+ * one of the extended field names (`400`). The sync then still works, it just
+ * cannot store the optional metadata.
+ */
+export const TAG_DOCUMENT_MINIMAL_FIELDS = 'id,title';
+
+/** Path of one page of the tag-filtered document listing. */
+export function tagDocumentsPath(
+  tagId: number,
+  page: number,
+  fields: string = TAG_DOCUMENT_METADATA_FIELDS,
+): string {
+  return (
+    `/documents/?page=${page}&page_size=${PAPERLESS_TAG_PAGE_SIZE}` +
+    `&ordering=id&fields=${fields}&tags__id=${tagId}`
+  );
+}
+
+/** One raw entry of the Paperless document list response. */
+export interface PaperlessTagDocumentEntry {
+  id: number;
+  title?: unknown;
+  created?: unknown;
+  mime_type?: unknown;
+}
+
+/**
+ * Pure mapper for a Paperless document list entry. Only values that are
+ * actually strings are accepted – a missing or malformed field becomes null
+ * instead of a guessed value (the UI then falls back to the file extension).
+ */
+export function mapTagDocument(entry: PaperlessTagDocumentEntry): TagDocumentRef {
+  return {
+    paperlessId: entry.id,
+    title: typeof entry.title === 'string' ? entry.title : null,
+    createdAt: typeof entry.created === 'string' ? entry.created : null,
+    mimeType: typeof entry.mime_type === 'string' ? entry.mime_type : null,
+  };
+}
+
 interface PaperlessPage {
-  results: Array<{ id: number; name?: string; title?: string | null }>;
+  results: Array<{
+    id: number;
+    name?: string;
+    title?: unknown;
+    created?: unknown;
+    mime_type?: unknown;
+  }>;
   next: string | null;
   count: number;
 }
@@ -165,25 +230,31 @@ export class PaperlessTagClient {
    * Walks ALL pages of the tag-filtered document query in stable ID order.
    * Any failed page invalidates the whole result (returns null) so the
    * caller keeps the last known assignments instead of a partial state.
+   *
+   * BugFix-21: the request also asks for the document date and the MIME type
+   * so the sync can store the metadata shown in the UI. Servers that reject
+   * the extended field list (400) are retried once with the minimal field
+   * set instead of failing the whole sync.
    */
   async listDocumentsByTag(tagId: number): Promise<TagDocumentRef[] | null> {
     const { enabled, baseUrl, apiToken } = await this.runtimeConfig();
     if (!enabled || baseUrl.length === 0 || apiToken.length === 0) return null;
 
     const all: TagDocumentRef[] = [];
+    let fields = TAG_DOCUMENT_METADATA_FIELDS;
     for (let page = 1; page <= PAPERLESS_TAG_MAX_PAGES; page++) {
-      const res = await this.request(
-        'GET',
-        `/documents/?page=${page}&page_size=${PAPERLESS_TAG_PAGE_SIZE}` +
-          `&ordering=id&fields=id,title&tags__id=${tagId}`,
-      );
+      let res = await this.request('GET', tagDocumentsPath(tagId, page, fields));
+      if (res && res.status === 400 && fields !== TAG_DOCUMENT_MINIMAL_FIELDS) {
+        this.logger.warn(
+          `Paperless tag ${tagId}: extended field list rejected - retrying with ${TAG_DOCUMENT_MINIMAL_FIELDS}`,
+        );
+        fields = TAG_DOCUMENT_MINIMAL_FIELDS;
+        res = await this.request('GET', tagDocumentsPath(tagId, page, fields));
+      }
       if (!res || res.status !== 200 || !isPage(res.data)) return null;
 
       for (const doc of res.data.results) {
-        all.push({
-          paperlessId: doc.id,
-          title: typeof doc.title === 'string' ? doc.title : null,
-        });
+        all.push(mapTagDocument(doc));
       }
 
       if (!res.data.next) {

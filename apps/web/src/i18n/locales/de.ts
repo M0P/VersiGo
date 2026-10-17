@@ -278,6 +278,12 @@ export const de = {
     paperlessAlreadyLinked: 'Bereits verbunden',
     paperlessOpenInPaperless: 'In Paperless öffnen',
     paperlessLinkedDocument: 'Paperless-Dokument',
+    // BugFix-21: Dokumenttyp als Icon (Barrierefreier Name)
+    documentTypeKindPdf: 'PDF',
+    documentTypeKindImage: 'Bild',
+    documentTypeKindDocument: 'Dokument',
+    documentTypeKindSpreadsheet: 'Tabelle',
+    documentTypeKindOther: 'Datei',
     // AP-22: tag-basierte Dokumentzuordnung
     paperlessTagTitle: 'Paperless-ngx-Dokumentzuordnung',
     paperlessTagBody:

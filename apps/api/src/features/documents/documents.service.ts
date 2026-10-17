@@ -14,7 +14,11 @@ import * as crypto from 'crypto';
 import { UploadDocumentDto, UpdateDocumentMetadataDto } from './dto/documents.dto';
 import { UploadedFile } from './documents.types';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
-import { PAPERLESS_ADAPTER, IPaperlessAdapter } from '../paperless-ngx/paperless-ngx.interface';
+import {
+  PAPERLESS_ADAPTER,
+  IPaperlessAdapter,
+  type PaperlessDocumentMetadata,
+} from '../paperless-ngx/paperless-ngx.interface';
 import { PaperlessTagService } from '../paperless-ngx/paperless-tag.service';
 import { PAPERLESS_TAG_TAG_DOCUMENT_JOB } from '../paperless-ngx/paperless-tag.constants';
 
@@ -48,6 +52,19 @@ const MAGIC_BYTES: Record<string, Buffer[]> = {
 
 export const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * BugFix-21 (review #2): parses a Paperless timestamp defensively.
+ * `created` is external input – an unusable value must not be turned into an
+ * `Invalid Date` that makes Prisma reject the write (the worker guards the
+ * same field the same way, see `parsePaperlessDate` in
+ * `apps/worker/src/paperless-tag.processor.ts`).
+ */
+function parsePaperlessDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 @Injectable()
 export class DocumentsService {
@@ -338,18 +355,20 @@ export class DocumentsService {
             archivedAt: null,
           },
         });
-        if (existing) return this.applyManualLinkOrigin(tx, policyId, existing);
+        if (existing) return this.applyManualLinkOrigin(tx, policyId, existing, metadata);
 
         const document = await tx.policyDocument.create({
           data: {
             policyId,
             storageType: 'PAPERLESS_LINK',
             fileName: metadata.title?.trim() || `Paperless document ${paperlessDocumentId}`,
-            mimeType: null,
+            // BugFix-21: the MIME type is stored so the document list can
+            // show a type icon without asking Paperless again.
+            mimeType: metadata.mimeType,
             fileSize: null,
             storageRef: String(paperlessDocumentId),
             category: metadata.documentType,
-            documentDate: metadata.createdAt ? new Date(metadata.createdAt) : null,
+            documentDate: parsePaperlessDate(metadata.createdAt),
             createdByUserId: userId,
             linkOriginManual: true,
           },
@@ -370,7 +389,7 @@ export class DocumentsService {
           },
         });
 
-        return this.applyManualLinkOrigin(tx, policyId, document);
+        return this.applyManualLinkOrigin(tx, policyId, document, metadata);
       });
     } catch (error) {
       // P2002 (unique violation of the partial index) = a parallel request
@@ -386,7 +405,7 @@ export class DocumentsService {
         });
         if (existing) {
           linked = await this.db.$transaction((tx) =>
-            this.applyManualLinkOrigin(tx, policyId, existing),
+            this.applyManualLinkOrigin(tx, policyId, existing, metadata),
           );
         }
       }
@@ -408,22 +427,39 @@ export class DocumentsService {
    * configured – a durable TAG_DOCUMENT outbox row exists so the document
    * receives the tag in Paperless. Runs inside the caller's transaction so
    * the link and the job row are atomic.
+   *
+   * BugFix-21: `metadata` is the Paperless state fetched for this link. It is
+   * used to fill metadata that is still missing on an existing row
+   * (`mimeType`, `documentDate`); existing values are never overwritten.
    */
   private async applyManualLinkOrigin(
     tx: Prisma.TransactionClient,
     policyId: string,
     document: PolicyDocument,
+    metadata: PaperlessDocumentMetadata,
   ): Promise<{ document: PolicyDocument; tagJobId: string | null }> {
     const tagConfig = await tx.policyPaperlessTag.findUnique({ where: { policyId } });
 
+    // BugFix-21 (review #1): documents that were linked before the metadata
+    // sync existed keep `mimeType = NULL` (and possibly no document date)
+    // forever when the policy has no tag configured – no sync ever runs for
+    // them. Linking is the only moment the current Paperless state is known,
+    // so still-missing metadata is filled here. Existing values are never
+    // overwritten: a manual link stays the user's record.
+    const gaps: { mimeType?: string; documentDate?: Date } = {};
+    if (!document.mimeType && metadata.mimeType) gaps.mimeType = metadata.mimeType;
+    // BugFix-21 (review #2): a malformed external date is skipped, not written.
+    const paperlessDate = parsePaperlessDate(metadata.createdAt);
+    if (!document.documentDate && paperlessDate) gaps.documentDate = paperlessDate;
+
     if (!tagConfig) {
       // Without a configured tag the manual link behaves exactly as before.
-      const updated = document.linkOriginManual
-        ? document
-        : await tx.policyDocument.update({
-            where: { id: document.id },
-            data: { linkOriginManual: true },
-          });
+      const data: Prisma.PolicyDocumentUpdateInput = { ...gaps };
+      if (!document.linkOriginManual) data.linkOriginManual = true;
+      // Nothing to record – stay write-free (idempotent re-link).
+      if (Object.keys(data).length === 0) return { document, tagJobId: null };
+
+      const updated = await tx.policyDocument.update({ where: { id: document.id }, data });
       return { document: updated, tagJobId: null };
     }
 
@@ -453,6 +489,7 @@ export class DocumentsService {
     const updated = await tx.policyDocument.update({
       where: { id: document.id },
       data: {
+        ...gaps,
         linkOriginManual: true,
         taggingStatus: 'PENDING',
         taggingErrorCode: null,

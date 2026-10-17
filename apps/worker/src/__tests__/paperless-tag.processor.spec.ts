@@ -90,6 +90,15 @@ describe('PaperlessTagProcessor', () => {
     };
   }
 
+  /** Update call of the reconciliation for one document id (BugFix-21 tests). */
+  function updateFor(
+    id: string,
+  ): { where?: { id?: string }; data: Record<string, unknown> } | undefined {
+    return db.policyDocument.update.mock.calls.find(
+      (call: unknown[]) => (call[0] as { where?: { id?: string } })?.where?.id === id,
+    )?.[0] as { where?: { id?: string }; data: Record<string, unknown> } | undefined;
+  }
+
   function syncJobRow(overrides: Record<string, unknown> = {}) {
     return {
       id: 'job-1',
@@ -319,7 +328,16 @@ describe('PaperlessTagProcessor', () => {
       // that lost the tag, one manual link that lost the tag.
       db.policyDocument.findMany
         .mockResolvedValueOnce([
-          { id: 'doc-manual', storageRef: '100', linkOriginManual: true, linkOriginTag: false },
+          {
+            id: 'doc-manual',
+            storageRef: '100',
+            linkOriginManual: true,
+            linkOriginTag: false,
+            // BugFix-21: user values of a manual link (title, no date, no type).
+            fileName: 'Police 2026',
+            documentDate: null,
+            mimeType: null,
+          },
           { id: 'doc-lost-tag-only', storageRef: '200', linkOriginManual: false, linkOriginTag: true },
           { id: 'doc-lost-manual', storageRef: '300', linkOriginManual: true, linkOriginTag: true },
         ])
@@ -445,6 +463,146 @@ describe('PaperlessTagProcessor', () => {
           data: { linkOriginTag: true },
         }),
       );
+    });
+  });
+
+  describe('BugFix-21 document metadata', () => {
+    it('stores date and MIME type of a newly assigned document', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        {
+          paperlessId: 500,
+          title: 'Police 2026',
+          createdAt: '2026-01-15T00:00:00Z',
+          mimeType: 'application/pdf',
+        },
+      ]);
+      db.policyDocument.findMany.mockResolvedValue([]);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      expect(db.policyDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            storageRef: '500',
+            fileName: 'Police 2026',
+            mimeType: 'application/pdf',
+            documentDate: new Date('2026-01-15T00:00:00Z'),
+          }),
+        }),
+      );
+    });
+
+    it('falls back to a generic file name when Paperless has no title', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        { paperlessId: 500, title: '   ', createdAt: null, mimeType: null },
+      ]);
+      db.policyDocument.findMany.mockResolvedValue([]);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      expect(db.policyDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ fileName: 'Paperless document 500' }),
+        }),
+      );
+    });
+
+    it('refreshes date and MIME type of an automatically managed document', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        {
+          paperlessId: 100,
+          title: 'Police 2026 (neu)',
+          createdAt: '2026-02-01T00:00:00Z',
+          mimeType: 'application/pdf',
+        },
+      ]);
+      db.policyDocument.findMany.mockResolvedValueOnce([
+        {
+          id: 'doc-auto',
+          storageRef: '100',
+          linkOriginManual: false,
+          linkOriginTag: true,
+          fileName: 'Police 2026',
+          documentDate: null,
+          mimeType: null,
+        },
+      ]);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      const update = updateFor('doc-auto');
+      expect(update?.data).toMatchObject({
+        fileName: 'Police 2026 (neu)',
+        mimeType: 'application/pdf',
+      });
+      expect((update?.data.documentDate as Date).toISOString()).toBe('2026-02-01T00:00:00.000Z');
+    });
+
+    it('never overwrites user-edited metadata of a manual link', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        {
+          paperlessId: 100,
+          title: 'Paperless-Titel',
+          createdAt: '2026-02-01T00:00:00Z',
+          mimeType: 'application/pdf',
+        },
+      ]);
+      db.policyDocument.findMany.mockResolvedValueOnce([
+        {
+          id: 'doc-manual',
+          storageRef: '100',
+          linkOriginManual: true,
+          linkOriginTag: true,
+          fileName: 'Mein eigener Name',
+          documentDate: new Date('2020-05-05T00:00:00.000Z'),
+          mimeType: 'image/png',
+        },
+      ]);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      // No metadata write at all – only the (already set) tag origin.
+      expect(updateFor('doc-manual')).toBeUndefined();
+      expect(db.policyDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('fills only genuinely missing metadata of a manual link', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        {
+          paperlessId: 100,
+          title: 'Paperless-Titel',
+          createdAt: '2026-02-01T00:00:00Z',
+          mimeType: 'application/pdf',
+        },
+      ]);
+      db.policyDocument.findMany.mockResolvedValueOnce([
+        {
+          id: 'doc-manual',
+          storageRef: '100',
+          linkOriginManual: true,
+          linkOriginTag: true,
+          fileName: 'Mein eigener Name',
+          documentDate: null,
+          mimeType: null,
+        },
+      ]);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      const update = updateFor('doc-manual');
+      expect(update?.data).toMatchObject({ mimeType: 'application/pdf' });
+      expect(update?.data.fileName).toBeUndefined();
+      expect(update?.data.linkOriginTag).toBeUndefined();
     });
   });
 
