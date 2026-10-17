@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactElement } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { AppShell } from '../../../components/ui/app-shell';
 import { PageHeader, SectionHeader } from '../../../components/ui/page-header';
 import { Card } from '../../../components/ui/card';
@@ -66,11 +66,32 @@ const TABS: { key: TabKey; label: string }[] = [
 
 export default function PolicyDetailPage(): ReactElement {
   const params = useParams();
+  const router = useRouter();
   const policyId = params.id as string;
   const { t, language } = useI18n();
   const [policy, setPolicy] = useState<PolicyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('masterData');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!window.confirm(t('policies.deleteConfirm'))) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`${API_BASE}/households/default/policies/${policyId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.status === 401) { window.location.href = '/login'; return; }
+      if (!res.ok) throw new Error(t('policies.deleteError'));
+      router.push('/policies?archived=1');
+    } catch (e: unknown) {
+      setDeleteError(e instanceof Error ? e.message : t('policies.deleteError'));
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     // BugFix-05 (finding 8): reset on a policyId change and discard
@@ -239,12 +260,17 @@ export default function PolicyDetailPage(): ReactElement {
             <a href={`/policies/${policyId}/edit`}>
               <Button variant="secondary" size="sm">{t('common.edit')}</Button>
             </a>
+            <Button variant="danger" size="sm" onClick={handleDelete} disabled={deleting}>
+              {deleting ? t('policies.deleting') : t('policies.deletePolicy')}
+            </Button>
             <a href="/policies">
               <Button variant="secondary" size="sm">{t('policies.backToOverview')}</Button>
             </a>
           </div>
         }
       />
+
+      {deleteError && <Alert variant="danger">{deleteError}</Alert>}
 
       {/* Tab Navigation */}
       <div style={{ marginBottom: 'var(--versigo-space-6)' }}>
