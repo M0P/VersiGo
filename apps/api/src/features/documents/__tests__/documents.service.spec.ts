@@ -67,7 +67,7 @@ function createMockPaperless() {
     searchDocuments: vi.fn().mockResolvedValue([]),
     healthCheck: vi.fn().mockResolvedValue(false),
     // AP-22: tag catalogue (not used by DocumentsService).
-    searchTags: vi.fn().mockResolvedValue({ items: [], page: 1, pageCount: 0 }),
+    searchTags: vi.fn().mockResolvedValue({ ok: true, page: { items: [], page: 1, pageCount: 0 } }),
     getTag: vi.fn(),
     createTag: vi.fn(),
     listDocumentsByTag: vi.fn(),

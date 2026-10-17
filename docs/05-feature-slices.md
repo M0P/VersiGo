@@ -21,6 +21,12 @@ Interne Dokumentenablage, Metadaten, Versionierung und Vorschau. Optionaler Adap
   Teilfehler entfernt nie bestehende Zuordnungen. Weder Tag noch Dokumente
   werden in Paperless gelöscht oder verändert, außer dem additiven Hinzufügen
   des Tags zu manuell verknüpften Dokumenten.
+  Die interaktive Tag-Verwaltung liegt im Reiter **Dokumente** der Versicherung
+  (`/policies/[id]`). Tag-Suche und Neuanlage melden ihre Fehlerursache
+  explizit (`PAPERLESS_NOT_CONFIGURED`, `PAPERLESS_AUTH_FAILED`,
+  `PAPERLESS_UNREACHABLE`, `PAPERLESS_TAG_SEARCH_FAILED`,
+  `PAPERLESS_TAG_CREATE_FAILED`) statt eine leere Trefferliste oder einen
+  generischen Fehler ohne Ursache zu zeigen.
 
 ## 4. Cost Tracking
 Pflege von Beiträgen, Zahlintervallen, Historien und Jahresauswertungen.

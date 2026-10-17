@@ -319,6 +319,7 @@ export const de = {
     paperlessTagErrorCONNECTION_CHANGED:
       'Die Paperless-Verbindung wurde geändert. Bitte den Tag neu auswählen.',
     paperlessTagErrorUnknown: 'Unbekannter Fehler beim Abgleich.',
+    paperlessTagErrorREJECTED: 'Paperless-ngx hat die Anfrage abgelehnt.',
     paperlessTagPendingBadge: 'Tag-Zuweisung ausstehend',
     paperlessTagFailedBadge: 'Tag-Zuweisung fehlgeschlagen',
     paperlessTagFailedHint:

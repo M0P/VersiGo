@@ -1,16 +1,19 @@
 import {
   BadGatewayException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { DatabaseService, SettingsResolverService } from '@versigo/foundation';
 import type { AiJobStatus, Prisma } from '@prisma/client';
+import type { PaperlessTagRequestError } from './paperless-ngx.interface';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import {
   PAPERLESS_ADAPTER,
@@ -26,6 +29,32 @@ import {
   PAPERLESS_TAG_SYNC_POLICY_JOB,
   PAPERLESS_TAG_TAG_DOCUMENT_JOB,
 } from './paperless-tag.constants';
+
+/**
+ * AP-22: stable codes for a failed interactive tag request. Each code is
+ * mapped onto a concrete explanation by the web UI
+ * (`apps/web/src/lib/paperless-tag-error.ts`). `REJECTED` is handled
+ * separately because it depends on the operation.
+ */
+const TAG_REQUEST_FAILURES: Record<
+  Exclude<PaperlessTagRequestError['kind'], 'REJECTED'>,
+  { status: 502 | 503; message: string }
+> = {
+  NOT_CONFIGURED: {
+    status: 503,
+    message:
+      'PAPERLESS_NOT_CONFIGURED: Paperless-ngx is not configured (enabled, URL and API token are required)',
+  },
+  AUTH_FAILED: {
+    status: 502,
+    message:
+      'PAPERLESS_AUTH_FAILED: Paperless-ngx rejected the API token or the account lacks the required permissions',
+  },
+  UNREACHABLE: {
+    status: 503,
+    message: 'PAPERLESS_UNREACHABLE: Paperless-ngx is not reachable',
+  },
+};
 
 /**
  * AP-22: configuration of the optional Paperless tag per insurance policy,
@@ -112,6 +141,32 @@ export class PaperlessTagService implements OnModuleInit {
 
   // --- Interactive tag catalogue -------------------------------------------
 
+  /**
+   * AP-22: translates an adapter failure into a specific HTTP error. Every
+   * message starts with a stable code that the web UI maps onto a concrete
+   * explanation – an empty result list must never hide a connection problem,
+   * and a failed creation must name its cause.
+   */
+  private static tagRequestException(
+    error: PaperlessTagRequestError,
+    operation: 'SEARCH' | 'CREATE',
+  ): HttpException {
+    if (error.kind === 'REJECTED') {
+      // Paperless itself refused the request (e.g. an invalid name): the
+      // operation-specific code is kept for backwards compatibility.
+      return new BadGatewayException(
+        operation === 'SEARCH'
+          ? 'PAPERLESS_TAG_SEARCH_FAILED: Paperless-ngx rejected the tag search'
+          : 'PAPERLESS_TAG_CREATE_FAILED: the tag could not be created in Paperless',
+      );
+    }
+
+    const failure = TAG_REQUEST_FAILURES[error.kind];
+    return failure.status === 503
+      ? new ServiceUnavailableException(failure.message)
+      : new BadGatewayException(failure.message);
+  }
+
   async searchTags(
     householdId: string,
     user: AuthenticatedUser,
@@ -119,7 +174,9 @@ export class PaperlessTagService implements OnModuleInit {
     page: number,
   ): Promise<PaperlessTagPage> {
     await this.assertHouseholdAccess(householdId, user.id);
-    return this.paperless.searchTags(search, page, 20);
+    const result = await this.paperless.searchTags(search, page, 20);
+    if (!result.ok) throw PaperlessTagService.tagRequestException(result.error, 'SEARCH');
+    return result.page;
   }
 
   /**
@@ -135,12 +192,8 @@ export class PaperlessTagService implements OnModuleInit {
     await this.assertHouseholdAccess(householdId, user.id);
 
     const created = await this.paperless.createTag(name);
-    if (!created) {
-      throw new BadGatewayException(
-        'PAPERLESS_TAG_CREATE_FAILED: the tag could not be created in Paperless',
-      );
-    }
-    return created;
+    if (!created.ok) throw PaperlessTagService.tagRequestException(created.error, 'CREATE');
+    return created.tag;
   }
 
   // --- Per-policy tag configuration ----------------------------------------
@@ -196,7 +249,11 @@ export class PaperlessTagService implements OnModuleInit {
         throw new BadGatewayException('PAPERLESS_NOT_CONFIGURED');
       }
       if (code === 'NOT_FOUND') {
-        throw new NotFoundException('PAPERLESS_TAG_NOT_FOUND');
+        // Same `CODE: explanation` shape as the other tag endpoints so the web
+        // UI can translate the failure instead of echoing a raw code.
+        throw new NotFoundException(
+          'PAPERLESS_TAG_NOT_FOUND: the tag does not exist in Paperless-ngx',
+        );
       }
       throw new BadGatewayException(`PAPERLESS_TAG_LOOKUP_FAILED: ${code}`);
     }

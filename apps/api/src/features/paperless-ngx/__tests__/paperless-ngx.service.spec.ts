@@ -578,13 +578,19 @@ describe('PaperlessNgxService', () => {
           ]);
         });
 
-        const page = await service.searchTags('kfz', 1, 20);
+        const result = await service.searchTags('kfz', 1, 20);
 
-        expect(page.items).toEqual([
-          { tagId: 1, name: 'KFZ' },
-          { tagId: 3, name: 'KFZ-Versicherung' },
-        ]);
-        expect(page.pageCount).toBe(1);
+        expect(result).toEqual({
+          ok: true,
+          page: {
+            items: [
+              { tagId: 1, name: 'KFZ' },
+              { tagId: 3, name: 'KFZ-Versicherung' },
+            ],
+            page: 1,
+            pageCount: 1,
+          },
+        });
         expect(calls).toBe(1);
         // The server filter is requested, but never trusted on its own.
         expect(mockHttp.get).toHaveBeenCalledWith(
@@ -596,18 +602,108 @@ describe('PaperlessNgxService', () => {
       it('drops tags that do not match even when the server ignored the filter', async () => {
         routeTagHttp(() => tagPage([{ id: 9, name: 'Unrelated' }]));
 
-        const page = await service.searchTags('kfz', 1, 20);
-
-        expect(page.items).toEqual([]);
+        await expect(service.searchTags('kfz', 1, 20)).resolves.toEqual({
+          ok: true,
+          page: { items: [], page: 1, pageCount: 1 },
+        });
       });
 
-      it('returns an empty page for an unusable response', async () => {
-        routeTagHttp(() => ({ status: 500, data: { detail: 'boom' } }));
+      it('reports pageCount 0 for an empty result instead of suggesting another page', async () => {
+        routeTagHttp(() => tagPage([], 0));
 
+        await expect(service.searchTags('nope', 1, 20)).resolves.toEqual({
+          ok: true,
+          page: { items: [], page: 1, pageCount: 0 },
+        });
+      });
+
+      it('falls back to the next link when the dialect omits count', async () => {
+        // Some deployments answer without `count`; the `next` link then tells
+        // whether another page exists.
+        routeTagHttp(() => ({
+          status: 200,
+          data: {
+            results: [{ id: 1, name: 'KFZ' }],
+            next: 'http://paperless/api/tags/?page=2',
+            previous: null,
+          },
+        }));
+
+        await expect(service.searchTags('', 1, 20)).resolves.toEqual({
+          ok: true,
+          page: { items: [{ tagId: 1, name: 'KFZ' }], page: 1, pageCount: 2 },
+        });
+
+        // No `next` link: the current page is the last one.
+        routeTagHttp(() => ({
+          status: 200,
+          data: {
+            results: [{ id: 1, name: 'KFZ' }],
+            next: null,
+            previous: 'http://paperless/api/tags/?page=2',
+          },
+        }));
+
+        await expect(service.searchTags('', 3, 20)).resolves.toEqual({
+          ok: true,
+          page: { items: [{ tagId: 1, name: 'KFZ' }], page: 3, pageCount: 3 },
+        });
+      });
+
+      it('reports a missing configuration instead of a silent empty list', async () => {
+        const disabled = new PaperlessNgxService(
+          mockHttp,
+          createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
+        );
+
+        await expect(disabled.searchTags('kfz', 1, 20)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'NOT_CONFIGURED' },
+        });
+        expect(mockHttp.get).not.toHaveBeenCalled();
+      });
+
+      it('distinguishes rejected credentials from an outage', async () => {
+        routeTagHttp(() => ({ status: 401, data: { detail: 'invalid token' } }));
         await expect(service.searchTags('kfz', 1, 20)).resolves.toEqual({
-          items: [],
-          page: 1,
-          pageCount: 0,
+          ok: false,
+          error: { kind: 'AUTH_FAILED' },
+        });
+
+        routeTagHttp(() => ({ status: 403, data: { detail: 'Forbidden' } }));
+        await expect(service.searchTags('kfz', 1, 20)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'AUTH_FAILED' },
+        });
+
+        mockHttp.get = vi.fn((url: string) =>
+          url.endsWith('/documents/?page_size=1')
+            ? of({ status: 200, data: {} })
+            : throwError(() => new Error('connect ECONNREFUSED')),
+        ) as unknown as typeof mockHttp.get;
+        await expect(service.searchTags('kfz', 1, 20)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'UNREACHABLE' },
+        });
+      });
+
+      it('separates an upstream outage from a rejected request', async () => {
+        routeTagHttp(() => ({ status: 500, data: { detail: 'boom' } }));
+        await expect(service.searchTags('kfz', 1, 20)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'UNREACHABLE' },
+        });
+
+        routeTagHttp(() => ({ status: 400, data: { detail: 'unsupported query' } }));
+        await expect(service.searchTags('kfz', 1, 20)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'REJECTED' },
+        });
+
+        routeTagHttp(() => ({ status: 200, data: { unexpected: true } }));
+        await expect(service.searchTags('kfz', 1, 20)).resolves.toEqual({
+          ok: false,
+          error: { kind: 'UNREACHABLE' },
         });
       });
     });
@@ -650,14 +746,20 @@ describe('PaperlessNgxService', () => {
       it('rejects an empty name without calling Paperless', async () => {
         routeTagHttp(() => tagPage([]));
 
-        await expect(service.createTag('   ')).resolves.toBeNull();
+        await expect(service.createTag('   ')).resolves.toEqual({
+          ok: false,
+          error: { kind: 'REJECTED' },
+        });
         expect(mockHttp.get).not.toHaveBeenCalled();
       });
 
       it('reuses an existing tag instead of creating a duplicate', async () => {
         routeTagHttp(() => tagPage([{ id: 7, name: 'KFZ' }]));
 
-        await expect(service.createTag('KFZ')).resolves.toEqual({ tagId: 7, name: 'KFZ' });
+        await expect(service.createTag('KFZ')).resolves.toEqual({
+          ok: true,
+          tag: { tagId: 7, name: 'KFZ' },
+        });
         expect(mockHttp.request).not.toHaveBeenCalled();
       });
 
@@ -671,7 +773,10 @@ describe('PaperlessNgxService', () => {
           },
         );
 
-        await expect(service.createTag('Neu')).resolves.toEqual({ tagId: 42, name: 'Neu' });
+        await expect(service.createTag('Neu')).resolves.toEqual({
+          ok: true,
+          tag: { tagId: 42, name: 'Neu' },
+        });
       });
 
       it('resolves a parallel-creation race idempotently', async () => {
@@ -690,8 +795,47 @@ describe('PaperlessNgxService', () => {
           }),
         );
 
-        await expect(service.createTag('Neu')).resolves.toEqual({ tagId: 42, name: 'Neu' });
+        await expect(service.createTag('Neu')).resolves.toEqual({
+          ok: true,
+          tag: { tagId: 42, name: 'Neu' },
+        });
         expect(lookups).toBe(2);
+      });
+
+      it('names the reason instead of returning null', async () => {
+        routeTagHttp(() => tagPage([]), () => ({ status: 401, data: { detail: 'invalid token' } }));
+        await expect(service.createTag('Neu')).resolves.toEqual({
+          ok: false,
+          error: { kind: 'AUTH_FAILED' },
+        });
+
+        routeTagHttp(() => tagPage([]), () => ({ status: 500, data: { detail: 'boom' } }));
+        await expect(service.createTag('Neu')).resolves.toEqual({
+          ok: false,
+          error: { kind: 'UNREACHABLE' },
+        });
+
+        routeTagHttp(() => tagPage([]), () => ({ status: 400, data: { name: ['invalid'] } }));
+        await expect(service.createTag('Neu')).resolves.toEqual({
+          ok: false,
+          error: { kind: 'REJECTED' },
+        });
+
+        // A 201 without a usable body cannot confirm the tag identity.
+        routeTagHttp(() => tagPage([]), () => ({ status: 201, data: { unexpected: true } }));
+        await expect(service.createTag('Neu')).resolves.toEqual({
+          ok: false,
+          error: { kind: 'UNREACHABLE' },
+        });
+
+        const disabled = new PaperlessNgxService(
+          mockHttp,
+          createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
+        );
+        await expect(disabled.createTag('Neu')).resolves.toEqual({
+          ok: false,
+          error: { kind: 'NOT_CONFIGURED' },
+        });
       });
     });
 

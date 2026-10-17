@@ -152,7 +152,7 @@ exist and they can be combined:
 | Way | How it works |
 |-----|--------------|
 | **Manual link** | In a policy, open **Documents → Link Paperless document**, search Paperless and link a document. Only that one policy shows it. |
-| **Automatic via tag** | On the policy edit page, section **Paperless-ngx document assignment**, pick or create a tag. *Every* Paperless document carrying that tag appears automatically for the policy. |
+| **Automatic via tag** | In a policy, open the **Documents** tab, section **Paperless-ngx document assignment**, and pick or create a tag. *Every* Paperless document carrying that tag appears automatically for the policy. |
 
 Setup:
 
@@ -161,7 +161,7 @@ Setup:
    `PAPERLESS_API_TOKEN` (create the token in Paperless under
    *Settings → Users & Groups → My Profile → API Token*).
 2. Restart the stack (`docker compose up -d`).
-3. Open a policy, edit it and choose the tag under
+3. Open a policy, switch to the **Documents** tab and choose the tag under
    **Paperless-ngx document assignment**.
 
 Good to know:
@@ -188,3 +188,4 @@ Good to know:
 | API shows `cannot connect to database` | Check `DATABASE_URL` in `.env` and that `db` is healthy. |
 | Login fails | Verify `LOCAL_ADMIN_USERNAME` / `LOCAL_ADMIN_PASSWORD` and `NODE_ENV`. In production the placeholder password is rejected. |
 | Everything unhealthy | `docker compose down` then `docker compose up -d --build` again. |
+| Tag search finds nothing, or creating a tag fails with *"the tag could not be created in Paperless"* | The **Paperless-ngx document assignment** section names the cause: *not configured*, *access denied*, *not reachable* or *request rejected*. Check `PAPERLESS_ENABLED`, `PAPERLESS_URL` and `PAPERLESS_API_TOKEN` and use **Admin → Integrations → Test connection**. |

@@ -10,6 +10,7 @@ import { InlineSpinner } from '@/components/ui/loading';
 import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import PaperlessTagSection from './paperless-tag-section';
 
 const API_BASE = getApiBaseUrl();
 
@@ -41,7 +42,14 @@ type PaperlessHit = {
   correspondent: string | null;
 };
 
-export default function DocumentsTab({ policyId }: { policyId: string }): ReactElement {
+export default function DocumentsTab({
+  policyId,
+  insurerName,
+}: {
+  policyId: string;
+  /** AP-22: shown in the tag assignment section rendered below the list. */
+  insurerName: string;
+}): ReactElement {
   const { t } = useI18n();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,18 +108,27 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
   };
 
   // AP-22: shows the user which tag a manual link will additionally receive
-  // in Paperless. Failure is non-fatal – the hint is simply omitted.
+  // in Paperless. Failure is non-fatal – the hint is simply omitted, and a
+  // failed lookup must never keep claiming a tag that may be gone. `tagSeq`
+  // invalidates an in-flight lookup after a policyId change, so a late answer
+  // for the previous policy cannot overwrite the current hint.
+  const tagSeq = useRef(0);
   const loadAssignedTag = async () => {
+    const seq = ++tagSeq.current;
     try {
       const res = await fetch(
         `${API_BASE}/households/default/policies/${policyId}/paperless-tag`,
         { credentials: 'include' },
       );
-      if (!res.ok) return;
+      if (seq !== tagSeq.current) return;
+      if (!res.ok) {
+        setAssignedTagName(null);
+        return;
+      }
       const data = await res.json();
-      setAssignedTagName(data?.paperlessTagName ?? null);
+      if (seq === tagSeq.current) setAssignedTagName(data?.paperlessTagName ?? null);
     } catch {
-      setAssignedTagName(null);
+      if (seq === tagSeq.current) setAssignedTagName(null);
     }
   };
 
@@ -140,6 +157,7 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
     return () => {
       requestSeq.current += 1;
       searchSeq.current += 1;
+      tagSeq.current += 1;
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [policyId]);
@@ -332,245 +350,255 @@ export default function DocumentsTab({ policyId }: { policyId: string }): ReactE
   };
 
   return (
-    <Card>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--versigo-space-4)' }}>
-        <h2>{t('policies.tabs.documents')}</h2>
-        <div style={{ display: 'flex', gap: 'var(--versigo-space-2)' }}>
-          {/* BugFix-07 (Q3): Paperless linking – separate panel so any
-              number of documents can be linked one after another. */}
-          <Button variant="secondary" onClick={() => setShowPaperless((v) => !v)}>
-            {t('policies.paperlessConnect')}
-          </Button>
-          <Button variant="primary" onClick={() => setShowForm(true)}>
-            {t('policies.uploadDocument')}
-          </Button>
+    <>
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--versigo-space-4)' }}>
+          <h2>{t('policies.tabs.documents')}</h2>
+          <div style={{ display: 'flex', gap: 'var(--versigo-space-2)' }}>
+            {/* BugFix-07 (Q3): Paperless linking – separate panel so any
+                number of documents can be linked one after another. */}
+            <Button variant="secondary" onClick={() => setShowPaperless((v) => !v)}>
+              {t('policies.paperlessConnect')}
+            </Button>
+            <Button variant="primary" onClick={() => setShowForm(true)}>
+              {t('policies.uploadDocument')}
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {showPaperless && (
-        <div style={{ marginBottom: 'var(--versigo-space-6)', padding: 'var(--versigo-space-4)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
-          <strong>{t('policies.paperlessConnectTitle')}</strong>
-          <p className="text-sm text-muted" style={{ margin: 'var(--versigo-space-2) 0 var(--versigo-space-4)' }}>
-            {t('policies.paperlessConnectBody')}
-          </p>
-          {/* AP-22: tell the user which tag the manual link will add. */}
-          {assignedTagName && (
-            <Alert variant="info">
-              {t('policies.paperlessLinkAddsTag', { tag: assignedTagName })}
-            </Alert>
-          )}
-          <FormField label={t('policies.paperlessSearchPlaceholder')} hint={t('policies.paperlessSearchHint')}>
-            <Input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={t('policies.paperlessSearchPlaceholder')}
-              autoComplete="off"
-              maxLength={200}
-            />
-          </FormField>
-
-          {paperlessError && (
-            <div style={{ marginTop: 'var(--versigo-space-3)' }}>
-              <Alert variant="danger">{paperlessError}</Alert>
-            </div>
-          )}
-
-          {paperlessSearching && (
-            <div style={{ marginTop: 'var(--versigo-space-4)', textAlign: 'center' }}>
-              <InlineSpinner />
-            </div>
-          )}
-
-          {!paperlessSearching && paperlessResults !== null && paperlessResults.length === 0 && searchTerm.trim().length >= 2 && (
-            <p className="text-sm text-muted" style={{ marginTop: 'var(--versigo-space-4)' }}>
-              {t('policies.paperlessNoResults')}
+        {showPaperless && (
+          <div style={{ marginBottom: 'var(--versigo-space-6)', padding: 'var(--versigo-space-4)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
+            <strong>{t('policies.paperlessConnectTitle')}</strong>
+            <p className="text-sm text-muted" style={{ margin: 'var(--versigo-space-2) 0 var(--versigo-space-4)' }}>
+              {t('policies.paperlessConnectBody')}
             </p>
-          )}
-
-          {paperlessResults && paperlessResults.length > 0 && (
-            <div style={{ marginTop: 'var(--versigo-space-4)', display: 'grid', gap: 'var(--versigo-space-3)' }}>
-              {paperlessResults.map((hit) => (
-                <div key={hit.paperlessId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--versigo-space-3)', padding: 'var(--versigo-space-3)', background: 'var(--versigo-surface-alt, var(--versigo-surface))', borderRadius: 'var(--versigo-radius)' }}>
-                  <div style={{ minWidth: 0 }}>
-                    <strong>{hit.title}</strong>
-                    {hit.correspondent && (
-                      <div className="text-xs text-muted">{hit.correspondent}</div>
-                    )}
-                    {hit.tags.length > 0 && (
-                      <div className="text-xs text-muted">{hit.tags.join(', ')}</div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexShrink: 0 }}>
-                    <a href={hit.deepLink} target="_blank" rel="noopener noreferrer">
-                      <Button variant="secondary" size="sm">{t('policies.paperlessOpenInPaperless')}</Button>
-                    </a>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={linkingId === hit.paperlessId}
-                      onClick={() => handleLinkPaperless(hit.paperlessId)}
-                    >
-                      {linkingId === hit.paperlessId ? <><InlineSpinner /> {t('policies.paperlessConnecting')}</> : t('policies.paperlessConnectButton')}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {showForm && (
-        <form onSubmit={handleSubmit} style={{ marginBottom: 'var(--versigo-space-6)', padding: 'var(--versigo-space-4)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--versigo-space-4)' }}>
-            <FormField label={t('policies.documentFile')} required>
+            {/* AP-22: tell the user which tag the manual link will add. */}
+            {assignedTagName && (
+              <Alert variant="info">
+                {t('policies.paperlessLinkAddsTag', { tag: assignedTagName })}
+              </Alert>
+            )}
+            <FormField label={t('policies.paperlessSearchPlaceholder')} hint={t('policies.paperlessSearchHint')}>
               <Input
-                type="file"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                required
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={t('policies.paperlessSearchPlaceholder')}
+                autoComplete="off"
+                maxLength={200}
               />
             </FormField>
-            <FormField label={t('policies.documentCategory')}>
-              <Input
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                placeholder={t('policies.documentCategoryPlaceholder')}
-              />
-            </FormField>
-            <FormField label={t('policies.documentDate')}>
-              <Input
-                type="date"
-                value={form.documentDate}
-                onChange={(e) => setForm({ ...form, documentDate: e.target.value })}
-              />
-            </FormField>
-          </div>
-          {formError && (
-            <div style={{ marginTop: 'var(--versigo-space-3)' }}>
-              <Alert variant="danger">{formError}</Alert>
-            </div>
-          )}
-          <div style={{ marginTop: 'var(--versigo-space-4)', display: 'flex', gap: 'var(--versigo-space-2)' }}>
-            <Button type="submit" disabled={uploading}>
-              {uploading ? <><InlineSpinner /> {t('common.saving')}</> : t('common.save')}
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => { setShowForm(false); setFile(null); setFormError(null); }}>
-              {t('common.cancel')}
-            </Button>
-          </div>
-        </form>
-      )}
 
-      {error && <Alert variant="danger">{error}</Alert>}
+            {paperlessError && (
+              <div style={{ marginTop: 'var(--versigo-space-3)' }}>
+                <Alert variant="danger">{paperlessError}</Alert>
+              </div>
+            )}
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 'var(--versigo-space-8)' }}>
-          <InlineSpinner />
-        </div>
-      ) : documents.length === 0 ? (
-        <EmptyState icon="📄" title={t('policies.noDocumentsTitle')}>
-          <p>{t('policies.noDocumentsBody')}</p>
-        </EmptyState>
-      ) : (
-        <div style={{ display: 'grid', gap: 'var(--versigo-space-3)' }}>
-          {documents.map((doc) => (
-            <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--versigo-space-3)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--versigo-space-3)' }}>
-                <span style={{ fontSize: '1.5rem' }}>📄</span>
-                <div>
-                  <strong>{doc.fileName}</strong>
-                  {/* AP-22: origin + external tagging status */}
-                  {originLabel(doc) && (
-                    <span
-                      className="badge badge-neutral"
-                      style={{ marginLeft: 'var(--versigo-space-2)' }}
-                    >
-                      {originLabel(doc)}
-                    </span>
-                  )}
-                  {doc.taggingStatus === 'PENDING' && (
-                    <span
-                      className="badge badge-neutral"
-                      style={{ marginLeft: 'var(--versigo-space-2)' }}
-                    >
-                      {t('policies.paperlessTagPendingBadge')}
-                    </span>
-                  )}
-                  {doc.taggingStatus === 'FAILED' && (
-                    <span
-                      className="badge badge-danger"
-                      style={{ marginLeft: 'var(--versigo-space-2)' }}
-                    >
-                      {t('policies.paperlessTagFailedBadge')}
-                    </span>
-                  )}
-                  <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
-                    {isLinked(doc) && (
-                      <>
-                        {t('policies.paperlessLinkedDocument')}
-                        {doc.category && ` · ${doc.category}`}
-                      </>
-                    )}
-                    {!isLinked(doc) && (
-                      <>
-                        {doc.mimeType && `${doc.mimeType} · `}
-                        {formatFileSize(doc.fileSize)}
-                        {doc.category && ` · ${t('policies.documentCategory')}: ${doc.category}`}
-                      </>
-                    )}
-                    {doc.documentDate && ` · ${t('policies.documentDate')}: ${new Date(doc.documentDate).toLocaleDateString()}`}
-                    {' · '}{t('common.uploadedAt', { date: new Date(doc.uploadedAt).toLocaleDateString() })}
-                  </div>
-                  {doc.taggingStatus === 'FAILED' && (
-                    <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
-                      {t('policies.paperlessTagFailedHint')}
+            {paperlessSearching && (
+              <div style={{ marginTop: 'var(--versigo-space-4)', textAlign: 'center' }}>
+                <InlineSpinner />
+              </div>
+            )}
+
+            {!paperlessSearching && paperlessResults !== null && paperlessResults.length === 0 && searchTerm.trim().length >= 2 && (
+              <p className="text-sm text-muted" style={{ marginTop: 'var(--versigo-space-4)' }}>
+                {t('policies.paperlessNoResults')}
+              </p>
+            )}
+
+            {paperlessResults && paperlessResults.length > 0 && (
+              <div style={{ marginTop: 'var(--versigo-space-4)', display: 'grid', gap: 'var(--versigo-space-3)' }}>
+                {paperlessResults.map((hit) => (
+                  <div key={hit.paperlessId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--versigo-space-3)', padding: 'var(--versigo-space-3)', background: 'var(--versigo-surface-alt, var(--versigo-surface))', borderRadius: 'var(--versigo-radius)' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <strong>{hit.title}</strong>
+                      {hit.correspondent && (
+                        <div className="text-xs text-muted">{hit.correspondent}</div>
+                      )}
+                      {hit.tags.length > 0 && (
+                        <div className="text-xs text-muted">{hit.tags.join(', ')}</div>
+                      )}
                     </div>
+                    <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexShrink: 0 }}>
+                      <a href={hit.deepLink} target="_blank" rel="noopener noreferrer">
+                        <Button variant="secondary" size="sm">{t('policies.paperlessOpenInPaperless')}</Button>
+                      </a>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={linkingId === hit.paperlessId}
+                        onClick={() => handleLinkPaperless(hit.paperlessId)}
+                      >
+                        {linkingId === hit.paperlessId ? <><InlineSpinner /> {t('policies.paperlessConnecting')}</> : t('policies.paperlessConnectButton')}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showForm && (
+          <form onSubmit={handleSubmit} style={{ marginBottom: 'var(--versigo-space-6)', padding: 'var(--versigo-space-4)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--versigo-space-4)' }}>
+              <FormField label={t('policies.documentFile')} required>
+                <Input
+                  type="file"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  required
+                />
+              </FormField>
+              <FormField label={t('policies.documentCategory')}>
+                <Input
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  placeholder={t('policies.documentCategoryPlaceholder')}
+                />
+              </FormField>
+              <FormField label={t('policies.documentDate')}>
+                <Input
+                  type="date"
+                  value={form.documentDate}
+                  onChange={(e) => setForm({ ...form, documentDate: e.target.value })}
+                />
+              </FormField>
+            </div>
+            {formError && (
+              <div style={{ marginTop: 'var(--versigo-space-3)' }}>
+                <Alert variant="danger">{formError}</Alert>
+              </div>
+            )}
+            <div style={{ marginTop: 'var(--versigo-space-4)', display: 'flex', gap: 'var(--versigo-space-2)' }}>
+              <Button type="submit" disabled={uploading}>
+                {uploading ? <><InlineSpinner /> {t('common.saving')}</> : t('common.save')}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => { setShowForm(false); setFile(null); setFormError(null); }}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {error && <Alert variant="danger">{error}</Alert>}
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 'var(--versigo-space-8)' }}>
+            <InlineSpinner />
+          </div>
+        ) : documents.length === 0 ? (
+          <EmptyState icon="📄" title={t('policies.noDocumentsTitle')}>
+            <p>{t('policies.noDocumentsBody')}</p>
+          </EmptyState>
+        ) : (
+          <div style={{ display: 'grid', gap: 'var(--versigo-space-3)' }}>
+            {documents.map((doc) => (
+              <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--versigo-space-3)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--versigo-space-3)' }}>
+                  <span style={{ fontSize: '1.5rem' }}>📄</span>
+                  <div>
+                    <strong>{doc.fileName}</strong>
+                    {/* AP-22: origin + external tagging status */}
+                    {originLabel(doc) && (
+                      <span
+                        className="badge badge-neutral"
+                        style={{ marginLeft: 'var(--versigo-space-2)' }}
+                      >
+                        {originLabel(doc)}
+                      </span>
+                    )}
+                    {doc.taggingStatus === 'PENDING' && (
+                      <span
+                        className="badge badge-neutral"
+                        style={{ marginLeft: 'var(--versigo-space-2)' }}
+                      >
+                        {t('policies.paperlessTagPendingBadge')}
+                      </span>
+                    )}
+                    {doc.taggingStatus === 'FAILED' && (
+                      <span
+                        className="badge badge-danger"
+                        style={{ marginLeft: 'var(--versigo-space-2)' }}
+                      >
+                        {t('policies.paperlessTagFailedBadge')}
+                      </span>
+                    )}
+                    <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
+                      {isLinked(doc) && (
+                        <>
+                          {t('policies.paperlessLinkedDocument')}
+                          {doc.category && ` · ${doc.category}`}
+                        </>
+                      )}
+                      {!isLinked(doc) && (
+                        <>
+                          {doc.mimeType && `${doc.mimeType} · `}
+                          {formatFileSize(doc.fileSize)}
+                          {doc.category && ` · ${t('policies.documentCategory')}: ${doc.category}`}
+                        </>
+                      )}
+                      {doc.documentDate && ` · ${t('policies.documentDate')}: ${new Date(doc.documentDate).toLocaleDateString()}`}
+                      {' · '}{t('common.uploadedAt', { date: new Date(doc.uploadedAt).toLocaleDateString() })}
+                    </div>
+                    {doc.taggingStatus === 'FAILED' && (
+                      <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
+                        {t('policies.paperlessTagFailedHint')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {/* BugFix-07 (Q3): PAPERLESS_LINK documents have no
+                      local file content – instead of preview/download the
+                      Paperless deep link is offered. */}
+                  {isLinked(doc) ? (
+                    doc.deepLink ? (
+                      <a href={doc.deepLink} target="_blank" rel="noopener noreferrer">
+                        <Button variant="secondary" size="sm">{t('policies.paperlessOpenInPaperless')}</Button>
+                      </a>
+                    ) : (
+                      <span className="badge badge-neutral" style={{ alignSelf: 'center' }}>{t('policies.paperlessLinkedDocument')}</span>
+                    )
+                  ) : (
+                    <>
+                      <a href={`${API_BASE}/households/default/policies/${policyId}/documents/${doc.id}/preview`} target="_blank" rel="noopener noreferrer">
+                        <Button variant="secondary" size="sm">{t('policies.previewDocument')}</Button>
+                      </a>
+                      <a href={`${API_BASE}/households/default/policies/${policyId}/documents/${doc.id}/download`}>
+                        <Button variant="secondary" size="sm">{t('policies.downloadDocument')}</Button>
+                      </a>
+                    </>
+                  )}
+                  {doc.taggingStatus === 'FAILED' && (
+                    <Button variant="secondary" size="sm" onClick={() => handleRetryTagging(doc.id)}>
+                      {t('policies.paperlessTagRetry')}
+                    </Button>
+                  )}
+                  {/* AP-22: an exclusively automatic assignment is controlled by
+                      the Paperless tag; offering "delete" here would be
+                      misleading because the next sync would restore it. */}
+                  {doc.linkOriginTag && !doc.linkOriginManual ? (
+                    <span className="badge badge-neutral" style={{ alignSelf: 'center' }}>
+                      {t('policies.paperlessAutoManagedHint')}
+                    </span>
+                  ) : (
+                    <Button variant="danger" size="sm" onClick={() => handleDelete(doc.id)}>{t('policies.deleteDocument')}</Button>
                   )}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {/* BugFix-07 (Q3): PAPERLESS_LINK documents have no
-                    local file content – instead of preview/download the
-                    Paperless deep link is offered. */}
-                {isLinked(doc) ? (
-                  doc.deepLink ? (
-                    <a href={doc.deepLink} target="_blank" rel="noopener noreferrer">
-                      <Button variant="secondary" size="sm">{t('policies.paperlessOpenInPaperless')}</Button>
-                    </a>
-                  ) : (
-                    <span className="badge badge-neutral" style={{ alignSelf: 'center' }}>{t('policies.paperlessLinkedDocument')}</span>
-                  )
-                ) : (
-                  <>
-                    <a href={`${API_BASE}/households/default/policies/${policyId}/documents/${doc.id}/preview`} target="_blank" rel="noopener noreferrer">
-                      <Button variant="secondary" size="sm">{t('policies.previewDocument')}</Button>
-                    </a>
-                    <a href={`${API_BASE}/households/default/policies/${policyId}/documents/${doc.id}/download`}>
-                      <Button variant="secondary" size="sm">{t('policies.downloadDocument')}</Button>
-                    </a>
-                  </>
-                )}
-                {doc.taggingStatus === 'FAILED' && (
-                  <Button variant="secondary" size="sm" onClick={() => handleRetryTagging(doc.id)}>
-                    {t('policies.paperlessTagRetry')}
-                  </Button>
-                )}
-                {/* AP-22: an exclusively automatic assignment is controlled by
-                    the Paperless tag; offering "delete" here would be
-                    misleading because the next sync would restore it. */}
-                {doc.linkOriginTag && !doc.linkOriginManual ? (
-                  <span className="badge badge-neutral" style={{ alignSelf: 'center' }}>
-                    {t('policies.paperlessAutoManagedHint')}
-                  </span>
-                ) : (
-                  <Button variant="danger" size="sm" onClick={() => handleDelete(doc.id)}>{t('policies.deleteDocument')}</Button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* AP-22: the tag decides which Paperless documents appear in this tab,
+          so its management lives here instead of the policy's basic settings. */}
+      <PaperlessTagSection
+        policyId={policyId}
+        insurerName={insurerName}
+        onConfigChange={loadAssignedTag}
+      />
+    </>
   );
 }

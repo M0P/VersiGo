@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui/alert';
 import { InlineSpinner } from '@/components/ui/loading';
 import { useI18n } from '@/i18n';
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import { paperlessTagErrorKey } from '@/lib/paperless-tag-error';
 
 const API_BASE = getApiBaseUrl();
 
@@ -27,17 +28,24 @@ type TagConfig = {
 type TagHit = { tagId: number; name: string };
 
 /**
- * AP-22: "Paperless-ngx-Dokumentzuordnung" section on the policy edit page.
- * Lets the user search/select an existing tag, create a new one after an
- * explicit confirmation, change or remove the assignment, trigger an
- * immediate sync and see the last successful sync plus error state.
+ * AP-22: "Paperless-ngx-Dokumentzuordnung" section inside the policy's
+ * **Documents** tab (the tag decides which documents appear there, so the
+ * control lives where its effect is visible). Lets the user search/select an
+ * existing tag, create a new one after an explicit confirmation, change or
+ * remove the assignment, trigger an immediate sync and see the last
+ * successful sync plus error state.
+ *
+ * `onConfigChange` lets the parent refresh data that depends on the
+ * assignment (e.g. the hint which tag a manual link will receive).
  */
 export default function PaperlessTagSection({
   policyId,
   insurerName,
+  onConfigChange,
 }: {
   policyId: string;
   insurerName: string;
+  onConfigChange?: () => void;
 }): ReactElement {
   const { t } = useI18n();
   const [config, setConfig] = useState<TagConfig | null>(null);
@@ -102,8 +110,12 @@ export default function PaperlessTagSection({
     if (!editing || term.length < 2) {
       // No request will be made: clear the spinner as well, otherwise it stays
       // visible forever after the term is shortened below the minimum length.
+      // Bumping the sequence invalidates an in-flight search, so a late answer
+      // cannot render hits under a term the user already cleared.
+      searchSeq.current += 1;
       setSearching(false);
       setResults(null);
+      setSearchError(null);
       return;
     }
     setSearching(true);
@@ -117,7 +129,13 @@ export default function PaperlessTagSection({
         );
         if (mySeq !== searchSeq.current) return;
         if (!res.ok) {
-          setSearchError(t('policies.paperlessTagSearchError'));
+          // AP-22 follow-up: the API names the cause – showing "no results"
+          // for an unreachable/broken Paperless would be misleading.
+          const body = await res.json().catch(() => null);
+          if (mySeq !== searchSeq.current) return;
+          setSearchError(
+            t(paperlessTagErrorKey(body, 'policies.paperlessTagSearchError')),
+          );
           setResults([]);
           return;
         }
@@ -184,7 +202,9 @@ export default function PaperlessTagSection({
       );
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.message ?? t('policies.paperlessTagSaveError'));
+        // AP-22: translate the API error code like the search and create
+        // paths do - a raw technical string must never reach the UI.
+        throw new Error(t(paperlessTagErrorKey(data, 'policies.paperlessTagSaveError')));
       }
       if (mySeq === seq.current) {
         setEditing(false);
@@ -192,6 +212,8 @@ export default function PaperlessTagSection({
         setResults(null);
         setNewTagName('');
         await loadConfig();
+        // AP-22: the Documents tab shows which tag a manual link will add.
+        onConfigChange?.();
       }
     } catch (err) {
       if (mySeq === seq.current) {
@@ -217,7 +239,9 @@ export default function PaperlessTagSection({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.message ?? t('policies.paperlessTagSaveError'));
+        // AP-22: turn the API error code into a concrete explanation
+        // (not configured / access denied / not reachable / rejected).
+        throw new Error(t(paperlessTagErrorKey(data, 'policies.paperlessTagSaveError')));
       }
       const tag = (await res.json()) as TagHit;
       if (mySeq === seq.current) await assignTag(tag.tagId, tag.name);
@@ -240,7 +264,11 @@ export default function PaperlessTagSection({
         { method: 'DELETE', credentials: 'include' },
       );
       if (!res.ok) throw new Error(t('policies.paperlessTagSaveError'));
-      if (mySeq === seq.current) await loadConfig();
+      if (mySeq === seq.current) {
+        await loadConfig();
+        // AP-22: the Documents tab shows which tag a manual link will add.
+        onConfigChange?.();
+      }
     } catch (err) {
       if (mySeq === seq.current) {
         setError(err instanceof Error ? err.message : t('policies.paperlessTagSaveError'));
@@ -384,7 +412,18 @@ export default function PaperlessTagSection({
             </div>
           )}
           {searchError && <Alert variant="danger">{searchError}</Alert>}
-          {!searching && results !== null && results.length === 0 && (
+          {/* AP-22 follow-up: a term below the minimum length triggers no
+              request at all – say why instead of showing nothing, and never
+              claim "no matching tag" when no search was made. */}
+          {!searching &&
+            !searchError &&
+            search.trim().length > 0 &&
+            search.trim().length < 2 && (
+              <p className="text-sm text-muted">{t('policies.paperlessTagSearchHint')}</p>
+            )}
+          {/* AP-22 follow-up: never claim "no matching tag" when the search
+              actually failed – the error above names the cause instead. */}
+          {!searching && !searchError && results !== null && results.length === 0 && (
             <p className="text-sm text-muted">{t('policies.paperlessTagNoResults')}</p>
           )}
           {results && results.length > 0 && (

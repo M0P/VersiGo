@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BadGatewayException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { GlobalRole, UserStatus } from '@prisma/client';
 import { PaperlessTagService } from '../paperless-tag.service';
 import type { AuthenticatedUser } from '../../identity/auth.service';
@@ -62,7 +62,7 @@ function createMockSettings(url = 'https://paperless.example.com/'): any {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createMockPaperless(): any {
   return {
-    searchTags: vi.fn().mockResolvedValue({ items: [], page: 1, pageCount: 0 }),
+    searchTags: vi.fn().mockResolvedValue({ ok: true, page: { items: [], page: 1, pageCount: 0 } }),
     getTag: vi.fn().mockResolvedValue({ ok: true, tag: { tagId: 7, name: 'KFZ-Versicherung' } }),
     createTag: vi.fn(),
     listDocumentsByTag: vi.fn(),
@@ -108,9 +108,8 @@ describe('PaperlessTagService', () => {
   describe('searchTags / createTag', () => {
     it('searches tags server-side for a household member', async () => {
       paperless.searchTags.mockResolvedValue({
-        items: [{ tagId: 7, name: 'KFZ' }],
-        page: 1,
-        pageCount: 1,
+        ok: true,
+        page: { items: [{ tagId: 7, name: 'KFZ' }], page: 1, pageCount: 1 },
       });
 
       const result = await service.searchTags(householdId, user, 'KFZ', 1);
@@ -128,8 +127,43 @@ describe('PaperlessTagService', () => {
       expect(paperless.searchTags).not.toHaveBeenCalled();
     });
 
+    it('surfaces why a tag search failed instead of returning an empty list', async () => {
+      paperless.searchTags.mockResolvedValue({ ok: false, error: { kind: 'UNREACHABLE' } });
+
+      await expect(service.searchTags(householdId, user, 'KFZ', 1)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      await expect(service.searchTags(householdId, user, 'KFZ', 1)).rejects.toThrow(
+        'PAPERLESS_UNREACHABLE',
+      );
+
+      paperless.searchTags.mockResolvedValue({ ok: false, error: { kind: 'AUTH_FAILED' } });
+      await expect(service.searchTags(householdId, user, 'KFZ', 1)).rejects.toThrow(
+        BadGatewayException,
+      );
+      await expect(service.searchTags(householdId, user, 'KFZ', 1)).rejects.toThrow(
+        'PAPERLESS_AUTH_FAILED',
+      );
+
+      paperless.searchTags.mockResolvedValue({ ok: false, error: { kind: 'NOT_CONFIGURED' } });
+      await expect(service.searchTags(householdId, user, 'KFZ', 1)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      await expect(service.searchTags(householdId, user, 'KFZ', 1)).rejects.toThrow(
+        'PAPERLESS_NOT_CONFIGURED',
+      );
+
+      paperless.searchTags.mockResolvedValue({ ok: false, error: { kind: 'REJECTED' } });
+      await expect(service.searchTags(householdId, user, 'KFZ', 1)).rejects.toThrow(
+        BadGatewayException,
+      );
+      await expect(service.searchTags(householdId, user, 'KFZ', 1)).rejects.toThrow(
+        'PAPERLESS_TAG_SEARCH_FAILED',
+      );
+    });
+
     it('returns the existing tag idempotently on create', async () => {
-      paperless.createTag.mockResolvedValue({ tagId: 7, name: 'KFZ' });
+      paperless.createTag.mockResolvedValue({ ok: true, tag: { tagId: 7, name: 'KFZ' } });
 
       await expect(service.createTag(householdId, user, 'KFZ')).resolves.toEqual({
         tagId: 7,
@@ -138,10 +172,39 @@ describe('PaperlessTagService', () => {
     });
 
     it('reports a gateway error when the tag could not be created', async () => {
-      paperless.createTag.mockResolvedValue(null);
+      paperless.createTag.mockResolvedValue({ ok: false, error: { kind: 'REJECTED' } });
 
       await expect(service.createTag(householdId, user, 'KFZ')).rejects.toThrow(
         BadGatewayException,
+      );
+      await expect(service.createTag(householdId, user, 'KFZ')).rejects.toThrow(
+        'PAPERLESS_TAG_CREATE_FAILED',
+      );
+    });
+
+    it('names the cause when Paperless is missing, unreachable or rejecting', async () => {
+      paperless.createTag.mockResolvedValue({ ok: false, error: { kind: 'NOT_CONFIGURED' } });
+      await expect(service.createTag(householdId, user, 'KFZ')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      await expect(service.createTag(householdId, user, 'KFZ')).rejects.toThrow(
+        'PAPERLESS_NOT_CONFIGURED',
+      );
+
+      paperless.createTag.mockResolvedValue({ ok: false, error: { kind: 'AUTH_FAILED' } });
+      await expect(service.createTag(householdId, user, 'KFZ')).rejects.toThrow(
+        BadGatewayException,
+      );
+      await expect(service.createTag(householdId, user, 'KFZ')).rejects.toThrow(
+        'PAPERLESS_AUTH_FAILED',
+      );
+
+      paperless.createTag.mockResolvedValue({ ok: false, error: { kind: 'UNREACHABLE' } });
+      await expect(service.createTag(householdId, user, 'KFZ')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      await expect(service.createTag(householdId, user, 'KFZ')).rejects.toThrow(
+        'PAPERLESS_UNREACHABLE',
       );
     });
   });
