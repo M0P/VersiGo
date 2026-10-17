@@ -421,15 +421,75 @@ describe('AiAssistService', () => {
 
       const result = await disabledService.healthCheck();
 
-      expect(result).toEqual({ connected: false, provider: 'none' });
+      expect(result).toEqual({ connected: false, provider: 'none', reason: 'disabled' });
+      expect(mockRegistry.getAdapter).not.toHaveBeenCalled();
     });
 
-    it('reports a provider with NoOp when AI is connected', async () => {
+    it('reports a provider with NoOp when AI is enabled but unknown', async () => {
       mockDb.householdMembership.findUnique = vi.fn();
 
       const result = await service.healthCheck();
 
-      expect(result.provider).toBe('none'); // Mock-Registry gibt NoOpAdapter zurueck
+      // The mock registry hands out the NoOp adapter (providerKey "none")
+      // – BugFix-22 reports that as "not-configured" instead of the
+      // misleading "provider does not answer".
+      expect(result).toEqual({
+        connected: false,
+        provider: 'none',
+        reason: 'not-configured',
+      });
+    });
+
+    it('passes the adapter reason through (BugFix-22)', async () => {
+      const adapter = {
+        providerKey: 'openai-compat',
+        healthCheck: vi.fn().mockResolvedValue(false),
+        healthStatus: vi.fn().mockResolvedValue({
+          connected: false,
+          reason: 'unauthorized',
+        }),
+      };
+      const registry = { getAdapter: vi.fn().mockResolvedValue(adapter) };
+
+      const enabledService = new AiAssistService(
+        mockDb as never,
+        registry as never,
+        createMockSettings(true) as never,
+        createMockAuthService() as never,
+        createMockQueue() as never,
+      );
+
+      const result = await enabledService.healthCheck();
+
+      expect(result).toEqual({
+        connected: false,
+        provider: 'openai-compat',
+        reason: 'unauthorized',
+      });
+    });
+
+    it('falls back to healthCheck for adapters without healthStatus', async () => {
+      const adapter = {
+        providerKey: 'openai-compat',
+        healthCheck: vi.fn().mockResolvedValue(true),
+      };
+      const registry = { getAdapter: vi.fn().mockResolvedValue(adapter) };
+
+      const enabledService = new AiAssistService(
+        mockDb as never,
+        registry as never,
+        createMockSettings(true) as never,
+        createMockAuthService() as never,
+        createMockQueue() as never,
+      );
+
+      const result = await enabledService.healthCheck();
+
+      expect(result).toEqual({
+        connected: true,
+        provider: 'openai-compat',
+        reason: null,
+      });
     });
   });
 });

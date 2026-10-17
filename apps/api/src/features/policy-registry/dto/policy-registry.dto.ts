@@ -11,7 +11,7 @@ import {
   ValidateNested,
   IsUrl,
 } from 'class-validator';
-import { InsurancePolicyType, PolicyStatus, PaymentFrequency, PolicySource, SyncStatus } from '@prisma/client';
+import { InsurancePolicyType, PolicyStatus, PaymentFrequency, PolicySource, SyncStatus, CoveredSubjectType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 
 /**
@@ -180,8 +180,21 @@ export class CreateCoveredPersonDto {
   @IsString()
   personName!: string;
 
+  /**
+   * BugFix-22: the insured subject is a person or an object (car, house, ...).
+   * Defaults to `PERSON` in the service so existing clients stay valid.
+   */
+  @IsOptional()
+  @IsEnum(CoveredSubjectType)
+  subjectType?: CoveredSubjectType;
+
+  /**
+   * BugFix-22: the relation is optional – an insured object has no relation
+   * to the policy holder.
+   */
+  @IsOptional()
   @IsString()
-  relationType!: string;
+  relationType?: string;
 
   @IsOptional()
   @IsDateString()
@@ -192,6 +205,10 @@ export class UpdateCoveredPersonDto {
   @IsOptional()
   @IsString()
   personName?: string;
+
+  @IsOptional()
+  @IsEnum(CoveredSubjectType)
+  subjectType?: CoveredSubjectType;
 
   @IsOptional()
   @IsString()

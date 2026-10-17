@@ -7,7 +7,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { DatabaseService, ENCRYPTION_PORT, EncryptionPort } from '@versigo/foundation';
-import { GlobalRole, Prisma, PortalAccountLink } from '@prisma/client';
+import { CoveredSubjectType, GlobalRole, Prisma, PortalAccountLink } from '@prisma/client';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { PortalConnectorService } from '../portal-connectors/portal-connector.service';
 import {
@@ -399,7 +399,11 @@ export class PolicyRegistryService {
         data: {
           policyId,
           personName: dto.personName,
-          relationType: dto.relationType,
+          // BugFix-22: insured subjects are persons or objects; PERSON keeps
+          // existing clients (that never send a subject type) valid.
+          subjectType: dto.subjectType ?? CoveredSubjectType.PERSON,
+          // BugFix-22: the relation is optional – an empty value means "none".
+          relationType: dto.relationType?.trim() ? dto.relationType.trim() : null,
           birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
         },
       });
@@ -410,7 +414,12 @@ export class PolicyRegistryService {
           entityType: 'CoveredPerson',
           entityId: person.id,
           action: 'CREATE',
-          diffJson: { policyId, personName: dto.personName },
+          diffJson: {
+            policyId,
+            personName: dto.personName,
+            subjectType: dto.subjectType ?? CoveredSubjectType.PERSON,
+            relationType: dto.relationType?.trim() ? dto.relationType.trim() : null,
+          },
         },
       });
 
@@ -445,7 +454,12 @@ export class PolicyRegistryService {
         where: { id: personId },
         data: {
           personName: dto.personName,
-          relationType: dto.relationType,
+          subjectType: dto.subjectType,
+          // BugFix-22: `undefined` leaves the relation untouched, an empty
+          // value clears it.
+          relationType: dto.relationType !== undefined
+            ? (dto.relationType.trim() ? dto.relationType.trim() : null)
+            : undefined,
           birthDate: dto.birthDate !== undefined ? (dto.birthDate ? new Date(dto.birthDate) : null) : undefined,
         },
       });

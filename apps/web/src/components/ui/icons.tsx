@@ -19,7 +19,13 @@ export type IconName =
   | 'fileImage'
   | 'fileDocument'
   | 'fileSpreadsheet'
-  | 'fileGeneric';
+  | 'fileGeneric'
+  // BugFix-22: origin of a Paperless assignment + insured subject kind.
+  | 'linkTag'
+  | 'linkManual'
+  | 'linkBoth'
+  | 'subjectPerson'
+  | 'subjectObject';
 
 const ICON_PATHS: Record<IconName, string> = {
   home: 'M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5',
@@ -48,6 +54,16 @@ const ICON_PATHS: Record<IconName, string> = {
   // Monitoring: Puls-/EKG-Linie (Betriebsstatus)
   monitoring:
     'M2 12h4l3-7 4 14 3-7h6',
+  // BugFix-22: Herkunft einer Paperless-Zuordnung (Tag / manuelle Verknüpfung)
+  linkTag: 'M3 12 11.5 3.5H20v8.5L11.5 20 3 12Zm12.2-4.7a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4Z',
+  linkManual:
+    'M9.5 14.5 14.5 9.5M8.5 7.5H7a4.5 4.5 0 0 0 0 9h1.5M15.5 7.5H17a4.5 4.5 0 0 1 0 9h-1.5',
+  linkBoth:
+    'M3 11.5 11 3.5h7.5V11L10.5 19 3 11.5Zm11-4.2a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4ZM12.5 21h-1a2.7 2.7 0 0 1 0-5.4h1M19 21h1a2.7 2.7 0 0 0 0-5.4h-1M13 18.3h5',
+  // BugFix-22: versichertes Subjekt – Person oder Objekt (z. B. Kfz, Haus)
+  subjectPerson:
+    'M12 11.5a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5ZM4.5 21c0-3.3 3.4-5.5 7.5-5.5s7.5 2.2 7.5 5.5',
+  subjectObject: 'M3.5 21V9.5L12 3l8.5 6.5V21M9 21v-6h6v6',
 };
 
 type IconProps = {

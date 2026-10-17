@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import { Card } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Loading } from '../../../components/ui/loading';
-import { useI18n } from '../../../i18n';
+import { useI18n, type Translator } from '../../../i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 
@@ -28,7 +28,32 @@ type CoverageSummary = {
 type AiHealth = {
   connected: boolean;
   provider: string;
+  /** Coarse, secret-free reason why the provider is unavailable (BugFix-22). */
+  reason?: string | null;
 };
+
+/**
+ * Maps the machine-readable reason codes of `GET .../ai/status` to the
+ * corresponding i18n key (BugFix-22). Unknown codes fall back to a generic
+ * hint instead of rendering the raw code.
+ */
+const AI_REASON_KEYS: Record<string, string> = {
+  disabled: 'ai.reasonDisabled',
+  'not-configured': 'ai.reasonNotConfigured',
+  unauthorized: 'ai.reasonUnauthorized',
+  timeout: 'ai.reasonTimeout',
+  unreachable: 'ai.reasonUnreachable',
+  'http-error': 'ai.reasonHttpError',
+};
+
+/**
+ * Human hint for a reason code; empty string when unknown, so an unexpected
+ * code never renders as a raw token (BugFix-22).
+ */
+function aiReasonHint(t: Translator, reason: string | null | undefined): string {
+  const key = reason ? AI_REASON_KEYS[reason] : undefined;
+  return key ? t(key) : '';
+}
 
 type Props = {
   householdId: string;
@@ -37,7 +62,7 @@ type Props = {
 
 type ViewState =
   | { status: 'loading' }
-  | { status: 'ai-unavailable'; provider: string }
+  | { status: 'ai-unavailable'; provider: string; reason: string | null }
   | { status: 'ai-check-error'; message: string }
   | { status: 'no-summary'; aiAvailable: boolean }
   | { status: 'summary-load-error'; message: string }
@@ -92,7 +117,13 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
       }
 
       if (!health.connected) {
-        if (!cancelled) setViewState({ status: 'ai-unavailable', provider: health.provider });
+        if (!cancelled) {
+          setViewState({
+            status: 'ai-unavailable',
+            provider: health.provider,
+            reason: health.reason ?? null,
+          });
+        }
         return;
       }
 
@@ -274,6 +305,9 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
             {viewState.provider === 'none'
               ? t('ai.unavailableConfig')
               : t('ai.unavailableProvider')}
+            {/* BugFix-22: concrete, secret-free reason instead of a bare
+                "provider does not answer". */}
+            {aiReasonHint(t, viewState.reason)}
           </p>
         </Card>
       );

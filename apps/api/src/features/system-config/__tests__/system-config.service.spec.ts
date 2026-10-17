@@ -52,12 +52,12 @@ function createMockDb() {
   };
 }
 
-function createMockResolver() {
+function createMockResolver(overrides: Record<string, string | number | boolean> = {}) {
   const resolveImpl = async (key: string) => {
     const definition = getSettingDefinition(key)!;
     const resolution = {
       key,
-      value: definition.defaultValue,
+      value: key in overrides ? overrides[key] : definition.defaultValue,
       source: 'DEFAULT' as const,
       reason: 'No value configured – safe code default active',
       uiValuePresent: false,
@@ -80,14 +80,17 @@ function createMockResolver() {
       return map;
     }),
     getEffectiveString: vi.fn(async (key: string) => {
+      if (key in overrides) return String(overrides[key]);
       const definition = getSettingDefinition(key)!;
       return typeof definition.defaultValue === 'string' ? definition.defaultValue : undefined;
     }),
     getEffectiveBoolean: vi.fn(async (key: string) => {
+      if (key in overrides) return typeof overrides[key] === 'boolean' ? overrides[key] : overrides[key] === 'true';
       const definition = getSettingDefinition(key)!;
       return typeof definition.defaultValue === 'boolean' ? definition.defaultValue : undefined;
     }),
     getEffectiveNumber: vi.fn(async (key: string) => {
+      if (key in overrides) return typeof overrides[key] === 'number' ? overrides[key] : Number(overrides[key]);
       const definition = getSettingDefinition(key)!;
       return typeof definition.defaultValue === 'number' ? definition.defaultValue : undefined;
     }),
@@ -102,12 +105,33 @@ function createMockSettingsStore() {
   };
 }
 
-function createService() {
+/**
+ * BugFix-22: AI connectivity tests are cross-checked against the runtime
+ * adapter. The default mock reports a healthy provider so that the existing
+ * endpoint tests keep their original intent; individual tests override it.
+ */
+function createMockAiAssist() {
+  return {
+    healthCheck: vi.fn().mockResolvedValue({
+      connected: true,
+      provider: 'openai-compat',
+      reason: null,
+    }),
+  };
+}
+
+function createService(resolverOverrides: Record<string, string | number | boolean> = {}) {
   const db = createMockDb();
-  const resolver = createMockResolver();
+  const resolver = createMockResolver(resolverOverrides);
   const store = createMockSettingsStore();
-  const service = new SystemConfigService(db as never, resolver as never, store as never);
-  return { db, resolver, store, service };
+  const aiAssist = createMockAiAssist();
+  const service = new SystemConfigService(
+    db as never,
+    resolver as never,
+    store as never,
+    aiAssist as never,
+  );
+  return { db, resolver, store, aiAssist, service };
 }
 
 describe('SystemConfigService', () => {
@@ -313,7 +337,9 @@ describe('SystemConfigService', () => {
       const result = await service.testConnectivity('AI_OLLAMA_BASE_URL', ACTOR);
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('HTTP 200: OK');
+      expect(result.message).toBe(
+        'HTTP 200: OK | Lauftest: Provider \'openai-compat\' erreichbar.',
+      );
       expect(axiosGetMock).toHaveBeenCalledWith(
         'http://localhost:11434/api/tags',
         expect.objectContaining({ signal: expect.anything() }),
@@ -361,6 +387,79 @@ describe('SystemConfigService', () => {
       expect(result.message).toContain('abgelehnt');
       expect(axiosGetMock).not.toHaveBeenCalled();
       axiosGetMock.mockRestore();
+    });
+
+    // --- BugFix-22: runtime cross-check of AI connectivity tests ---
+
+    it('downgrades a reachable AI endpoint when the runtime is unavailable', async () => {
+      const { aiAssist, service } = createService({
+        AI_OPENAI_COMPAT_BASE_URL: 'https://api.example.com/v1',
+        AI_OPENAI_COMPAT_API_KEY: 'sk-secret-value',
+      });
+      aiAssist.healthCheck.mockResolvedValue({
+        connected: false,
+        provider: 'ollama',
+        reason: 'unreachable',
+      });
+      vi.spyOn(axios, 'get').mockResolvedValue({ status: 200, statusText: 'OK' } as never);
+
+      const result = await service.testConnectivity('AI_OPENAI_COMPAT_BASE_URL', ACTOR);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('HTTP 200: OK');
+      expect(result.message).toContain('Lauftest');
+      expect(result.message).toContain('nicht erreichbar');
+      // The verdict must stay secret-free: neither the URL, the host nor
+      // the configured API key may leak into the message.
+      expect(result.message).not.toContain('api.example.com');
+      expect(result.message).not.toContain('sk-secret-value');
+      vi.restoreAllMocks();
+    });
+
+    it('reports a disabled AI runtime without failing the endpoint wording', async () => {
+      const { aiAssist, service } = createService({
+        AI_OPENAI_COMPAT_BASE_URL: 'https://api.example.com/v1',
+        AI_OPENAI_COMPAT_API_KEY: 'sk-secret-value',
+      });
+      aiAssist.healthCheck.mockResolvedValue({
+        connected: false,
+        provider: 'none',
+        reason: 'disabled',
+      });
+      vi.spyOn(axios, 'get').mockResolvedValue({ status: 200, statusText: 'OK' } as never);
+
+      const result = await service.testConnectivity('AI_OPENAI_COMPAT_API_KEY', ACTOR);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('AI ist deaktiviert');
+      vi.restoreAllMocks();
+    });
+
+    it('does not cross-check non-AI keys', async () => {
+      const { aiAssist, service } = createService({
+        PAPERLESS_URL: 'https://paperless.example.com',
+        PAPERLESS_API_TOKEN: 'token',
+      });
+      vi.spyOn(axios, 'get').mockResolvedValue({ status: 200, statusText: 'OK' } as never);
+
+      const result = await service.testConnectivity('PAPERLESS_URL', ACTOR);
+
+      expect(result.message).toBe('HTTP 200: OK');
+      expect(aiAssist.healthCheck).not.toHaveBeenCalled();
+      vi.restoreAllMocks();
+    });
+
+    it('reports a runtime verdict error safely', async () => {
+      const { aiAssist, service } = createService();
+      aiAssist.healthCheck.mockRejectedValue(new Error('internal details host.example'));
+      vi.spyOn(axios, 'get').mockResolvedValue({ status: 200, statusText: 'OK' } as never);
+
+      const result = await service.testConnectivity('AI_OLLAMA_BASE_URL', ACTOR);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('konnte nicht ermittelt werden');
+      expect(result.message).not.toContain('host.example');
+      vi.restoreAllMocks();
     });
   });
 });

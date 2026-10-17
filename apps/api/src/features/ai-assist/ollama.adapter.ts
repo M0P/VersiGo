@@ -3,8 +3,14 @@ import { HttpService } from '@nestjs/axios';
 import { SettingsResolverService } from '@versigo/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/foundation';
+import type {
+  IAIAdapter,
+  AiExtractResult,
+  AiSummarizeResult,
+  AiHealthStatus,
+} from '@versigo/foundation';
 import { tryParseExtractionResponse } from './ai-json.helper';
+import { classifyAiHealthError } from './ai-health-error.helper';
 import { optionalRelaxedHttpsAgent } from '../../common/connectivity/tls-agent';
 
 interface OllamaChatResponse {
@@ -170,18 +176,30 @@ export class OllamaAdapter implements IAIAdapter {
   }
 
   async healthCheck(): Promise<boolean> {
+    return (await this.healthStatus()).connected;
+  }
+
+  /**
+   * Detailed health check (BugFix-22) with a machine-readable reason, so
+   * the UI can say WHY Ollama does not answer (e.g. "unreachable" when the
+   * container's localhost has no Ollama) instead of a generic message.
+   */
+  async healthStatus(): Promise<AiHealthStatus> {
+    const config = await this.runtimeConfig();
+    const url = `${config.baseUrl}/api/tags`;
     try {
-      const config = await this.runtimeConfig();
-      const url = `${config.baseUrl}/api/tags`;
       const { status } = await firstValueFrom(
         this.httpService.get(url, {
           timeout: 5_000,
+          validateStatus: () => true,
           ...(config.httpsAgent !== undefined ? { httpsAgent: config.httpsAgent } : {}),
         }),
       );
-      return status >= 200 && status < 300;
-    } catch {
-      return false;
+      if (status >= 200 && status < 300) return { connected: true, reason: null };
+      if (status === 401 || status === 403) return { connected: false, reason: 'unauthorized' };
+      return { connected: false, reason: 'http-error' };
+    } catch (err) {
+      return { connected: false, reason: classifyAiHealthError(err) };
     }
   }
 

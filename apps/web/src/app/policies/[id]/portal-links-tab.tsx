@@ -11,6 +11,7 @@ import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 import { normalizePortalUrl } from '@/lib/portal-url';
+import { newPortalLinkForm } from '@/lib/portal-link-form';
 
 const API_BASE = getApiBaseUrl();
 
@@ -30,14 +31,13 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    providerKey: '',
-    portalUrl: '',
-    usernameHint: '',
-    accessHint: '',
-  });
+  const [form, setForm] = useState(newPortalLinkForm());
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // BugFix-22: the legacy portal URL of the policy (master-data column
+  // `insurerPortalUrl`). It is offered as the default value of a new portal
+  // link – this tab is now the single place for a portal URL.
+  const [legacyPortalUrl, setLegacyPortalUrl] = useState<string | null>(null);
 
   // Shared loading logic for the mount effect and handler reloads. A
   // monotonically increasing counter (`requestSeq`) invalidates in-flight
@@ -52,6 +52,7 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
     // BugFix-05 (finding 8): reset state so a policyId change does not
     // display data from the previous policy.
     setLinks([]);
+    setLegacyPortalUrl(null);
     setLoading(true);
     setError(null);
     try {
@@ -62,7 +63,10 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
       if (res.status === 401) { window.location.href = '/login'; return; }
       if (res.ok) {
         const data = await res.json();
-        if (seq === requestSeq.current) setLinks(data.portalLinks || []);
+        if (seq === requestSeq.current) {
+          setLinks(data.portalLinks || []);
+          setLegacyPortalUrl(data.insurerPortalUrl ?? null);
+        }
       } else if (seq === requestSeq.current) {
         setError(t('policies.noLinksBody'));
       }
@@ -84,7 +88,7 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
   useEffect(() => {
     setShowForm(false);
     setEditingId(null);
-    setForm({ providerKey: '', portalUrl: '', usernameHint: '', accessHint: '' });
+    setForm(newPortalLinkForm());
     setFormError(null);
     void reloadLinks();
     // policyId controls the data source; `t` is deliberately not in the
@@ -133,7 +137,7 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
       // also seq-guarded – a late success of a submit from A must not
       // close/clear B's open form after a policyId change.
       if (seq === requestSeq.current) {
-        setForm({ providerKey: '', portalUrl: '', usernameHint: '', accessHint: '' });
+        setForm(newPortalLinkForm());
         setEditingId(null);
         setShowForm(false);
         // Success reload only if no policyId change happened in the meantime
@@ -182,23 +186,39 @@ export default function PortalLinksTab({ policyId }: { policyId: string }): Reac
   };
 
   const cancelEdit = () => {
-    setForm({ providerKey: '', portalUrl: '', usernameHint: '', accessHint: '' });
+    setForm(newPortalLinkForm());
     setEditingId(null);
     setShowForm(false);
     setFormError(null);
+  };
+
+  /**
+   * BugFix-22: a new portal link starts with the legacy portal URL of the
+   * policy (if one exists) – the value stays reachable after the field was
+   * removed from the master data.
+   */
+  const startCreate = () => {
+    setEditingId(null);
+    setForm(newPortalLinkForm(legacyPortalUrl));
+    setFormError(null);
+    setShowForm(true);
   };
 
   return (
     <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--versigo-space-4)' }}>
         <h2>{t('policies.tabs.portalLinks')}</h2>
-        <Button variant="primary" onClick={() => { setEditingId(null); setForm({ providerKey: '', portalUrl: '', usernameHint: '', accessHint: '' }); setShowForm(true); }}>
+        <Button variant="primary" onClick={startCreate}>
           {t('policies.addPortalLink')}
         </Button>
       </div>
 
       {showForm && (
         <form onSubmit={handleSubmit} style={{ marginBottom: 'var(--versigo-space-6)', padding: 'var(--versigo-space-4)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
+          {/* BugFix-22: explains the pre-filled portal URL of a new link. */}
+          {!editingId && legacyPortalUrl && (
+            <p className="form-hint">{t('policies.portalUrlLegacyHint')}</p>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--versigo-space-4)' }}>
             <FormField label={t('policies.providerKey')} required>
               <Input

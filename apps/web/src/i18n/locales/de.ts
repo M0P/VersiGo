@@ -36,6 +36,7 @@ export const de = {
     enabled: 'Aktiviert',
     disabled: 'Deaktiviert',
     required: 'Pflichtfeld',
+    optional: 'Optional',
     invalidNumber: 'Ungültige Zahl',
     days: 'Tage',
   },
@@ -207,9 +208,9 @@ export const de = {
     masterData: 'Stammdaten',
     tariff: 'Tarif',
     endDate: 'Ende',
-    coveredPersons: 'Versicherte Personen',
-    noPersonsTitle: 'Keine Personen',
-    noPersonsBody: 'Keine Personen eingetragen.',
+    coveredPersons: 'Versicherte Personen oder Objekte',
+    noPersonsTitle: 'Keine versicherten Personen oder Objekte',
+    noPersonsBody: 'Es sind noch keine versicherten Personen oder Objekte erfasst.',
     portalLinks: 'Portal-Links',
     noLinksTitle: 'Keine Links',
     noLinksBody: 'Keine Portal-Links vorhanden.',
@@ -232,22 +233,25 @@ export const de = {
     // Tabs for policy detail (BugFix-02)
     tabs: {
       masterData: 'Stammdaten',
-      coveredPersons: 'Versicherte Personen',
+      coveredPersons: 'Versicherte',
       documents: 'Dokumente',
       portalLinks: 'Portal-Links',
       coverage: 'Deckungszusammenfassung',
       costs: 'Kosten',
     },
-    // Covered persons
-    addPerson: 'Person hinzufügen',
+    // Covered persons / objects
+    addPerson: 'Person oder Objekt hinzufügen',
+    subjectType: 'Art',
+    subjectTypePERSON: 'Person',
+    subjectTypeOBJECT: 'Objekt',
     personName: 'Personenname',
     personNamePlaceholder: 'z. B. Max Mustermann',
     relationType: 'Beziehung',
     relationTypePlaceholder: 'z. B. Ehepartner, Kind',
     birthDate: 'Geburtsdatum',
-    editPerson: 'Person bearbeiten',
-    deletePerson: 'Person löschen',
-    confirmDeletePerson: 'Diese Person wirklich löschen?',
+    editPerson: 'Eintrag bearbeiten',
+    deletePerson: 'Eintrag löschen',
+    confirmDeletePerson: 'Diesen Eintrag wirklich löschen?',
     // Documents
     uploadDocument: 'Dokument hochladen',
     documentFile: 'Datei',
@@ -260,6 +264,14 @@ export const de = {
     confirmDeleteDocument: 'Dieses Dokument wirklich löschen?',
     noDocumentsTitle: 'Keine Dokumente',
     noDocumentsBody: 'Noch keine Dokumente hochgeladen.',
+    // BugFix-22: sorting of the documents list.
+    documentsSort: 'Sortierung',
+    documentSort: {
+      dateDesc: 'Datum (neueste zuerst)',
+      dateAsc: 'Datum (älteste zuerst)',
+      nameAsc: 'Name (A–Z)',
+      nameDesc: 'Name (Z–A)',
+    },
     // BugFix-07 (Q3): Paperless-Verknuepfung
     paperlessConnect: 'Paperless-Dokument verbinden',
     paperlessConnectTitle: 'Paperless-Dokumente verknüpfen',
@@ -354,6 +366,9 @@ export const de = {
     providerKeyPlaceholder: 'z. B. allianz, huk',
     portalUrl: 'Portal-URL',
     portalUrlPlaceholder: 'https://portal.beispiel.de',
+    // BugFix-22: explains the pre-filled value of a new portal link.
+    portalUrlLegacyHint:
+      'Die bisherige Portal-URL aus den Stammdaten ist vorbelegt. Speichern Sie den Link, um sie hier zu übernehmen.',
     usernameHint: 'Benutzername-Hinweis',
     accessHint: 'Zugangshinweis',
     editPortalLink: 'Portal-Link bearbeiten',
@@ -428,6 +443,12 @@ export const de = {
     increaseTitle: 'Kosten-Erhöhung ab einem Datum',
     increaseHint:
       'Ein neuer Eintrag beendet den bisherigen automatisch. Zu jedem Zeitpunkt gilt genau eine Kostenposition.',
+    // BugFix-22: Brutto ODER Netto genügt – eines von beiden muss angegeben werden.
+    amountHint:
+      'Geben Sie den Brutto- oder den Nettobetrag an – einer von beiden genügt.',
+    amountRequired: 'Bitte den Brutto- oder den Nettobetrag angeben.',
+    amountInvalid: 'Bitte einen gültigen Betrag angeben.',
+    amountNegative: 'Der Betrag darf nicht negativ sein.',
     // BugFix-08 (Q4): Perioden-Tabelle (incurred/expected).
     scheduleTitle: 'Kostenplan',
     scheduleDescription:
@@ -459,6 +480,15 @@ export const de = {
     unavailable: 'KI-Funktionen sind nicht verfügbar.',
     unavailableConfig: ' Bitte AI-Konfiguration in den Admin-Einstellungen aktivieren.',
     unavailableProvider: ' Der konfigurierte Provider antwortet nicht.',
+    reasonDisabled: ' AI ist deaktiviert (AI_ENABLED=false).',
+    reasonNotConfigured:
+      ' Kein KI-Provider konfiguriert – AI_PROVIDER und die Endpunkt-Einstellungen prüfen.',
+    reasonUnauthorized:
+      ' Der Provider hat den Zugriff abgelehnt (HTTP 401/403) – API-Schlüssel prüfen.',
+    reasonTimeout: ' Der Provider hat nicht rechtzeitig geantwortet.',
+    reasonUnreachable:
+      ' Der Provider ist nicht erreichbar – AI_PROVIDER zeigt ggf. noch auf einen anderen Anbieter.',
+    reasonHttpError: ' Der Provider hat mit einem Fehlerstatus geantwortet.',
     checkError: 'AI-Status konnte nicht geprueft werden.',
     noSummary: 'Noch keine Zusammenfassung vorhanden.',
     generate: 'Zusammenfassung erstellen',

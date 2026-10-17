@@ -22,4 +22,9 @@ describe('NoOpAIAdapter', () => {
     const result = await adapter.healthCheck();
     expect(result).toBe(false);
   });
+
+  it('healthStatus reports "not-configured" (BugFix-22)', async () => {
+    const result = await adapter.healthStatus();
+    expect(result).toEqual({ connected: false, reason: 'not-configured' });
+  });
 });

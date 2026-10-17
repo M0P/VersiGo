@@ -47,7 +47,10 @@
 - ownerUserId
 - type (`haftpflicht`, `hausrat`, `rechtsschutz`, `kfz`, `wohngebaeude`, `unfall`, `leben`, `berufsunfaehigkeit`, ...)
 - insurerName
-- insurerPortalUrl
+- insurerPortalUrl (Legacy; BugFix-22: nicht mehr in den Stammdaten
+  bearbeitbar. Die Portal-Link-Maske ist der einzige Ort für Portal-URLs und
+  schlägt den Altwert als Vorbelegung eines neuen Portal-Links vor.
+  Keine destruktive Migration – der Wert bleibt erhalten.)
 - contractNumber
 - tariffName
 - status
@@ -65,16 +68,25 @@
 - id
 - policyId
 - personName
-- relationType
-- birthDate
+- subjectType (`CoveredSubjectType`: `PERSON` | `OBJECT`, Default `PERSON`;
+  BugFix-22 – versichert sein kann eine Person oder ein Objekt, z. B. Kfz oder
+  Haus)
+- relationType (nullable; BugFix-22 – die Beziehung ist optional und entfällt
+  bei Objekten; ein leerer Wert löscht eine bestehende Beziehung)
+- birthDate (nullable; nur bei `subjectType = PERSON` sinnvoll – die UI blendet
+  das Feld für Objekte aus und setzt beim Wechsel auf `OBJECT` den Wert auf
+  `null`)
 
 ### PolicyCostEntry
 - id
 - policyId
 - validFrom
 - validTo
-- grossAmount
-- netAmount
+- grossAmount (nullable; BugFix-22 – mindestens einer der beiden Beträge muss
+  gesetzt sein. Berechnungsbasis aller Kostenkennzahlen ist `grossAmount`,
+  ersatzweise `netAmount` („effektiver Betrag"), siehe
+  `apps/api/src/features/cost-tracking/cost-tracking.service.ts`)
+- netAmount (nullable)
 - frequency
 - bookingSource
 - note
