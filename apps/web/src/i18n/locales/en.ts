@@ -322,6 +322,7 @@ export const en = {
     paperlessTagErrorCONNECTION_CHANGED:
       'The Paperless connection has changed. Please select the tag again.',
     paperlessTagErrorUnknown: 'Unknown synchronization error.',
+    paperlessTagErrorREJECTED: 'Paperless-ngx rejected the request.',
     paperlessTagPendingBadge: 'Tag assignment pending',
     paperlessTagFailedBadge: 'Tag assignment failed',
     paperlessTagFailedHint:

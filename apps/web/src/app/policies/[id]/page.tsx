@@ -210,7 +210,9 @@ export default function PolicyDetailPage(): ReactElement {
         return <CoveredPersonsTab policyId={policyId} />;
 
       case 'documents':
-        return <DocumentsTab policyId={policyId} />;
+        // AP-22: the tag assignment lives in the documents tab and needs the
+        // insurer name for its explanatory text.
+        return <DocumentsTab policyId={policyId} insurerName={policy.insurerName} />;
 
       case 'portalLinks':
         return <PortalLinksTab policyId={policyId} />;

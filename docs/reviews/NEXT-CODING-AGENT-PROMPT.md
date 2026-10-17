@@ -1,53 +1,101 @@
 # NEXT-CODING-AGENT-PROMPT.md
 
-## Project state after AP-22 (tag-based Paperless-ngx document assignment)
+## Project state after the AP-22 follow-up (2026-10-17)
 
-AP-22 (`prompts/AP-22-paperless-ngx-ext`) is implemented, reviewed and
-committed on branch `fix/BugFix-09-ci-fix-community-standards-dockerhub`
-(commit `84e15ea`, 46 files). Review reports:
-`docs/reviews/AP-22-paperless-ngx-ext-review-1.md` … `-review-6.md`.
-Final review round: **PASS — 0 Critical / 0 High / 0 Medium / 1 Minor**
-(the Minor is an accepted, documented error-code mis-mapping in the legacy
-`bulk_edit` fallback path of `assignTagToDocument`; see review 6).
+Branch: `fix/BugFix-09-ci-fix-community-standards-dockerhub` (the long-lived
+task branch; AP-22 and the follow-up are committed on it).
 
-### What AP-22 delivered
+### Package history relevant to this handoff
 
-- Data model: `policy_documents.linkOriginManual` / `linkOriginTag` (two
-  independent origins), `taggingStatus` / `taggingErrorCode`; new
-  `PolicyPaperlessTag` (1:1 policy, `connectionRef`, `configVersion`, sync
-  state) and `PaperlessTagJob` outbox (`SYNC_POLICY` / `TAG_DOCUMENT`).
-  Migration `20261017100000_ap22_paperless_tag_assignment` is additive and
-  backfills existing `PAPERLESS_LINK` rows with `linkOriginManual = true`.
-- Queue `paperless-tag-sync` with durable-outbox semantics (DB row first, in
-  the same transaction as the change; BullMQ is transport only; `PENDING` rows
-  are re-dispatched by the periodic reconcile tick). Every job re-checks
-  `configVersion` and the connection before acting.
-- API config service/controller/DTOs with a read/write role split; worker
-  processor (sync, manual-link backfill, tag-removal semantics, reconcile
-  tick, connection-drift guard) plus a worker-side transport that reuses the
-  existing `PAPERLESS_*` settings (no second connector, no second auth path).
-- Frontend tag section (search/select/change/remove/retry) and origin/tagging
-  badges on the policy documents tab.
-- Docs/.env/compose/settings-catalogue updates, including the
-  `PAPERLESS_TAG_SYNC_INTERVAL_MS` smoke assertion.
+- **AP-22** (`prompts/AP-22-paperless-ngx-ext`) — tag-based Paperless-ngx
+  document assignment per insurance policy. Commit `84e15ea`, handoff
+  `7e4a557` / `0948b6f`, review reports
+  `docs/reviews/AP-22-paperless-ngx-ext-review-1.md` … `-review-6.md`
+  (final round: 0 Critical / 0 High / 0 Medium / 1 Minor).
+- **AP-22 follow-up** (this package, user bug report 2026-10-17) — commit
+  **`e5e91ac`**, 25 files. Review reports
+  `docs/reviews/AP-22-followup-review-1.md` … `-review-5.md`.
+  Final round 5: **PASS — 0 Critical / 0 High / 0 Medium / 5 Minor**
+  (round 5 was the cap of the review loop; the five remaining Minors are
+  cosmetic doc/UI duplications documented in review 5 and in the session
+  report — they were deliberately NOT changed because no further review round
+  was available for a modified tree).
 
-### Verification performed (AP-22)
+### What the AP-22 follow-up delivered
 
-- Containerised gate, Docker only (AGENTS.md mandate):
+User report (verbatim): *"Die Tag verwaltung der versicherung sollte unter
+dem dokumenten reiter sein, nicht unter basiseinstellungen jeder versicherung.
+außerdem PAPERLESS_TAG_CREATE_FAILED: the tag could not be created in Paperless
+und tags suchen funktioniert auch nicht (kein fehler, aber auch kein
+ergebnis)"*. The Paperless connection itself was verified working by the user
+(HTTP 200 from the admin menu).
+
+- **UI move:** the per-policy tag management now lives in the policy's
+  **Documents tab**. `apps/web/src/app/policies/[id]/documents-tab.tsx`
+  renders `paperless-tag-section.tsx` (fragment + sibling-`Card` pattern of
+  `costs-overview-card.tsx`); `edit/page.tsx` no longer renders it;
+  `DocumentsTab` gained an `insurerName` prop and the section an optional
+  `onConfigChange` callback that clears/refreshes the manual-link tag hint.
+- **Silent failures removed (root cause of both symptoms):** the adapter
+  contract changed from "empty page / `null`" to explicit results —
+  `searchTags` → `PaperlessTagSearchResult` (`{ok:true;page}` |
+  `{ok:false;error:{kind}}`), `createTag` → `PaperlessTagCreateResult`; kinds
+  `NOT_CONFIGURED | AUTH_FAILED | UNREACHABLE | REJECTED` (401/403 →
+  `AUTH_FAILED`, other 4xx → `REJECTED`, `requestRaw` null / 5xx / unusable
+  payload → `UNREACHABLE`).
+- **API mapping:** `paperless-tag.service.ts` maps the kinds to HTTP 503/502
+  with stable `PAPERLESS_*` message prefixes (`PAPERLESS_NOT_CONFIGURED`,
+  `PAPERLESS_AUTH_FAILED`, `PAPERLESS_UNREACHABLE`,
+  `PAPERLESS_TAG_SEARCH_FAILED`; a create rejection keeps
+  `PAPERLESS_TAG_CREATE_FAILED`). 401 is deliberately avoided so the web does
+  not treat it as session expiry. PUT lookup paths emit
+  `PAPERLESS_TAG_NOT_FOUND: …` / `PAPERLESS_TAG_LOOKUP_FAILED: <KIND>`.
+- **Web:** `apps/web/src/lib/paperless-tag-error.ts` maps the API message to
+  an i18n key for search, create, assign and tag-lookup;
+  `apps/web/src/__tests__/paperless-tag-error.spec.ts` pins the mapping and
+  guards both directions against code drift with the API. New i18n key
+  `paperlessTagErrorREJECTED` (de + en). The section shows the cause instead
+  of "no matching tag".
+- **Smaller fixes:** empty tag pages report `pageCount` 0;
+  `CreatePaperlessTagDto.name` is trimmed via `@Transform` (blank name → 400,
+  not a 502) with a new DTO spec; `searchSeq`/`tagSeq` guards against stale
+  responses; a short search term renders an explanation.
+- **Docs synced:** `docs/05-feature-slices.md`, `docs/06-integrations.md`
+  (error/status contract incl. PUT/DELETE semantics and the accepted
+  `REJECTED` limitation), `docs/end-user-guide.md`,
+  `docs/ui-control-matrix.md`.
+
+### Verification performed (AP-22 follow-up)
+
+- Containerised gate (Docker only, AGENTS.md mandate):
   `docker compose -p versigo-test -f docker-compose.test.yml down -v` then
   `up --build --abort-on-container-exit --exit-code-from test` →
   prisma migrate deploy → lint → typecheck → tests → dependency-licence check
   → version-sync check → i18n guard → "All checks passed!"
-  (api 61, worker 3, foundation 12, web 4 test files).
-- `bash -n scripts/compose-smoke-test.sh` (syntax) — passed.
-- **Not covered:** this repository has no browser/e2e or accessibility harness,
-  so no UI, keyboard, responsive or visual verification was performed.
+  (api 750 tests / 62 files, web 58 / 5, foundation 107 / 12, worker 30 / 3).
+- Host `tsc --noEmit` for `apps/web` and `apps/api` — clean.
+- TDD: a red phase was observed (16 API + 1 web test failing against the old
+  code) before implementation.
+- **Not covered:** this repository still has no browser/e2e or accessibility
+  harness, so neither the tab move nor the new UI error branches were verified
+  in a browser.
+- Side effect to be aware of: reproduction/verification created four tags in
+  the user's **real** Paperless instance (ids 1184–1187, names "VersiGo –
+  Testtag", "VersiGo – Wohngebäude Test", "versigo", "VersiGo – testtag").
+  They were intentionally left in place.
 
 ## THERE IS NO NEXT WORK PACKAGE
 
-`prompts/` contains **no** numbered work package after
+`prompts/` contains **no** unimplemented numbered work package after
 `prompts/AP-22-paperless-ngx-ext` (the last numbered file). All defined
-packages (AP-01 … AP-22 plus the `BugFix-*` series) are committed.
+packages (AP-01 … AP-22 and the `BugFix-*` series up to BugFix-19) are
+implemented, reviewed and committed.
+
+- `prompts/BugFix-18-oidc-reverse-proxy-caddy.md` still exists but is **already
+  implemented** (commit `f9d6166`, reviews
+  `docs/reviews/BugFix-18-review-1.md` / `-2.md`); do **not** re-implement it.
+- `prompts/00-gemeinsame-regeln.md` and `prompts/PR-REVIEW.md` are not work
+  packages.
 
 **A new coding-agent session must therefore NOT auto-start any work package.**
 Wait for the user's explicit instruction. If the user supplies a new numbered
@@ -73,26 +121,8 @@ do not begin any later package.
    stop, do not commit, and ask the user to decide (they may authorize one or
    more extra verification rounds — that is what happened for AP-22, whose
    round 6 was explicitly approved by the user).
-6. Commit only the files belonging to the package, with a message starting
-   with the package number, and then write a new handoff file (this file).
-
-### Reviewer quirks (learned across AP-06 … AP-22)
-
-- The `code-reviewer` subagent MUST be invoked with
-  `model: "opencode/deepseek-v4.1-flash-free"`; without it the Task call fails
-  with `Model unavailable`.
-- It is read-only and has **no shell**. Give it the diff as a single repo file
-  (generate one: `git add -N` the untracked files, `git diff > patch`,
-  `git reset`, then point it at the patch) and keep its reading list short.
-- It exhausts its step budget quickly: instruct it to "be economical" and to
-  emit the final formatted report as the very next text it writes. That single
-  instruction is what produced complete reports in AP-22 rounds 3–6.
-- It can end a session at "maximum steps reached" with only a candidate list;
-  the coordinator may then finalize the classification and must say so in the
-  report file.
-- Some of its findings can be artefacts of the review setup (e.g. file modes
-  reported as `100755` when only the patch generator was at fault). Verify a
-  finding against the real file/commit before changing code.
+6. Commit only the files belonging to the package, using a message that begins
+   with the package number, then update this handoff file.
 
 ## Environment reminders (Podman host)
 
@@ -103,16 +133,38 @@ do not begin any later package.
   `name: versigo`, so always pass `-p versigo-test` for the test stack;
   a plain `down` against the test file would disturb the dev stack.
 - Node/pnpm/vitest do not work on the host (missing
-  `@rollup/rollup-linux-x64-gnu`); run all gates in the test container.
+  `@rollup/rollup-linux-x64-gnu`); run all gates in the test container. Host
+  `node` and `node_modules/.bin/tsc` do work for fast pre-checks.
+- `scripts/compose-smoke-test.sh` is destructive: its final phase (step 12)
+  runs `DROP SCHEMA public CASCADE` on the dev database and bootstraps a
+  production admin. Run it only when losing the current dev data is
+  acceptable (or make a DB dump first), and note that several steps assume a
+  fresh database (e.g. step 8n asserts that the local admin's `users.locale`
+  is `en`). An AP-22-time run aborted there because the long-lived dev DB had
+  `de`; that is a precondition issue, not a product defect.
 - `/var/home` is ~123 GB and fills quickly. Check `df -h /var/home`, use
   `podman system prune -a -f` when needed, never relocate podman storage, and
   delete every scratch file/container/image/volume the session created before
   finishing (AGENTS.md point 9). Do not touch pre-existing containers
   (`tk-epa-ubuntu`, `libation-env`) or the `versigo_*` dev stack.
+- The AP-22 follow-up session added no new runtime dependency, environment
+  variable, port, queue or health endpoint, so the Compose stack,
+  `.env.example` and the smoke test needed no change; keep it that way.
 
 ## Documentation status (Trilium)
 
-See the final section of the AP-22 session report: the Trilium MCP status is
-recorded there (note/resolved reference or the exact blocker). Repository
-documentation (`docs/04`, `05`, `06`, `13`, end-user-guide,
-ui-control-matrix) is updated and committed with AP-22.
+Trilium MCP is available and writable. The VersiGo project note is:
+
+- Note **"VersiGo (Versicherungsverwaltung)"**, `noteId BRpbPoqTaGKk`, at the
+  Trilium root, labels `#project = versigo`, `#repository =
+  VibeCode/VersiGo`, `#status = in Arbeit`.
+- Content: project overview, verification/process conventions, the
+  destructive-smoke-test warning, the AP-22 package entry (commit `84e15ea`)
+  and the AP-22 follow-up entry (commit `e5e91ac`, branch, validation results,
+  accepted limitations).
+- Writes are verified by reading the note back (`get_note`,
+  `search_notes`). Extend this note for future packages instead of creating a
+  second VersiGo note.
+
+Repository documentation (`docs/04`, `05`, `06`, `13`, end-user-guide,
+ui-control-matrix) is updated and committed with AP-22 and its follow-up.

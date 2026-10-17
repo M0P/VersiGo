@@ -9,9 +9,11 @@ import type {
   PaperlessSyncResult,
   PaperlessSearchResult,
   PaperlessTagAssignmentResult,
+  PaperlessTagCreateResult,
   PaperlessTagDocumentRef,
   PaperlessTagLookupResult,
-  PaperlessTagPage,
+  PaperlessTagRequestError,
+  PaperlessTagSearchResult,
   PaperlessTagSummary,
 } from './paperless-ngx.interface';
 import { optionalRelaxedHttpsAgent } from '../../common/connectivity/tls-agent';
@@ -516,10 +518,24 @@ export class PaperlessNgxService implements IPaperlessAdapter {
     );
   }
 
-  async searchTags(query: string, page: number, pageSize: number): Promise<PaperlessTagPage> {
-    const empty: PaperlessTagPage = { items: [], page: 1, pageCount: 0 };
+  /**
+   * AP-22: maps the HTTP status of a tag request onto the shared failure
+   * vocabulary, so the interactive UI can name the cause instead of showing
+   * "no results" (empty list) or a generic error.
+   */
+  private static classifyTagRequest(status: number): PaperlessTagRequestError {
+    if (status === 401 || status === 403) return { kind: 'AUTH_FAILED' };
+    if (status >= 500) return { kind: 'UNREACHABLE' };
+    return { kind: 'REJECTED' };
+  }
+
+  async searchTags(query: string, page: number, pageSize: number): Promise<PaperlessTagSearchResult> {
     const safePage = Math.max(1, Math.floor(page) || 1);
     const safeSize = Math.min(100, Math.max(1, Math.floor(pageSize) || 20));
+
+    if (!(await this.isConfigured())) {
+      return { ok: false, error: { kind: 'NOT_CONFIGURED' } };
+    }
 
     const term = query.trim();
     // `name__icontains` is supported by both API dialects (v2 and legacy);
@@ -530,18 +546,36 @@ export class PaperlessNgxService implements IPaperlessAdapter {
       'GET',
       `/tags/?page=${safePage}&page_size=${safeSize}&ordering=name${nameFilter}`,
     );
-    if (!res || res.status !== 200 || !PaperlessNgxService.isTagPage(res.data)) {
-      return empty;
+    if (!res) return { ok: false, error: { kind: 'UNREACHABLE' } };
+    if (res.status !== 200) {
+      return { ok: false, error: PaperlessNgxService.classifyTagRequest(res.status) };
+    }
+    // A 200 with an unexpected body makes the answer unusable (proxy, dialect
+    // mismatch, truncated payload): the catalogue is just as unavailable as
+    // if Paperless had not answered at all.
+    if (!PaperlessNgxService.isTagPage(res.data)) {
+      return { ok: false, error: { kind: 'UNREACHABLE' } };
     }
 
     const lowerTerm = term.toLowerCase();
     const items = res.data.results
       .filter((t) => !term || t.name.toLowerCase().includes(lowerTerm))
       .map((t) => ({ tagId: t.id, name: t.name }));
+    // Page count follows the server: `count` is the number of matching tags
+    // before the client-side re-filter, and a dialect that omits `count` falls
+    // back to the `next` link. An empty catalogue yields 0 pages instead of 1 -
+    // "load more" must not be offered for a list that can never grow.
+    const count = typeof res.data.count === 'number' ? res.data.count : null;
     const pageCount =
-      res.data.count > 0 ? Math.ceil(res.data.count / safeSize) : res.data.next ? safePage + 1 : safePage;
+      count === null
+        ? res.data.next
+          ? safePage + 1
+          : safePage
+        : count > 0
+          ? Math.ceil(count / safeSize)
+          : 0;
 
-    return { items, page: safePage, pageCount };
+    return { ok: true, page: { items, page: safePage, pageCount } };
   }
 
   async getTag(tagId: number): Promise<PaperlessTagLookupResult> {
@@ -562,30 +596,40 @@ export class PaperlessNgxService implements IPaperlessAdapter {
     return { ok: true, tag: { tagId: data.id, name: data.name } };
   }
 
-  async createTag(name: string): Promise<PaperlessTagSummary | null> {
+  async createTag(name: string): Promise<PaperlessTagCreateResult> {
     const trimmed = name.trim();
-    if (trimmed.length === 0) return null;
+    if (trimmed.length === 0) return { ok: false, error: { kind: 'REJECTED' } };
+
+    if (!(await this.isConfigured())) {
+      return { ok: false, error: { kind: 'NOT_CONFIGURED' } };
+    }
 
     // Pre-check for an identical name (exact match, case-sensitive like
     // Paperless itself) to avoid needless duplicates.
     const existing = await this.findTagByExactName(trimmed);
-    if (existing) return existing;
+    if (existing) return { ok: true, tag: existing };
 
     const res = await this.requestRaw('POST', '/tags/', { name: trimmed });
-    if (res && res.status === 201) {
+    if (!res) return { ok: false, error: { kind: 'UNREACHABLE' } };
+    if (res.status === 201) {
       const data = res.data as { id?: number; name?: string } | null;
       if (data && typeof data.id === 'number' && typeof data.name === 'string') {
-        return { tagId: data.id, name: data.name };
+        return { ok: true, tag: { tagId: data.id, name: data.name } };
       }
     }
 
     // Parallel creation race or server-side uniqueness: another request
     // may have created the tag in the meantime – resolve idempotently.
-    if (res && (res.status === 400 || res.status === 409)) {
+    if (res.status === 400 || res.status === 409) {
       const raced = await this.findTagByExactName(trimmed);
-      if (raced) return raced;
+      if (raced) return { ok: true, tag: raced };
     }
-    return null;
+
+    // A 201 without a usable body means the tag exists but its identity cannot
+    // be confirmed – like an unavailable service, not a rejected request.
+    if (res.status === 201) return { ok: false, error: { kind: 'UNREACHABLE' } };
+
+    return { ok: false, error: PaperlessNgxService.classifyTagRequest(res.status) };
   }
 
   private async findTagByExactName(name: string): Promise<PaperlessTagSummary | null> {

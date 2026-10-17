@@ -37,6 +37,37 @@ Mögliche Modi:
   `POST .../paperless-tag/sync` (Sofortabgleich),
   `POST .../paperless-tag/retry` (fehlgeschlagene Tag-Zuweisung wiederholen).
   Lesende Rollen dürfen den Zustand sehen, Änderungen sind `USER`/`ADMIN`.
+- **Fehlervertrag der interaktiven Tag-Endpunkte:** `GET`/`POST
+  /households/:id/paperless-tags` nennen den Fehlergrund explizit, statt ein
+  leeres Ergebnis („kein Treffer“) vorzutäuschen. Jede Fehlerantwort enthält
+  eines dieser stabilen Präfixe im `message`-Feld:
+  - `PAPERLESS_NOT_CONFIGURED` → `503` – Paperless ist deaktiviert oder die
+    Basis-URL fehlt.
+  - `PAPERLESS_AUTH_FAILED` → `502` – der Token ist ungültig oder hat zu wenig
+    Rechte.
+  - `PAPERLESS_UNREACHABLE` → `503` – Paperless antwortet nicht oder liefert
+    eine unbrauchbare Antwort.
+  - `PAPERLESS_TAG_SEARCH_FAILED` → `502` – die Suche wurde abgelehnt
+    (`GET`).
+  - `PAPERLESS_TAG_CREATE_FAILED` → `502` – das Anlegen wurde abgelehnt
+    (`POST`; Text unverändert aus Kompatibilitätsgründen).
+  Ein erfolgreicher Lauf ohne Treffer bleibt `200` mit leerer `items`-Liste
+  (`{ items: [], page, pageCount }`).
+  Die Web-Oberfläche übersetzt diese Präfixe in eine konkrete Meldung
+  (`apps/web/src/lib/paperless-tag-error.ts`).
+  Auch `PUT /households/:id/policies/:id/paperless-tag` folgt diesem Vertrag:
+  `PAPERLESS_NOT_CONFIGURED` → `502`, `PAPERLESS_TAG_NOT_FOUND` → `404` (der
+  gewählte Tag existiert in Paperless nicht) und
+  `PAPERLESS_TAG_LOOKUP_FAILED: <KIND>` → `502` mit dem eingebetteten
+  Adapter-Grund (`AUTH_FAILED` | `UNREACHABLE`). `DELETE .../paperless-tag` ist
+  idempotent: existiert keine Konfiguration, antwortet es `200` mit
+  `{ tagRemoved: false }`. `POST .../sync` und `POST .../retry` melden
+  `NO_PAPERLESS_TAG_CONFIGURED` → `404`, wenn keine Tag-Konfiguration existiert.
+  **Bewusste Grenze:** Eine Ablehnung durch Paperless, die keinem der
+  genannten Gründe entspricht (`REJECTED`), wird weiterhin als
+  `PAPERLESS_TAG_SEARCH_FAILED` bzw. `PAPERLESS_TAG_CREATE_FAILED` mit
+  unverändertem Text gemeldet – bewusst ohne rohen Upstream-Text
+  durchzureichen und ohne den bestehenden Code zu brechen.
 - **Outbox + Worker:** Die Änderung und die dauerhafte Job-Zeile
   (`paperless_tag_jobs`) entstehen in **einer** Transaktion; danach wird der
   Job in die Queue `paperless-tag-sync` eingereiht. Ein fehlgeschlagener

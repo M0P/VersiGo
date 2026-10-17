@@ -1,5 +1,5 @@
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 /** AP-22: paginated tag search (server-side filtering in Paperless). */
 export class SearchPaperlessTagsQueryDto {
@@ -21,6 +21,10 @@ export class SearchPaperlessTagsQueryDto {
  * never created without a deliberate user action.
  */
 export class CreatePaperlessTagDto {
+  // AP-22 follow-up: trim the name before validation. A whitespace-only name
+  // is invalid input (400), not a refusal by Paperless (502) – without the
+  // trim the adapter would send an empty tag name and report a rejection.
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MinLength(1)
   @MaxLength(128)

@@ -14,7 +14,6 @@ import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 import { normalizePortalUrl } from '@/lib/portal-url';
-import PaperlessTagSection from '../paperless-tag-section';
 
 const API_BASE = getApiBaseUrl();
 
@@ -334,9 +333,6 @@ export default function EditPolicyPage(): ReactElement {
           </div>
         </form>
       </Card>
-
-      {/* AP-22: tag-based Paperless document assignment */}
-      <PaperlessTagSection policyId={policyId} insurerName={form.insurerName} />
     </AppShell>
   );
 }

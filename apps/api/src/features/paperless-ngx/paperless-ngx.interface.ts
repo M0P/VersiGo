@@ -81,6 +81,31 @@ export type PaperlessTagLookupResult =
   | { ok: true; tag: PaperlessTagSummary }
   | { ok: false; error: PaperlessTagLookupError };
 
+/**
+ * AP-22: why an *interactive* tag operation (search / creation) could not be
+ * completed. Deliberately the same vocabulary as `PaperlessTagLookupError`
+ * without NOT_FOUND: a connection or permission problem must never surface
+ * as "no matching tag" in the UI.
+ */
+export type PaperlessTagRequestError =
+  | { kind: 'NOT_CONFIGURED' }
+  | { kind: 'AUTH_FAILED' }
+  | { kind: 'UNREACHABLE' }
+  | { kind: 'REJECTED' };
+
+/**
+ * AP-22: result of a paginated tag search. On failure the reason is
+ * reported explicitly instead of an empty page.
+ */
+export type PaperlessTagSearchResult =
+  | { ok: true; page: PaperlessTagPage }
+  | { ok: false; error: PaperlessTagRequestError };
+
+/** AP-22: result of a tag creation with explicit failure reason. */
+export type PaperlessTagCreateResult =
+  | { ok: true; tag: PaperlessTagSummary }
+  | { ok: false; error: PaperlessTagRequestError };
+
 /** AP-22: result of an additive tag assignment onto a document. */
 export interface PaperlessTagAssignmentResult {
   success: boolean;
@@ -125,10 +150,11 @@ export interface IPaperlessAdapter {
 
   /**
    * Searches Paperless tags by name (paginated). An empty query lists all
-   * tags in stable (ID) order. Returns an empty page when Paperless is
-   * disabled/unreachable.
+   * tags in stable (ID) order. A configuration or connection failure is
+   * reported explicitly instead of an empty page, so the caller can explain
+   * why nothing was found.
    */
-  searchTags(query: string, page: number, pageSize: number): Promise<PaperlessTagPage>;
+  searchTags(query: string, page: number, pageSize: number): Promise<PaperlessTagSearchResult>;
 
   /**
    * Fetches a single tag by its external ID. The result distinguishes
@@ -138,11 +164,11 @@ export interface IPaperlessAdapter {
   getTag(tagId: number): Promise<PaperlessTagLookupResult>;
 
   /**
-   * Creates a new tag with the given name. Returns the created tag, or
-   * null on failure. When a tag with the identical name already exists,
-   * returns that existing tag instead of failing (idempotent).
+   * Creates a new tag with the given name. When a tag with the identical
+   * name already exists, that existing tag is returned instead of failing
+   * (idempotent). Every failure carries its explicit reason.
    */
-  createTag(name: string): Promise<PaperlessTagSummary | null>;
+  createTag(name: string): Promise<PaperlessTagCreateResult>;
 
   /**
    * Lists all document IDs (with titles) carrying the given tag, walking
