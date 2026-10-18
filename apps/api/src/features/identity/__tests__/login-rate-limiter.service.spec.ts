@@ -5,14 +5,19 @@ import type Redis from 'ioredis';
 
 // Mock Redis
 vi.mock('ioredis', () => {
-  const MockRedis = vi.fn(() => ({
-    incr: vi.fn(),
-    pexpire: vi.fn(),
-    get: vi.fn(),
-    del: vi.fn(),
-    quit: vi.fn().mockResolvedValue('OK'),
-    status: 'ready',
-  }));
+  // Vitest 5 only accepts a `function` or `class` implementation for mocks
+  // that are invoked as constructors. An arrow function makes
+  // `new Redis(...)` throw "is not a constructor".
+  const MockRedis = vi.fn(function MockRedis() {
+    return {
+      incr: vi.fn(),
+      pexpire: vi.fn(),
+      get: vi.fn(),
+      del: vi.fn(),
+      quit: vi.fn().mockResolvedValue('OK'),
+      status: 'ready',
+    };
+  });
   return { default: MockRedis };
 });
 

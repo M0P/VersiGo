@@ -28,7 +28,7 @@ Every package below is used as intended under its license:
 | License | Packages |
 |---------|----------|
 
-| MIT | 482 |
+| MIT | 467 |
 | Apache-2.0 | 35 |
 | ISC | 28 |
 | BSD-2-Clause | 12 |
@@ -40,7 +40,7 @@ Every package below is used as intended under its license:
 | LGPL-3.0-or-later | 1 |
 | Python-2.0 | 1 |
 
-Total: 578 packages (direct and transitive, incl. dev tooling).
+Total: 563 packages (direct and transitive, incl. dev tooling).
 
 ## Package inventory
 
@@ -60,7 +60,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `@humanfs/types@0.15.0`
 - `@humanwhocodes/module-importer@1.0.1`
 - `@humanwhocodes/retry@0.4.3`
-- `@img/sharp-linuxmusl-x64@0.35.3`
+- `@img/sharp-linuxmusl-x64@0.35.5`
 - `@prisma/client@6.19.3`
 - `@prisma/config@6.19.3`
 - `@prisma/debug@6.19.3`
@@ -68,10 +68,10 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `@prisma/engines-version@7.1.1-3.c2990dca591cba766e3b7ef5d9e8a84796e47ab7`
 - `@prisma/fetch-engine@6.19.3`
 - `@prisma/get-platform@6.19.3`
-- `@swc/helpers@0.5.15`
+- `@swc/helpers@0.5.23`
 - `@webassemblyjs/leb128@1.13.2`
 - `@xtuc/long@4.2.2`
-- `baseline-browser-mapping@2.11.4`
+- `baseline-browser-mapping@2.11.29`
 - `cluster-key-slot@1.1.1`
 - `denque@2.1.0`
 - `detect-libc@2.1.2`
@@ -83,7 +83,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `reflect-metadata@0.2.2`
 - `rxjs@7.8.1`
 - `rxjs@7.8.2`
-- `sharp@0.35.3`
+- `sharp@0.35.5`
 - `typescript@5.9.3`
 
 ### BSD-2-Clause
@@ -112,7 +112,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `qs@6.15.3`
 - `source-map@0.6.1`
 - `source-map@0.7.4`
-- `source-map-js@1.2.1`
+- `source-map-js@1.2.2`
 
 ### BlueOak-1.0.0
 
@@ -124,7 +124,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 
 ### CC-BY-4.0
 
-- `caniuse-lite@1.0.30001806`
+- `caniuse-lite@1.0.30001816`
 
 ### ISC
 
@@ -159,7 +159,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 
 ### LGPL-3.0-or-later
 
-- `@img/sharp-libvips-linuxmusl-x64@1.3.2`
+- `@img/sharp-libvips-linuxmusl-x64@1.3.4`
 
 ### MIT
 
@@ -200,7 +200,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `@jridgewell/gen-mapping@0.3.13`
 - `@jridgewell/resolve-uri@3.1.2`
 - `@jridgewell/source-map@0.3.11`
-- `@jridgewell/sourcemap-codec@1.5.5`
+- `@jridgewell/sourcemap-codec@1.6.0`
 - `@jridgewell/trace-mapping@0.3.31`
 - `@jridgewell/trace-mapping@0.3.9`
 - `@lukeed/csprng@1.1.0`
@@ -214,8 +214,8 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `@nestjs/passport@11.0.5`
 - `@nestjs/platform-express@11.1.28`
 - `@nestjs/schematics@11.1.0`
-- `@next/env@16.2.12`
-- `@next/swc-linux-x64-musl@16.2.12`
+- `@next/env@16.3.8`
+- `@next/swc-linux-x64-musl@16.3.8`
 - `@rollup/rollup-linux-x64-musl@4.62.3`
 - `@standard-schema/spec@1.1.0`
 - `@tokenizer/inflate@0.4.1`
@@ -260,13 +260,8 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `@typescript-eslint/typescript-estree@8.65.0`
 - `@typescript-eslint/utils@8.65.0`
 - `@typescript-eslint/visitor-keys@8.65.0`
-- `@vitest/expect@3.2.7`
-- `@vitest/mocker@3.2.7`
-- `@vitest/pretty-format@3.2.7`
-- `@vitest/runner@3.2.7`
-- `@vitest/snapshot@3.2.7`
-- `@vitest/spy@3.2.7`
-- `@vitest/utils@3.2.7`
+- `@vitest/mocker@5.0.0`
+- `@vitest/spy@5.0.0`
 - `@webassemblyjs/ast@1.14.1`
 - `@webassemblyjs/floating-point-hex-parser@1.13.2`
 - `@webassemblyjs/helper-api-error@1.13.2`
@@ -302,7 +297,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `array-timsort@1.0.3`
 - `assertion-error@2.0.1`
 - `asynckit@0.4.0`
-- `axios@1.18.1`
+- `axios@1.20.0`
 - `balanced-match@1.0.2`
 - `balanced-match@4.0.4`
 - `base64-js@1.5.1`
@@ -320,14 +315,12 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `busboy@1.6.0`
 - `bytes@3.1.2`
 - `c12@3.1.0`
-- `cac@6.7.14`
 - `call-bind-apply-helpers@1.0.2`
 - `call-bound@1.0.4`
 - `callsites@3.1.0`
-- `chai@5.3.3`
+- `chai@6.2.2`
 - `chalk@4.1.2`
 - `chardet@2.2.0`
-- `check-error@2.1.3`
 - `chokidar@3.6.0`
 - `chokidar@4.0.3`
 - `chrome-trace-event@1.0.4`
@@ -366,7 +359,6 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `csstype@3.2.3`
 - `debug@2.6.9`
 - `debug@4.4.3`
-- `deep-eql@5.0.2`
 - `deep-is@0.1.4`
 - `deepmerge@4.3.1`
 - `defaults@1.0.4`
@@ -385,8 +377,8 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `error-ex@1.3.4`
 - `es-define-property@1.0.1`
 - `es-errors@1.3.0`
-- `es-module-lexer@1.7.0`
 - `es-module-lexer@2.3.1`
+- `es-module-lexer@2.3.2`
 - `es-object-atoms@1.1.2`
 - `es-set-tostringtag@2.1.0`
 - `esbuild@0.25.12`
@@ -412,7 +404,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `finalhandler@2.1.1`
 - `find-up@5.0.0`
 - `flat-cache@4.0.1`
-- `follow-redirects@1.16.0`
+- `follow-redirects@1.16.1`
 - `fork-ts-checker-webpack-plugin@9.1.0`
 - `form-data@4.0.6`
 - `forwarded@0.2.0`
@@ -451,7 +443,6 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `jiti@2.7.0`
 - `jose@6.2.4`
 - `js-tokens@4.0.0`
-- `js-tokens@9.0.1`
 - `js-yaml@4.3.0`
 - `json-buffer@3.0.1`
 - `json-parse-even-better-errors@2.3.1`
@@ -471,9 +462,9 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `lodash@4.18.1`
 - `lodash.merge@4.6.2`
 - `log-symbols@4.1.0`
-- `loupe@3.2.1`
 - `luxon@3.7.2`
 - `magic-string@0.30.17`
+- `magic-string@1.3.1`
 - `math-intrinsics@1.1.0`
 - `media-typer@0.3.0`
 - `media-typer@1.1.1`
@@ -491,11 +482,11 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `msgpackr@2.0.4`
 - `msgpackr-extract@3.0.4`
 - `multer@2.2.0`
-- `nanoid@3.3.16`
+- `nanoid@3.3.20`
 - `natural-compare@1.4.0`
 - `negotiator@1.0.0`
 - `neo-async@2.6.2`
-- `next@16.2.12`
+- `next@16.3.8`
 - `node-abort-controller@3.1.1`
 - `node-addon-api@8.9.1`
 - `node-emoji@1.11.0`
@@ -508,6 +499,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `oauth4webapi@3.8.6`
 - `object-assign@4.1.1`
 - `object-inspect@1.13.4`
+- `obug@2.2.1`
 - `ohash@2.0.11`
 - `on-finished@2.4.1`
 - `on-headers@1.1.0`
@@ -529,15 +521,14 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `path-to-regexp@8.4.2`
 - `path-type@4.0.0`
 - `pathe@2.0.3`
-- `pathval@2.0.1`
 - `pause@0.0.1`
 - `perfect-debounce@1.0.0`
 - `picomatch@2.3.2`
 - `picomatch@4.0.4`
-- `picomatch@4.0.5`
+- `picomatch@4.0.7`
 - `pkg-types@2.3.1`
 - `pluralize@8.0.0`
-- `postcss@8.5.23`
+- `postcss@8.5.30`
 - `prelude-ls@1.2.1`
 - `proxy-addr@2.0.7`
 - `proxy-from-env@2.1.0`
@@ -577,7 +568,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `stackback@0.0.2`
 - `standard-as-callback@2.1.0`
 - `statuses@2.0.2`
-- `std-env@3.10.0`
+- `std-env@4.2.0`
 - `streamsearch@1.1.0`
 - `string-width@4.2.3`
 - `string_decoder@1.3.0`
@@ -585,7 +576,6 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `strip-bom@3.0.0`
 - `strip-json-comments@2.0.1`
 - `strip-json-comments@3.1.1`
-- `strip-literal@3.1.0`
 - `strtok3@10.3.5`
 - `styled-jsx@5.1.6`
 - `supports-color@7.2.0`
@@ -594,13 +584,9 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `symbol-observable@4.0.0`
 - `tapable@2.3.3`
 - `terser-webpack-plugin@5.6.1`
-- `tinybench@2.9.0`
-- `tinyexec@0.3.2`
-- `tinyexec@1.2.4`
+- `tinybench@6.1.4`
+- `tinyexec@1.3.0`
 - `tinyglobby@0.2.17`
-- `tinypool@1.1.1`
-- `tinyrainbow@2.0.0`
-- `tinyspy@4.0.4`
 - `to-regex-range@5.0.1`
 - `toidentifier@1.0.1`
 - `token-types@6.1.2`
@@ -630,8 +616,7 @@ Total: 578 packages (direct and transitive, incl. dev tooling).
 - `validator@13.15.35`
 - `vary@1.1.2`
 - `vite@6.4.3`
-- `vite-node@3.2.4`
-- `vitest@3.2.7`
+- `vitest@5.0.0`
 - `watchpack@2.5.2`
 - `wcwidth@1.0.1`
 - `webpack@5.106.2`

@@ -29,7 +29,12 @@ COPY --from=deps /app/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=deps /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=deps /app/turbo.json ./turbo.json
 
+# BugFix-23: bring the deps-stage workspace node_modules (apps/*/node_modules
+# symlinks into the root .pnpm store) into the build stage first; the context
+# COPY below then adds only sources (apps/*/node_modules is dockerignored).
+COPY --from=deps /app/apps ./apps
 COPY apps ./apps
+COPY --from=deps /app/packages ./packages
 COPY packages ./packages
 COPY prisma ./prisma
 COPY eslint.config.mjs ./eslint.config.mjs

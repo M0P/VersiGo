@@ -35,6 +35,16 @@ function createMockHttpService(): MockHttpService {
   } as unknown as MockHttpService;
 }
 
+/**
+ * BugFix-23: `@nestjs/axios` (axios 1.20) narrows the `HttpService` method
+ * types, so a bare `vi.fn()` is no longer assignable to the mocked method.
+ * This helper keeps the explicit mock typing in one place for the cases that
+ * only assert "was not called".
+ */
+function inertHttpMethod(): MockHttpService['get'] {
+  return vi.fn() as unknown as MockHttpService['get'];
+}
+
 function configuredValues(overrides: MockSettingsValues = {}): MockSettingsValues {
   return {
     PAPERLESS_ENABLED: true,
@@ -139,8 +149,8 @@ describe('PaperlessNgxService', () => {
     // URL. Loading the document list must never trigger a Paperless request
     // per document.
     it('builds the deep-link URL without any Paperless request', async () => {
-      mockHttp.get = vi.fn();
-      mockHttp.request = vi.fn();
+      mockHttp.get = inertHttpMethod();
+      mockHttp.request = inertHttpMethod();
 
       const result = await service.getDeepLink(42);
 

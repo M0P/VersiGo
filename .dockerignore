@@ -1,11 +1,22 @@
 # Dependencies
+# BugFix-23: exclude node_modules at EVERY depth – a stale host
+# apps/*/node_modules (old lockfile state after a dependency bump) must never
+# overwrite the fresh workspace node_modules produced by the deps stage.
 node_modules/
+**/node_modules/
 .pnpm-store/
 
 # Build outputs
+# BugFix-23: exclude build outputs at EVERY depth as well. Host artifacts from
+# an earlier local build must never enter the build context – the images build
+# these directories themselves, and a copied `tsconfig*.tsbuildinfo` from the
+# host can make an incremental `tsc` run skip emitting into a stale `dist/`.
 dist/
+**/dist/
 .next/
+**/.next/
 *.tsbuildinfo
+**/*.tsbuildinfo
 
 # Git and version control
 .git/

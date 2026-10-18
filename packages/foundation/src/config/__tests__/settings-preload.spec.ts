@@ -4,10 +4,16 @@ const findMany = vi.fn();
 const disconnect = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn(() => ({
-    globalIntegrationSetting: { findMany },
-    $disconnect: disconnect,
-  })),
+  // Vitest 5 only accepts a `function` or `class` implementation for mocks
+  // that are invoked as constructors. An arrow function makes
+  // `new PrismaClient(...)` throw "is not a constructor", which the code
+  // under test swallows as "database unreachable".
+  PrismaClient: vi.fn(function MockPrismaClient() {
+    return {
+      globalIntegrationSetting: { findMany },
+      $disconnect: disconnect,
+    };
+  }),
 }));
 
 import { preloadRestartSettingsIntoEnv } from '../settings-preload';
