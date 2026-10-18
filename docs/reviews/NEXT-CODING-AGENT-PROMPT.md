@@ -1,228 +1,391 @@
-# NEXT-CODING-AGENT-PROMPT.md
+# Next Coding Agent Prompt
 
-## Ready-to-paste prompt for the next coding-agent session
+**Next work package:** prompts/AP-24-detailverbesserungen
 
-> Copy everything between the two `--- PROMPT START/END ---` markers into a new
-> session. It is self-contained. Because there is currently **no** unimplemented
-> work package in `prompts/`, the prompt tells the next agent to wait for an
-> explicit instruction instead of inventing work.
+**Base branch:** feature/ap-23-mobile-tablet-ui (current HEAD: 9912c63)
+**Previous completed package:** AP-23-MOBILE-TABLET-UI.md (AP-23) — insurance types added (Rentenversicherung, Krankenversicherung, Krankenversicherung (Ausland)), i18n + POLICY_TYPES updated, API DTOs accept new enum values; Prisma enum updated (migration required in target environment).
 
---- PROMPT START ---
+## Instructions for the next agent
+You must implement ONLY the work package `prompts/AP-24-detailverbesserungen`. Do not start any later work package.
 
-You are the coding agent for the **VersiGo** repository at
-`/var/mnt/data/Dokumente/Informatik/VibeCode/VersiGo` (branch
-`fix/policy-delete-ui`, HEAD `ff04f14`).
+Use the same workflow:
+1. Read the supplied work package completely.
+2. Inspect relevant codebase, docs, tests, conventions.
+3. Implement exactly what is specified.
+4. Run formatter/linter/type-check/build/tests where available (Docker Compose gate is mandatory for verification; see AGENTS.md).
+5. Fix failures before requesting review.
+6. Invoke @code-reviewer to review uncommitted changes against the work package, conventions, correctness, regressions, security, tests, maintainability.
+7. Write each review report verbatim to docs/reviews/<work-package-number>-review-<iteration>.md (create docs/reviews if missing).
+8. Fix all Critical/High/Medium findings; fix Minor findings when reasonable/safe.
+9. Re-run relevant checks.
+10. Re-invoke @code-reviewer and repeat until: 0 Critical, 0 High, 0 Medium, ≤ 8 Minor, and relevant automated checks pass (or blocked/unavailable checks explained).
+11. If 5 review rounds reached without meeting acceptance, stop without committing; report remaining findings and ask the user to decide.
 
-### 1. Current state (2026-10-17)
+When acceptance is met:
+1. Check git diff/status.
+2. Commit only changes belonging to this work package with message starting with the work package number (e.g. "AP-24: ...").
+3. Find the next work package by selecting the next numbered Markdown file in /prompts after prompts/AP-24-detailverbesserungen.
+4. Create docs/reviews/NEXT-CODING-AGENT-PROMPT.md for that next package (include filename + full content + same instructions).
+5. Stop. Do NOT push, merge, or start the next package.
 
-- **BugFix-21** — "Paperless document list: no live lookups, controlled sync,
-  document metadata + type icons" — commit **`ff04f14`**, 25 files, user bug
-  report of 2026-10-17. Review reports:
-  `docs/reviews/BugFix-21-review-1.md` … `-4.md` (round 4: **PASS**, 0
-  Critical / 0 High / 0 Medium / 0 Minor). Original work package:
-  `prompts/BugFix-21-paperless-document-sync-metadata.md`.
-- Earlier packages on this branch: BugFix-20 (`1200bdc`, `b4445c0`), AP-22 and
-  its follow-up (`84e15ea`, `e5e91ac`) — see the package history below.
-- The Docker gate is green after BugFix-21: lint (4 packages), typecheck (4),
-  tests (api 755 / 62, web 111 / 7, worker 48 / 4, foundation 107 / 12),
-  dependency-licence check, version-sync check, i18n guard →
-  "All checks passed!".
+## Full content of prompts/AP-24-detailverbesserungen
+# AP: Sammelpaket kleiner Verbesserungen
 
-### 2. The work package you must implement
+## Ziel
 
-**There is none.** `prompts/` contains no unimplemented numbered work package
-after `prompts/BugFix-21-paperless-document-sync-metadata.md`:
+Dieses Arbeitspaket bündelt mehrere kleinere Verbesserungen in fünf Bereichen:
 
-- `prompts/` files that are already implemented and must **not** be
-  re-implemented: `AP-01 … AP-22`, `BugFix-01 … BugFix-21`,
-  including `prompts/BugFix-18-oidc-reverse-proxy-caddy.md` (commit `f9d6166`,
-  reviews `docs/reviews/BugFix-18-review-1.md` / `-2.md`).
-- `prompts/00-gemeinsame-regeln.md` and `prompts/PR-REVIEW.md` are not work
-  packages.
-- There is no `prompts/BugFix-22-*.md`; `AP-23` is unused/reserved and has no
-  prompt file.
+1. Paperless-ngx-Dokumentzuordnung
+2. Dokumentklassifikation
+3. KI-Leistungszusammenfassung
+4. Kosten
+5. Versicherte Personen oder Objekte
 
-**Therefore: do not start, invent, or partially implement any work package.**
-Wait for the user's explicit instruction. If the user supplies a new numbered
-prompt file in `prompts/` (or an equivalent direct request), implement **only
-that one package** and **do not start any later package**, not even
-partially. If a new prompt file appears, the whole procedure of section 4
-applies to it; paste its full content into your working context before
-touching any file.
+Nutze die bestehende Architektur, Komponenten, Berechtigungslogik, Queue-Infrastruktur und KI-Anbindung. Führe keine parallelen Lösungen ein. Alle Änderungen sind additiv und rückwärtskompatibel, soweit nicht ausdrücklich anders beschrieben.
 
-### 3. What BugFix-21 changed (context, do not redo)
+Führe zuerst eine Bestandsaufnahme der betroffenen Stellen durch und dokumentiere, welche vorhandenen Strukturen erweitert werden.
 
-User findings after the AP-22 release, verbatim:
+---
 
-> "die automatisch verknüpften paperless dokumente sollen nicht jedes mal live
-> geladen werden, es soll einen geteuerten automatischen sync geben und die
-> möglichkeit soll bleiben, es manuell zu triggern. zudem fehlen metadaten der
-> dokumente, diese müssen in der ui angezeigt werden: datum vom dokument, url zu
-> dem dokument in paperless. die info "common.uploadedAt" muss nicht angezeigt
-> werden. "Paperless-Dokument" wird doppelt aufgeführt, einmal reicht."
+## 1. Paperless-ngx-Dokumentzuordnung
 
-Plus the follow-up requirement: "der dokument typ soll durch ein passendes icon
-dargestellt werden".
+### 1.1 Fortschrittsanzeige beim manuellen Abgleich
 
-Delivered:
+Wenn ein Nutzer den Abgleich manuell startet, soll der Fortschritt sichtbar sein. Nach erfolgreichem Abschluss wird der Seiteninhalt ohne vollständigen Seiten-Reload aktualisiert.
 
-- `PaperlessNgxService.getDeepLink()` is a **pure local computation** from
-  `PAPERLESS_URL` (no HTTP request per linked document) and also returns a link
-  for a document that no longer exists in Paperless.
-- The controlled tag sync (periodic reconcile via
-  `PAPERLESS_TAG_SYNC_INTERVAL_MS`, default 5 min, plus the manual
-  "Jetzt aktualisieren" button) persists title, document date and MIME type.
-  The worker requests `fields=id,title,created,mime_type` and falls back to
-  `fields=id,title` on HTTP 400. Automatically managed rows are refreshed;
-  manually linked rows are only gap-filled — user values are never overwritten.
-- Manual links store the fetched MIME type; re-linking fills only metadata that
-  is still NULL. An unusable external date is dropped (`parsePaperlessDate`)
-  instead of being persisted as `Invalid Date`.
-- The document list shows the type as an icon (pure mapping in
-  `apps/web/src/lib/document-type.ts`, new icon paths, `policies.documentTypeKind*`
-  keys in both catalogs), the document date and the Paperless URL. The
-  `common.uploadedAt` line and the duplicate "Paperless-Dokument" label are gone.
-- New guard test `apps/web/src/__tests__/documents-tab-i18n.spec.ts` pins the
-  defect class: every static `t('…')` key in `documents-tab.tsx` must resolve in
-  both catalogs, and `common.uploadedAt` must not reappear.
-- Docs synced: `docs/06-integrations.md` (incl. the accepted boundary that
-  API-side metadata edits of tag-assigned documents are overwritten by the next
-  sync), `docs/05-feature-slices.md`, `docs/ui-control-matrix.md`,
-  `docs/end-user-guide.md`.
+#### Anforderungen
 
-Known limits of BugFix-21 (accepted, documented): pre-BugFix-21 rows only get
-metadata at the next sync (or on re-link); `parsePaperlessDate` is intentionally
-duplicated in `apps/api` and `apps/worker`; the API-side
-`PaperlessNgxService.listDocumentsByTag` is unused by production code and still
-requests the minimal field list — the sync runs exclusively through the worker's
-`PaperlessTagClient`.
+- Beim Auslösen des Abgleichs liefert die API sofort eine Job-ID bzw. einen Statusverweis zurück; der Abgleich selbst läuft weiter im Worker.
+- Ergänze einen Status-Endpunkt oder eine bestehende Status-Abfrage mit mindestens diesen Zuständen: `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`.
+- Der Status enthält, soweit ermittelbar: verarbeitete Seiten bzw. Dokumente, Gesamtzahl, neu zugeordnete, entfernte und unveränderte Dokumente sowie einen nicht sensitiven Fehlercode.
+- Ist die Gesamtzahl unbekannt, zeige einen unbestimmten Fortschrittsbalken mit dem bereits verarbeiteten Zwischenstand. Täusche keinen exakten Prozentwert vor.
+- Das Frontend fragt den Status in sinnvollen Intervallen ab (Polling) oder nutzt einen bereits vorhandenen Echtzeitmechanismus. Neue Infrastruktur ist nur bei klarem Bedarf einzuführen.
+- Das Polling endet bei Abschluss, Fehler, Navigation weg von der Seite oder Abbruch durch den Nutzer.
+- Bei Erfolg werden ausschließlich die betroffenen Daten neu geladen, beispielsweise per Query-Invalidierung oder Router-Refresh der Dokumentliste. Ein vollständiger Browser-Reload ist nicht zulässig.
+- Scroll-Position, Filter, geöffnete Bereiche und nicht gespeicherte Eingaben bleiben erhalten.
+- Bei Fehlern wird eine verständliche Meldung angezeigt; die zuletzt bekannte Dokumentliste bleibt unverändert sichtbar.
+- Der Auslöser-Button ist während eines laufenden Abgleichs deaktiviert. Ein zweiter Klick oder ein zweiter Browser-Tab darf keinen parallelen Lauf für dieselbe Versicherung starten; stattdessen wird der laufende Job angezeigt.
+- Der Fortschritt muss nach einem Seiten-Reload wiederaufnehmbar sein, falls ein Lauf noch aktiv ist.
+- Statusänderungen werden Screenreadern angekündigt (`aria-live`), der Fortschrittsbalken ist korrekt beschriftet.
+- Prüfe, dass die Status-Abfrage Haushalts- und Rollenberechtigungen berücksichtigt.
 
-### 4. Required process for any package you are given
+#### Akzeptanzkriterien
 
-1. Read the applicable `AGENTS.md` files, the prompt file and the touched
-   sources/tests before editing. Use test-driven development (observe the red
-   phase) for changed behaviour.
-2. Use a feature branch (`feature/<short-name>`, or the repository's existing
-   task branch). Never implement on `main`/`master`/release branches. Do not
-   push, merge, rebase, amend or rewrite history.
-3. Keep the change inside the work package; do not start the next one.
-4. Run the **Docker-only** gate (`docker compose -p versigo-test -f
-   docker-compose.test.yml down -v`, then `up --build
-   --abort-on-container-exit --exit-code-from test`). The host has no working
-   vitest/rollup; host `tsc --noEmit` works for fast pre-checks.
-5. Review loop: invoke the `code-reviewer` **subagent via the Task tool** for
-   every round (a review is valid only if the subagent actually runs — never
-   self-review, never simulate it) and write each report verbatim to
-   `docs/reviews/<package>-review-<n>.md`. Fix every Critical/High/Medium
-   finding and every Minor that is reasonable and safe. Acceptance: 0 Critical,
-   0 High, 0 Medium, ≤ 8 Minor, plus passing checks. The loop is capped at
-   **five rounds**; if the bar is not met, stop without committing and ask the
-   user to decide.
-   **Model caveat:** `.opencode/agents/code-reviewer.md` configures
-   `opencode/deepseek-v4-flash-free`, which the provider currently rejects with
-   "Model unavailable". In BugFix-21 every round was therefore invoked with
-   `model: opencode/deepseek-v4.1-flash-free` (note this in the report). If no
-   `code-reviewer` model is available, stop and report
-   "REVIEW AUTOMATION FAILED: DeepSeek code-reviewer could not be invoked."
-6. Commit only the files belonging to the package, with a message beginning
-   with the package number (e.g. `BugFix-22: …`), then update this handoff file
-   for the package after it.
-7. Synchronise the Trilium project note (section 6) and clean up all
-   Docker/Podman artifacts and scratch files the session created (section 5).
+- Nach dem Start erscheint innerhalb kurzer Zeit ein sichtbarer Fortschritt.
+- Nach Erfolg zeigt die Liste die neuen Zuordnungen ohne Seiten-Reload.
+- Bei Fehler bleibt der alte Stand sichtbar und eine Wiederholung ist möglich.
+- Doppelte parallele Läufe pro Versicherung sind ausgeschlossen.
 
---- PROMPT END ---
+### 1.2 Konfigurierbares Abgleichintervall
 
-## Project state after BugFix-21 (2026-10-17)
+Der regelmäßige automatische Abgleich muss in den Einstellungen konfigurierbar sein.
 
-Branch: `fix/policy-delete-ui`, HEAD `ff04f14` (BugFix-21).
+#### Anforderungen
 
-### Package history relevant to this handoff
+- Ergänze in den bestehenden Admin-/Systemeinstellungen einen Bereich für den automatischen Paperless-Abgleich.
+- Konfigurierbar sind mindestens: automatischer Abgleich aktiv/inaktiv und das Intervall.
+- Das Intervall wird über vordefinierte Auswahlwerte angeboten, beispielsweise 5, 15, 30 Minuten, 1, 6 und 24 Stunden. Ein freier Wert ist nur zulässig, wenn er validiert wird (Mindest- und Höchstwert).
+- Der Standardwert bleibt fünf Minuten, wie im bestehenden Konzept, sofern keine andere Vorgabe im Projekt besteht.
+- Die Einstellung wird in der Datenbank bzw. im bestehenden Einstellungsmechanismus gespeichert und serverseitig validiert.
+- Änderungen wirken ohne Neustart der Anwendung. Der Scheduler liest die Konfiguration dynamisch oder wird nach einer Änderung sauber neu geplant.
+- Beim Deaktivieren laufen keine neuen automatischen Abgleiche an; manuelle Abgleiche bleiben möglich.
+- Bereits laufende Jobs werden nicht abgebrochen.
+- Verteile Abgleiche mehrerer Versicherungen gestaffelt, damit nicht alle gleichzeitig starten.
+- Zeige in der Oberfläche den Zeitpunkt des letzten erfolgreichen und optional des nächsten geplanten Abgleichs.
+- Änderungen an der Einstellung werden im Audit-Log erfasst.
+- Nur berechtigte Rollen dürfen die Einstellung ändern.
 
-- **BugFix-21** (user bug report 2026-10-17) — commit **`ff04f14`**, 25 files.
-  Work package `prompts/BugFix-21-paperless-document-sync-metadata.md`, reviews
-  `docs/reviews/BugFix-21-review-1.md` … `-4.md` (4 → 2 → 2 → 0 Minor, final
-  verdict PASS). All four rounds were run by the `code-reviewer` subagent; the
-  reports note the model override (`opencode/deepseek-v4.1-flash-free`).
-- **BugFix-20** — commit **`1200bdc`** (policy delete UI) plus `b4445c0`
-  (documentation/handoff). Review report `docs/reviews/BugFix-20-review-1.md`
-  is a **self-review** (no reviewer subagent was available in that session).
-- **AP-22** — tag-based Paperless document assignment (`84e15ea`, follow-up
-  `e5e91ac`), review reports `docs/reviews/AP-22-*-review-*.md`.
-- Older history is listed in the previous revision of this file (git history of
-  this path).
+#### Akzeptanzkriterien
 
-### Verification performed for BugFix-21
+- Intervall und Aktivierung sind in der Oberfläche änderbar.
+- Ungültige Werte werden abgelehnt.
+- Der Scheduler verwendet nach Speicherung den neuen Wert ohne Neustart.
+- Die Anzeige von letztem Abgleich und Status ist korrekt.
 
-- Containerised gate (twice, after the round-1 and round-2/3 fixes):
-  `docker compose -p versigo-test -f docker-compose.test.yml down -v` then
-  `up --build --abort-on-container-exit --exit-code-from test` →
-  prisma migrate deploy → lint (4 packages) → typecheck (4) → tests →
-  licence check → version-sync check → i18n guard → "All checks passed!".
-  Final counts: api 755 / 62 files, web 111 / 7, worker 48 / 4,
-  foundation 107 / 12.
-- TDD: the red phase was observed by stashing the implementation and running
-  the new specs against the old code (API 5 failures, worker 16, web 2) before
-  the green run.
-- Host `tsc --noEmit` for `apps/api` and `apps/web` — clean.
-- **Not covered:** the repository still has no browser/e2e or accessibility
-  harness, so the document-list UI (type icon, date, URL, removed lines) was
-  verified only by unit tests, type/build checks and source reading. State this
-  honestly in any follow-up report.
+---
 
-## THERE IS NO NEXT WORK PACKAGE
+## 2. Dokumente klassifizieren
 
-`prompts/` contains **no** unimplemented numbered work package after
-`prompts/BugFix-21-paperless-document-sync-metadata.md` (the last numbered
-file). Everything defined so far (AP-01 … AP-22, `BugFix-*` up to BugFix-21) is
-implemented, reviewed and committed.
+Dokumente sollen einer Klasse zugeordnet werden können.
 
-- `prompts/BugFix-18-oidc-reverse-proxy-caddy.md` still exists but is **already
-  implemented** (commit `f9d6166`); do **not** re-implement it.
-- `prompts/00-gemeinsame-regeln.md` and `prompts/PR-REVIEW.md` are not work
-  packages.
-- `AP-23` is unused/reserved and has no prompt file.
+### 2.1 Dokumentklassen
 
-**A new coding-agent session must NOT auto-start any work package.** Wait for an
-explicit user instruction. If a new numbered prompt file appears in `prompts/`,
-implement only that one and do not begin any later package.
+Lege eine typisierte, serverseitig validierte Klassenliste an. Vorschlag:
 
-## Environment reminders (Podman host)
+| Schlüssel | Anzeigename | Beschreibung |
+|---|---|---|
+| `CONTRACT` | Vertragsdokument | Police, Antrag, Nachträge, Vertragsbedingungen, Bestätigungen |
+| `BILLING` | Abrechnung | Beitragsrechnung, Beitragsabrechnung, Jahresabrechnung, Leistungs- oder Erstattungsabrechnung |
+| `CORRESPONDENCE` | Korrespondenz | Briefe, E-Mails, Mitteilungen des Versicherers |
+| `CLAIM` | Schaden/Leistungsfall | Schadensmeldung, Gutachten, Leistungsentscheidung |
+| `OTHER` | Sonstiges | Alles andere |
+| `UNCLASSIFIED` | Nicht klassifiziert | Standard für neue und bestehende Dokumente |
 
-- `docker` is a Podman shim → podman-compose. Always
-  `docker compose -p versigo-test -f docker-compose.test.yml down -v` before
-  `up`; `up --build` alone does not recreate containers on this machine.
-- `docker-compose.yml` and `docker-compose.test.yml` both declare
-  `name: versigo`, so always pass `-p versigo-test` for the test stack; a plain
-  `down` against the test file would disturb the dev stack.
-- Node/pnpm/vitest do not work on the host (missing
-  `@rollup/rollup-linux-x64-gnu`); run gates in the test container. Host `node`
-  and `npx tsc --noEmit` do work for fast pre-checks.
-- Fast iteration without a rebuild (used for BugFix-21):
-  `podman run --rm -v "$PWD/apps/api/src:/app/apps/api/src:ro" … versigo-test:latest sh -c 'pnpm --filter @versigo/api exec vitest run <spec>'`.
-- `scripts/compose-smoke-test.sh` is destructive (its last phase drops the dev
-  schema); run it only when losing the current dev data is acceptable.
-- `/var/home` is ~123 GB and fills quickly. Check `df -h /var/home`, use
-  `podman system prune -a -f` when needed, never relocate podman storage, and
-  delete every scratch file/container/image/volume the session created before
-  finishing (AGENTS.md point 9). Do not touch pre-existing containers
-  (`tk-epa-ubuntu`, `libation-env`) or the `versigo_*` dev stack.
-- BugFix-21 added no runtime dependency, environment variable, migration, port,
-  queue, storage path or health endpoint, so the Compose stack, `.env.example`
-  and the smoke test needed no change; keep it that way.
+Hinweise:
 
-## Documentation status (Trilium)
+- Die Klassen `CONTRACT` und `BILLING` sind verbindlich; die weiteren Klassen sind Vorschläge und können nach Rücksprache angepasst werden.
+- Verwende stabile technische Schlüssel (Enum oder Referenztabelle). Anzeigenamen werden über das vorhandene Übersetzungsverfahren gepflegt.
+- Falls Erweiterbarkeit durch Administratoren gefordert wird, ist dies in einem Folgepaket zu behandeln. Für dieses AP genügt eine feste Liste.
 
-Trilium MCP is available and writable. The VersiGo project note is:
+### 2.2 Datenmodell und Migration
 
-- Note **"VersiGo (Versicherungsverwaltung)"**, `noteId BRpbPoqTaGKk`, at the
-  Trilium root, labels `#project = versigo`, `#repository = VibeCode/VersiGo`,
-  `#status = in Arbeit`.
-- Content: project overview, verification/process conventions, the
-  destructive-smoke-test warning, and one entry per package (AP-22 `84e15ea`,
-  AP-22 follow-up `e5e91ac`, BugFix-20 `1200bdc`, and — added by the BugFix-21
-  session — BugFix-21 `ff04f14`).
-- Writes are verified by reading the note back. Extend this note for future
-  packages instead of creating a second VersiGo note.
+- Ergänze die Dokumentverknüpfung um das Feld `documentClass` mit Standardwert `UNCLASSIFIED`.
+- Bestehende Dokumente werden bei der Migration als `UNCLASSIFIED` übernommen. Es erfolgt keine automatische inhaltliche Klassifikation durch die Migration.
+- Für Paperless-Dokumente wird die Klasse in Insura an der Dokumentzuordnung gespeichert. Die Klassifikation darf Paperless-Dokumente nicht verändern.
+- Klasse und Zuordnung müssen auch bei automatischer Tag-Zuordnung persistent bleiben. Ein Abgleich überschreibt eine bestehende Klassifikation nicht.
+- Sieht das Datenmodell mehrfache Zuordnung desselben externen Dokuments zu mehreren Versicherungen vor, ist festzulegen und zu dokumentieren, ob die Klasse je Zuordnung oder je Dokument gilt. Bevorzugt wird die Klasse je Versicherungszuordnung.
+- Erstelle eine additive Prisma-Migration.
 
-Repository documentation (`docs/05`, `06`, `ui-control-matrix`, end-user-guide)
-is updated and committed with BugFix-21.
+### 2.3 Oberfläche und Backend
+
+- Die Klasse ist in der Dokumentliste sichtbar, beispielsweise als Badge.
+- Die Klasse lässt sich beim Hinzufügen, beim manuellen Verlinken und nachträglich in den Dokumentdetails ändern.
+- Zusätzlich gibt es eine Mehrfachauswahl zum Ändern der Klasse mehrerer Dokumente.
+- Die Dokumentliste ist nach Klasse filterbar.
+- Die Änderung wird serverseitig mit den bestehenden Berechtigungen geprüft und im Audit-Log erfasst.
+- Eine fehlende oder ungültige Klasse führt zu einem validierten Fehler.
+- Die Klassifikation ist auch auf Smartphone und Tablet gut bedienbar.
+
+### Akzeptanzkriterien
+
+- Neue und bestehende Dokumente haben standardmäßig die Klasse „Nicht klassifiziert“.
+- Klassen können einzeln und in Mehrfachauswahl geändert werden.
+- Die Klasse bleibt nach Paperless-Abgleichen erhalten.
+- Die Liste ist nach Klasse filterbar.
+
+---
+
+## 3. KI-Leistungszusammenfassung
+
+### 3.1 Optionale Nutzung von Vertragsdokumenten
+
+Die KI-Leistungszusammenfassung kann optional auf einem oder mehreren als `CONTRACT` klassifizierten Dokumenten basieren.
+
+#### Anforderungen
+
+- Die Auswahl ist optional. Ohne Auswahl bleibt das bisherige Verhalten erhalten.
+- Der Nutzer kann alle oder einzelne Vertragsdokumente der Versicherung auswählen.
+- Zur Auswahl stehen nur Dokumente der Klasse `CONTRACT`, für die der Nutzer berechtigt ist.
+- Vor der Übergabe an die KI zeigt die Oberfläche eine klare Hinweismeldung, dass Dokumentinhalte an den konfigurierten KI-Anbieter übermittelt werden. Beachte bestehende Datenschutzeinstellungen und Freigabemechanismen.
+- Die Textextraktion nutzt vorhandene Mechanismen. Bei Paperless-Dokumenten ist zu prüfen, ob bereits extrahierter Inhalt verwendet werden kann; andernfalls ist die vorhandene Dokumentverarbeitung wiederzuverwenden.
+- Begrenze Anzahl und Größe der Dokumente anhand des Kontextfensters und der konfigurierten Limits. Bei Überschreitung wird der Nutzer informiert, statt Inhalte stillschweigend abzuschneiden.
+- Nicht lesbare, leere oder nicht unterstützte Dokumente werden benannt und gesondert behandelt; die Zusammenfassung wird nur mit den verwertbaren Dokumenten erstellt, wenn der Nutzer dies bestätigt oder der Ablauf dies eindeutig ausweist.
+- Die Antwort enthält Informationen zu den verwendeten Quellen, beispielsweise Dokumentnamen, soweit dies fachlich sinnvoll ist.
+- Dokumentinhalte werden nicht dauerhaft in zusätzlichen Insura-Tabellen gespeichert, sofern dies nicht bereits Bestandteil der Architektur ist.
+- Dokumentinhalte und Zusammenfassungen werden nicht ungeschützt geloggt.
+- Der Prompt muss Dokumentinhalt klar als Daten und nicht als Anweisungen behandeln, um Prompt-Injection über Dokumenttext zu begrenzen.
+- Die Zusammenfassung ist als KI-generiert zu kennzeichnen. Rechtliche oder vertragliche Aussagen sind kein Ersatz für die Originaldokumente.
+- Wenn keine KI-Funktion aktiviert oder eingerichtet ist, ist die Option nicht sichtbar.
+- Kostentracking oder Nutzungsprotokolle der KI-Funktion werden wie bei bestehenden KI-Aufrufen fortgeführt.
+
+### 3.2 Einheitliches Ausgabeformat
+
+Die KI gibt Antworten derzeit teilweise als Markdown zurück. Das Format muss einheitlich definiert und in der Oberfläche korrekt dargestellt werden.
+
+#### Entscheidung
+
+Definiere ein verbindliches Ausgabeformat und dokumentiere es zusammen mit dem Prompt. Zwei Varianten sind zulässig; wähle eine nach Prüfung der bestehenden KI-Anbindung und begründe sie:
+
+- **Variante A (bevorzugt für strukturierte Inhalte):** Die KI liefert ein JSON-Objekt nach festem Schema (zum Beispiel Abschnitte, Listen, Hinweise). Die Oberfläche rendert daraus selbst. Für eine zuverlässige Verarbeitung ist schemaerzwungene Ausgabe oder Function Calling bevorzugt; reines Prompt-JSON eignet sich eher für Prototypen. [web:43]
+- **Variante B:** Die KI liefert Markdown in einer klar eingeschränkten Teilmenge (Überschriften, Absätze, Listen, Fettdruck, Tabellen). Markdown wird immer erwartet und immer gerendert; Mischformen sind nicht zulässig.
+
+Unabhängig von der Variante gilt:
+
+- Das Schema bzw. die erlaubte Markdown-Teilmenge wird zentral definiert.
+- Die Ausgabe wird serverseitig validiert; bei Verstoß erfolgt ein begrenzter Wiederholungsversuch mit präzisiertem Prompt und danach ein sauberer Fehlerfall. [web:48]
+- Die Anzahl der Wiederholungen ist begrenzt.
+- Ungültige Rohausgaben werden zu Diagnosezwecken ohne vertrauliche Dokumentinhalte protokolliert, soweit dies datenschutzkonform möglich ist.
+- Bestehende bereits gespeicherte Zusammenfassungen müssen weiterhin dargestellt werden. Alte unstrukturierte oder Markdown-Texte werden beim Anzeigen kompatibel behandelt; eine Datenmigration ist nur bei Bedarf vorzusehen.
+
+#### Darstellung
+
+- Die Oberfläche rendert die Zusammenfassung formatiert und konsistent.
+- Wird Markdown verwendet, ist ein sicherer Renderer einzusetzen. `react-markdown` erzeugt React-Elemente statt HTML-Strings und schützt dadurch standardmäßig besser vor XSS; rohes HTML wird nicht aktiviert. [web:42][web:44]
+- Falls zusätzliches HTML gerendert werden muss, ist `rehype-sanitize` mit Allowlist zwingend. [web:42][web:49]
+- Unsichere Link- und Bild-Schemata (`javascript:`, `data:`, `vbscript:`) sind zu blockieren. [web:49]
+- Verwende keine ungesicherte Einbindung über `dangerouslySetInnerHTML`.
+- Typografie, Listen, Tabellen und lange Wörter müssen auf Desktop, Tablet und Smartphone korrekt dargestellt werden.
+- Das Rendering funktioniert in hellem und dunklem Modus, sofern beide unterstützt werden.
+
+### Akzeptanzkriterien
+
+- Vertragsdokumente können optional ausgewählt werden, die Option erscheint nur bei aktivierter KI.
+- Die Ausgabe folgt immer demselben definierten Format.
+- Die Oberfläche stellt sie formatiert dar.
+- HTML- oder Script-Inhalte in KI-Antworten werden nicht ausgeführt.
+- Der Datenübermittlungshinweis ist sichtbar.
+- Ohne Dokumentauswahl funktioniert die bisherige Zusammenfassung unverändert.
+
+---
+
+## 4. Kosten
+
+### 4.1 Seitenleiste mit Abrechnungsdokumenten
+
+- Die Kostenansicht zeigt eine Seitenleiste mit Dokumenten der Versicherung, die als `BILLING` klassifiziert sind.
+- Jeder Eintrag zeigt mindestens Titel, Datum und Herkunft; bereits für einen Kosteneintrag verwendete Dokumente werden sichtbar markiert.
+- Aus der Seitenleiste lässt sich die Dokumentvorschau öffnen, ohne die Kostenansicht zu verlassen.
+- Eine Suche oder ein Filter ist vorzusehen, wenn die Liste umfangreich werden kann.
+- Leerer Zustand: Hinweis, dass bislang keine Dokumente als „Abrechnung“ klassifiziert sind, mit direktem Zugang zur Klassifikation.
+- Auf Desktop als fest eingeblendete Seitenleiste; auf Tablet einklappbar; auf Smartphone als Bottom-Sheet, Schublade oder eigener Tab.
+- Die Liste aktualisiert sich nach Klassifikationsänderungen ohne vollständigen Seiten-Reload.
+
+### 4.2 Kosteneintrag aus Dokument per KI
+
+- Für Abrechnungsdokumente gibt es die Aktion „Kosten per KI erfassen“.
+- Die Aktion ist ausschließlich sichtbar, wenn die KI-Funktion aktiviert **und** vollständig eingerichtet ist. Die Prüfung erfolgt serverseitig und wird dem Frontend als Capability bereitgestellt.
+- Die KI liefert einen **Vorschlag**, keinen automatisch gespeicherten Eintrag.
+- Der Nutzer sieht die extrahierten Werte in der bestehenden Kosteneintragsmaske vorausgefüllt, kann sie ändern und bestätigt das Speichern bewusst.
+- Der Kosteneintrag verweist auf das Quelldokument.
+- Vor der Übermittlung gilt derselbe Datenübermittlungshinweis wie bei der Leistungszusammenfassung.
+
+#### Extraktionsschema
+
+Der Prompt und das serverseitig validierte Schema werden auf das bestehende Kostenmodell abgestimmt. Prüfe zuerst die vorhandenen Felder und Kategorien. Als Ausgangspunkt dienen:
+
+| Feld | Typ | Hinweis |
+|---|---|---|
+| `amount` | Zahl | Numerisch, kein Währungssymbol im Wert |
+| `currency` | ISO-Code | Beispielsweise EUR |
+| `date` | ISO-Datum | Rechnungs- bzw. Abrechnungsdatum |
+| `periodStart`, `periodEnd` | ISO-Datum oder `null` | Abgedeckter Zeitraum |
+| `category` | Enum | Muss den vorhandenen Kostenkategorien entsprechen |
+| `description` | String | Kurze, neutrale Beschreibung |
+| `confidence` | Enum | Zum Beispiel `high`, `medium`, `low` |
+| `notes` | String oder `null` | Auffälligkeiten, Unsicherheiten |
+
+Vorgaben für die Extraktion:
+
+- Nicht sicher bestimmbare Felder werden mit `null` zurückgegeben, nicht geraten. [web:46]
+- Explizite Unsicherheitsmarker für fehlende, mehrdeutige oder widersprüchliche Angaben sind vorzusehen. [web:46]
+- Zahlen sind numerisch und nicht als formatierter Text zu liefern. [web:43]
+- Geschlossene Auswahlfelder werden als Enum definiert. [web:43]
+- Die Ausgabe wird validiert, bei Fehlern wird begrenzt wiederholt oder an die manuelle Erfassung zurückgegeben. [web:48]
+- Enthält ein Dokument mehrere Positionen oder Zeiträume, ist festzulegen, ob mehrere Vorschläge geliefert werden. Für dieses AP genügt ein Vorschlag je Dokument, mit Hinweis auf weitere erkannte Positionen in `notes`.
+- Der Prompt behandelt Dokumentinhalt ausdrücklich als Daten, nicht als Anweisung.
+- Der Prompt ist versioniert, dokumentiert und mit Beispielen für typische Abrechnungsdokumente abgestimmt.
+- Rundungs-, Dezimaltrenner- und Datumsformate (deutsche Schreibweise, z. B. `1.234,56 €`) müssen korrekt interpretiert werden.
+- Beträge mit Vorzeichen (Gutschrift, Erstattung) sind eindeutig zu behandeln und im Schema abzubilden.
+
+#### Fehlerfälle
+
+- Nicht lesbares Dokument, leerer Text, Zeitüberschreitung, ungültige Antwort und KI-Fehler führen zu einer verständlichen Meldung ohne Datenverlust.
+- Der Nutzer kann die Kosten anschließend manuell erfassen.
+- Bereits erfasste Einträge zu demselben Dokument werden angezeigt, um Doppelerfassung zu vermeiden. Ein Hinweis genügt; das erneute Erfassen bleibt möglich.
+
+### Akzeptanzkriterien
+
+- Die Seitenleiste zeigt ausschließlich `BILLING`-Dokumente der Versicherung.
+- Die KI-Aktion ist nur bei aktivierter und eingerichteter KI sichtbar, auch serverseitig abgesichert.
+- Ein Vorschlag wird nie ohne Bestätigung gespeichert.
+- Nicht erkannte Felder bleiben leer.
+- Der Kosteneintrag verweist auf das Quelldokument.
+- Fehler beeinträchtigen die manuelle Erfassung nicht.
+
+---
+
+## 5. Versicherte Personen oder Objekte
+
+### 5.1 Dynamische Feldbezeichnung
+
+In der Eingabemaske ist die Überschrift „Personenname“ immer statisch, auch wenn ein Objekt erfasst wird.
+
+- Die Bezeichnung richtet sich nach dem gewählten Typ.
+- Bei Person: „Name der Person“ bzw. „Personenname“, entsprechend der bestehenden Terminologie.
+- Bei Objekt: „Bezeichnung des Objekts“ bzw. „Objektbezeichnung“.
+- Falls es weitere Typen oder Unterarten gibt, ist für jeden eine passende Bezeichnung zu definieren.
+- Die Bezeichnung wechselt sofort bei Änderung des Typs, ohne bereits eingegebene Werte zu löschen.
+- Platzhaltertexte, Hilfetexte, Validierungsfehler, Barrierefreiheitsbeschriftungen (`aria-label`) und Bestätigungsdialoge verwenden dieselbe typabhängige Bezeichnung.
+- Überprüfe auch Listen, Detailansichten, Tabellenüberschriften und Dokumenten- oder Kostenbezüge auf einen statischen Begriff „Person“, der bei Objekten irreführend ist.
+- Alle Texte werden über das bestehende Übersetzungsverfahren gepflegt.
+
+### 5.2 Feld „Beziehung“
+
+- Ändere die Beschriftung „Beziehung (Optional)“ in „Beziehung“.
+- Das Feld bleibt technisch optional, die Optionalität wird jedoch nicht mehr explizit im Label genannt.
+- Prüfe, ob dasselbe Label auch in Übersetzungen, Tests, Dokumentation und Screenshots vorkommt, und passe sie an.
+- Setze keine Pflichtfeldmarkierung, wenn das Feld nicht verpflichtend ist.
+- Die Bezeichnung für Objekte ist fachlich zu prüfen: Falls „Beziehung“ bei Objekten missverständlich ist, ist stattdessen ein passenderer typabhängiger Begriff zu wählen und zu dokumentieren.
+
+### Akzeptanzkriterien
+
+- Bei Personen und Objekten erscheint jeweils die passende Feldüberschrift.
+- Das Label „Beziehung“ enthält keinen Zusatz „(Optional)“.
+- Validierung, Hilfetexte und Barrierefreiheit verwenden konsistente Begriffe.
+
+---
+
+## Übergreifende Anforderungen
+
+- Alle neuen Oberflächen funktionieren auf Desktop, Tablet und Smartphone.
+- Lade-, Leer- und Fehlerzustände sind für alle neuen Elemente umgesetzt.
+- Texte werden über das vorhandene Übersetzungssystem bereitgestellt.
+- Neue Endpunkte verwenden validierte DTOs, bestehende Autorisierung und nachvollziehbare Fehlercodes.
+- Zugangsdaten, Dokumentinhalte und KI-Rohantworten werden nicht ungeschützt protokolliert.
+- Datenbankänderungen erfolgen ausschließlich über additive, testbare Prisma-Migrationen.
+- Bestehende Funktionen und Daten bleiben unverändert nutzbar.
+- Audit-Ereignisse werden für Konfigurationsänderungen, Klassifikationen und KI-gestützte Kosten- oder Zusammenfassungsaktionen ergänzt, soweit im Projekt vorgesehen.
+
+## Tests
+
+### Unit-Tests
+
+- Statusmodell und Zustandsübergänge des Paperless-Abgleichs.
+- Validierung der Intervalleinstellung.
+- Validierung von Dokumentklassen.
+- Schema-Validierung der KI-Antworten (Zusammenfassung und Kostenextraktion), einschließlich ungültiger und unvollständiger Antworten.
+- Typabhängige Feldbezeichnungen.
+
+### Integrations-Tests
+
+- Manueller Abgleich: Start, Fortschritt, Abschluss, Fehler, Wiederaufnahme nach Reload, Verhinderung paralleler Läufe.
+- Scheduler übernimmt geänderte Intervalle ohne Neustart.
+- Klassifikation bleibt nach Paperless-Abgleich erhalten.
+- Mehrfachklassifikation und Filterung.
+- Zusammenfassung mit und ohne Dokumentauswahl; Beschränkung auf berechtigte `CONTRACT`-Dokumente.
+- Kostenvorschlag aus Dokument; Ausblenden der Funktion bei deaktivierter oder unvollständig konfigurierter KI.
+- Berechtigungsprüfungen für Status-, Klassifikations- und KI-Endpunkte.
+- Migration erhält bestehende Dokumente und setzt `UNCLASSIFIED`.
+
+### Frontend- und End-to-End-Tests
+
+- Fortschrittsanzeige und Aktualisierung ohne Seiten-Reload.
+- Sicheres Rendern von KI-Ausgaben, einschließlich Testfällen mit HTML, Skript-Inhalt und gefährlichen Link-Schemata.
+- Seitenleiste in den Kosten auf Desktop, Tablet und Smartphone.
+- Prüfung der vollständigen Kette: Dokument klassifizieren, erscheint in der Kosten-Seitenleiste, Kosten per KI vorschlagen, bestätigen, Eintrag mit Dokumentverweis gespeichert.
+- Eingabemaske für Person und Objekt mit korrekten Beschriftungen.
+
+KI-Aufrufe werden in automatisierten Tests durch kontrollierte Mocks ersetzt. Zusätzlich ist mit einer repräsentativen, anonymisierten Stichprobe an Abrechnungsdokumenten die Qualität des Extraktionsprompts manuell zu bewerten und zu dokumentieren.
+
+## Reihenfolge der Umsetzung
+
+1. Dokumentklassifikation (Grundlage für KI und Kosten).
+2. Personen-/Objekt-Labels (unabhängig, schnell umsetzbar).
+3. Paperless-Fortschritt und konfigurierbares Intervall.
+4. Einheitliches KI-Ausgabeformat und sicheres Rendering.
+5. Optionale Vertragsdokumente für die Leistungszusammenfassung.
+6. Kosten-Seitenleiste und KI-Kostenerfassung.
+
+## Nicht Bestandteil
+
+- Automatische KI-Klassifikation von Dokumenten.
+- Benutzerdefinierte, frei erweiterbare Dokumentklassen.
+- Automatisches Speichern von KI-Vorschlägen ohne Nutzerbestätigung.
+- Mehrpositions-Extraktion mit Aufteilung in mehrere Kosteneinträge.
+- Neue Echtzeit-Infrastruktur, sofern Polling ausreicht.
+- Änderung des KI-Anbieters oder der Authentifizierung.
+
+## Abschlusslieferung
+
+Liefere:
+
+1. Implementierung in den bestehenden Projektstrukturen.
+2. Additive Prisma-Migration(en).
+3. Dokumentation des KI-Ausgabeformats einschließlich Schema, Prompt-Version und Rendering-Entscheidung.
+4. Dokumentation des Kostenextraktions-Prompts, Beispiele und Ergebnis der manuellen Qualitätsbewertung.
+5. Aktualisierte Konfigurations- und Nutzerdokumentation (insbesondere Abgleichintervall, Dokumentklassen, KI-Datenübermittlung).
+6. Automatisierte Tests und deren tatsächliche Ergebnisse.
+7. Liste geänderter Dateien mit kurzer Begründung.
+8. Offene Punkte und Einschränkungen, klar getrennt von abgeschlossenen Arbeiten.
+
+Behaupte keine Testergebnisse, KI-Qualitätswerte oder externen Aufrufe, die nicht tatsächlich ausgeführt wurden.
