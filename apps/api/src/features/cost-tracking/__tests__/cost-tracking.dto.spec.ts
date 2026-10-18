@@ -5,9 +5,10 @@ import { validate, type ValidationError } from 'class-validator';
 import { CreateCostEntryDto, UpdateCostEntryDto } from '../dto/cost-tracking.dto';
 
 /**
- * BugFix-22: the gross amount is no longer a mandatory field. The DTO accepts
- * an entry with only a net amount (and vice versa); the rule "at least one
- * amount" is enforced in the service (see cost-tracking.service.spec.ts).
+ * A cost entry records exactly ONE amount (the former gross/net pair is
+ * gone). The DTO makes it mandatory when creating; that an update may not
+ * CLEAR it is enforced in the service (see cost-tracking.service.spec.ts),
+ * because `@IsOptional()` also lets `null` through.
  */
 async function errorsFor(
   dtoClass: new () => object,
@@ -16,50 +17,70 @@ async function errorsFor(
   return validate(plainToInstance(dtoClass, raw as object));
 }
 
-describe('CreateCostEntryDto (BugFix-22: gross OR net)', () => {
-  it('accepts an entry with only a gross amount', async () => {
+describe('CreateCostEntryDto (single amount field)', () => {
+  it('accepts an entry with an amount', async () => {
     const errors = await errorsFor(CreateCostEntryDto, {
       validFrom: '2025-01-01',
-      grossAmount: 1200,
+      amount: 1200,
       frequency: 'MONTHLY',
     });
     expect(errors).toHaveLength(0);
   });
 
-  it('accepts an entry with only a net amount', async () => {
+  it('requires an amount', async () => {
     const errors = await errorsFor(CreateCostEntryDto, {
       validFrom: '2025-01-01',
-      netAmount: 1000,
       frequency: 'MONTHLY',
     });
-    expect(errors).toHaveLength(0);
+    expect(errors.map((e) => e.property)).toContain('amount');
   });
 
   it('rejects a non-numeric amount', async () => {
     const errors = await errorsFor(CreateCostEntryDto, {
       validFrom: '2025-01-01',
-      grossAmount: 'viel',
+      amount: 'viel',
       frequency: 'MONTHLY',
     });
-    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.map((e) => e.property)).toContain('amount');
+  });
+
+  it('rejects a negative amount', async () => {
+    const errors = await errorsFor(CreateCostEntryDto, {
+      validFrom: '2025-01-01',
+      amount: -5,
+      frequency: 'MONTHLY',
+    });
+    expect(errors.map((e) => e.property)).toContain('amount');
   });
 
   it('still requires validFrom and frequency', async () => {
-    const errors = await errorsFor(CreateCostEntryDto, { netAmount: 10 });
+    const errors = await errorsFor(CreateCostEntryDto, { amount: 10 });
     const fields = errors.map((e) => e.property);
     expect(fields).toContain('validFrom');
     expect(fields).toContain('frequency');
   });
+
+  it('does not accept the former gross/net fields any more', async () => {
+    const errors = await errorsFor(CreateCostEntryDto, {
+      validFrom: '2025-01-01',
+      grossAmount: 1200,
+      netAmount: 1000,
+      frequency: 'MONTHLY',
+    });
+    // The unknown properties are dropped by class-transformer; the missing
+    // `amount` is what the validation reports.
+    expect(errors.map((e) => e.property)).toContain('amount');
+  });
 });
 
-describe('UpdateCostEntryDto (BugFix-22)', () => {
-  it('accepts clearing the gross amount (net stays)', async () => {
-    const errors = await errorsFor(UpdateCostEntryDto, { grossAmount: null });
+describe('UpdateCostEntryDto (single amount field)', () => {
+  it('accepts a partial update without an amount', async () => {
+    const errors = await errorsFor(UpdateCostEntryDto, { note: 'Korrektur' });
     expect(errors).toHaveLength(0);
   });
 
-  it('accepts a partial update without amounts', async () => {
-    const errors = await errorsFor(UpdateCostEntryDto, { note: 'Korrektur' });
-    expect(errors).toHaveLength(0);
+  it('rejects a negative amount', async () => {
+    const errors = await errorsFor(UpdateCostEntryDto, { amount: -1 });
+    expect(errors.map((e) => e.property)).toContain('amount');
   });
 });

@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url';
  *  3. the documents list offers sorting and shows the origin as an icon,
  *  4. the Paperless deep link appears only once per document row (as the
  *     button target) and no longer as visible URL text,
- *  5. the cost increase accepts a gross OR a net amount (one of them is
- *     enough) and never displays a missing amount as 0.
+ *  5. a cost entry has exactly one amount and its edit form spans the whole
+ *     table (an input per column was unusably narrow).
  *
  * The repository has no browser/e2e harness, so these string-level guards are
  * the automated part of the verification; the visual result was reviewed by
@@ -62,22 +62,37 @@ describe('covered persons: relation is optional (BugFix-22, AP-24 §5.2)', () =>
   });
 });
 
-describe('cost increase: gross or net is enough (BugFix-22)', () => {
+describe('cost entries: one amount and a usable edit form', () => {
   const source = read('../app/policies/[id]/costs-overview-card.tsx');
 
-  it('validates through the tested helper instead of a required gross field', () => {
-    expect(source).toContain('parseCostAmounts(');
+  it('validates the amount through the tested helper and marks it required', () => {
+    expect(source).toContain('parseCostAmount(');
     expect(source).toContain("t('costs.amountHint')");
-    // Both amount fields are marked as optional now (label is on its own
-    // line because the field also carries a `hint` for the AI prefill).
-    expect(source).toContain("label={`${t('costs.grossAmount')} (${t('common.optional')})`}");
-    expect(source).toContain("label={`${t('costs.netAmount')} (${t('common.optional')})`}");
+    // The amount is mandatory – the former gross/net pair is gone.
+    expect(source).toContain("label={t('costs.amount')}\n            required");
+    expect(source).not.toContain('grossAmount');
+    expect(source).not.toContain('netAmount');
+    expect(source).not.toContain('basisGross');
   });
 
-  it('renders a missing gross amount as "-" and can clear it while editing', () => {
-    // BugFix-22: net-only entries must not be displayed as 0.
-    expect(source).toContain('e.grossAmount != null ?');
-    expect(source).toContain('entry.grossAmount != null ?');
+  it('renders the edit form full width instead of one input per column', () => {
+    // Regression guard: with one input per table column the fields were only
+    // a few dozen pixels wide and could not be used. The edit row now spans
+    // the whole table and lays its fields out in a grid.
+    expect(source).toContain('<td colSpan={6}>');
+    expect(source.split('className="cost-entry-edit"').length - 1).toBe(1);
+    expect(source.split('className="cost-entry-edit-actions"').length - 1).toBe(1);
+    // The grid itself lives in the stylesheet, not in the component.
+    expect(read('../styles/globals.css')).toContain('.cost-entry-edit {');
+    // The former per-column edit inputs are gone: the edit row holds exactly
+    // one input of each kind, the read-only rows hold none.
+    expect(source.split('value={editForm.amount}').length - 1).toBe(1);
+    expect(source.split('value={editForm.note}').length - 1).toBe(1);
+  });
+
+  it('keeps the period table to a single amount column', () => {
+    expect(source).not.toContain('amountGross');
+    expect(source).not.toContain('amountNet');
   });
 });
 

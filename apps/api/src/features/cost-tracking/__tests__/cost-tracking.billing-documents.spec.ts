@@ -69,7 +69,7 @@ describe('CostTrackingService (AP-24 §4)', () => {
       { id: 'doc2', fileName: 'vertrag.pdf', documentClass: 'CONTRACT' },
     ]);
     mockDb.policyCostEntry.findMany.mockResolvedValue([
-      { id: 'entry1', sourceDocumentId: 'doc1', validFrom: new Date('2026-01-01'), grossAmount: 120, netAmount: null, frequency: 'ANNUAL' },
+      { id: 'entry1', sourceDocumentId: 'doc1', validFrom: new Date('2026-01-01'), amount: 120, frequency: 'ANNUAL' },
     ]);
 
     const result = await service.listBillingDocuments(householdId, user, policyId);
@@ -81,7 +81,7 @@ describe('CostTrackingService (AP-24 §4)', () => {
       }),
     );
     expect(result.documents[0].usedByCostEntries).toEqual([
-      { id: 'entry1', validFrom: new Date('2026-01-01'), grossAmount: 120, netAmount: null, frequency: 'ANNUAL' },
+      { id: 'entry1', validFrom: new Date('2026-01-01'), amount: 120, frequency: 'ANNUAL' },
     ]);
     expect(result.documents[1].usedByCostEntries).toEqual([]);
   });
@@ -105,7 +105,7 @@ describe('CostTrackingService (AP-24 §4)', () => {
 
     await service.create(householdId, userId, policyId, {
       validFrom: '2026-01-01',
-      grossAmount: 100,
+      amount: 100,
       frequency: 'ANNUAL',
       sourceDocumentId: 'doc1',
     } as never);
@@ -127,7 +127,7 @@ describe('CostTrackingService (AP-24 §4)', () => {
     await expect(
       service.create(householdId, userId, policyId, {
         validFrom: '2026-01-01',
-        grossAmount: 10,
+        amount: 10,
         frequency: 'MONTHLY',
         sourceDocumentId: 'docX',
       } as never),
@@ -148,7 +148,7 @@ describe('CostTrackingService (AP-24 §4)', () => {
     await expect(
       service.create(householdId, userId, policyId, {
         validFrom: '2026-01-01',
-        grossAmount: 10,
+        amount: 10,
         frequency: 'MONTHLY',
         sourceDocumentId: 'doc1',
       } as never),

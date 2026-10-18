@@ -23,22 +23,14 @@ export class CreateCostEntryDto {
   validTo?: string;
 
   /**
-   * BugFix-22: gross and net are both optional – at least one of them must be
-   * provided. The rule is enforced in the service (single source of truth,
-   * because it also has to hold for partial updates, where the "at least one"
-   * check needs the existing row).
+   * The amount the policyholder pays. Required – a cost entry without an
+   * amount would contribute nothing to any sum. The rule is enforced in the
+   * service as well, because a partial update must not be able to clear it.
    */
-  @IsOptional()
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  grossAmount?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Type(() => Number)
-  netAmount?: number;
+  amount!: number;
 
   @IsIn(COST_FREQUENCIES, { message: 'frequency must be MONTHLY, QUARTERLY or ANNUAL' })
   frequency!: PaymentFrequency;
@@ -71,17 +63,15 @@ export class UpdateCostEntryDto {
   @IsDateString()
   validTo?: string;
 
+  /**
+   * Optional so that a partial update can leave the amount untouched; it can
+   * never be cleared (the service rejects a null amount).
+   */
   @IsOptional()
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  grossAmount?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Type(() => Number)
-  netAmount?: number;
+  amount?: number;
 
   @IsOptional()
   @IsIn(COST_FREQUENCIES, { message: 'frequency must be MONTHLY, QUARTERLY or ANNUAL' })

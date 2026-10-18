@@ -28,7 +28,7 @@ export { fetchLanguagePreference, saveLanguagePreference } from './language-clie
 export type { LanguagePreference, LanguagePersistence } from './language-client';
 export { localizeAuthError, oidcCallbackErrorKey } from './auth-errors';
 export {
-  formatBasisAmount,
+  formatAmount,
   formatCurrency,
   formatDate,
   formatDateDmy,

@@ -82,11 +82,13 @@
 - policyId
 - validFrom
 - validTo
-- grossAmount (nullable; BugFix-22 – mindestens einer der beiden Beträge muss
-  gesetzt sein. Berechnungsbasis aller Kostenkennzahlen ist `grossAmount`,
-  ersatzweise `netAmount` („effektiver Betrag"), siehe
-  `apps/api/src/features/cost-tracking/cost-tracking.service.ts`)
-- netAmount (nullable)
+- amount (Pflicht; ein Betrag pro Kostenposition – der Betrag, der tatsächlich
+  gezahlt wird. Das frühere Brutto/Netto-Paar wurde entfernt, weil es als
+  Endverbraucher nur verwirrt; Bestandsdaten wurden mit dem Bruttowert als
+  Gewinner migriert, siehe
+  `prisma/migrations/20261018160000_single_amount_field/migration.sql`.
+  Berechnungsbasis aller Kostenkennzahlen, siehe
+  `apps/api/src/features/cost-tracking/cost-schedule.ts`)
 - frequency
 - bookingSource
 - note

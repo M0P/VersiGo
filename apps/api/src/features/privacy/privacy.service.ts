@@ -58,9 +58,8 @@ export interface PrivacyExport {
     costEntries: {
       validFrom: string;
       validTo: string | null;
-      // BugFix-22: at least one of gross/net is set; the missing one is null.
-      grossAmount: string | null;
-      netAmount: string | null;
+      // A cost entry records exactly one amount.
+      amount: string;
       frequency: string;
       bookingSource: string | null;
       note: string | null;
@@ -236,9 +235,7 @@ export class PrivacyService {
         costEntries: policy.costEntries.map((ce) => ({
           validFrom: ce.validFrom.toISOString(),
           validTo: ce.validTo?.toISOString() ?? null,
-          // BugFix-22: a net-only entry has no gross amount.
-          grossAmount: ce.grossAmount?.toString() ?? null,
-          netAmount: ce.netAmount?.toString() ?? null,
+          amount: ce.amount.toString(),
           frequency: ce.frequency,
           bookingSource: ce.bookingSource,
           note: ce.note,

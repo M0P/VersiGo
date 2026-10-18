@@ -383,10 +383,11 @@ model PolicyCostEntry {
   policyId      String
   validFrom     DateTime
   validTo       DateTime?
-  // BugFix-22: at least one of gross/net is required; the amount basis of all
-  // calculations is "gross if set, otherwise net".
-  grossAmount   Decimal?
-  netAmount     Decimal?
+  // A cost entry records exactly ONE amount: the amount the policyholder
+  // actually pays. The former gross/net pair was removed because it only
+  // made the form harder to use (existing rows were migrated with the gross
+  // value winning over the net one).
+  amount        Decimal
   frequency     PaymentFrequency
   bookingSource String?
   note          String?

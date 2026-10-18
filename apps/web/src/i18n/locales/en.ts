@@ -454,8 +454,7 @@ export const en = {
     policyCount: 'Number of policies',
     noData: 'No data.',
     type: 'Type',
-    annualGross: 'Annual costs (gross)',
-    annualNet: 'Annual costs (net)',
+    annual: 'Annual costs',
     paidToDate: 'Paid to date',
     perMonth: 'Per month',
     perYear: 'Per year',
@@ -469,15 +468,7 @@ export const en = {
     noEntries: 'No entries.',
     validFrom: 'Valid from',
     validTo: 'Valid to',
-    gross: 'Gross',
-    net: 'Net',
-    // BugFix-22: every sum and column names its basis (gross/net); missing
-    // bases render as a dash placeholder.
-    basisGross: 'gross',
-    basisNet: 'net',
     note: 'Note',
-    grossAmount: 'Gross amount',
-    netAmount: 'Net amount',
     save: 'Save',
     saving: 'Saving...',
     addEntry: 'Add entry',
@@ -495,9 +486,8 @@ export const en = {
     increaseTitle: 'Increase costs from a date',
     increaseHint:
       'Adding a new entry automatically ends the previous entry. At any point in time exactly one cost entry applies.',
-    // BugFix-22: gross and net are both optional – one of them is enough.
-    amountHint: 'Enter the gross or the net amount – one of them is enough.',
-    amountRequired: 'Enter the gross or the net amount.',
+    amountHint: 'Enter the amount you actually pay.',
+    amountRequired: 'Enter the amount.',
     amountInvalid: 'Enter a valid amount.',
     amountNegative: 'The amount must not be negative.',
     // BugFix-08 (Q4): Period-based schedule (incurred/expected).
@@ -508,8 +498,6 @@ export const en = {
     periodStart: 'Period start',
     periodEnd: 'Period end',
     amount: 'Amount',
-    amountGross: 'Amount (gross)',
-    amountNet: 'Amount (net)',
     status: 'Status',
     periodStatus: {
       incurred: 'Incurred',

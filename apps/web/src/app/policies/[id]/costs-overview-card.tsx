@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 import { InlineSpinner } from '@/components/ui/loading';
 import { Alert } from '@/components/ui/alert';
 import { Input, Select, FormField } from '@/components/ui/form-field';
-import { useI18n, formatBasisAmount, formatCurrency, formatDateDmy } from '@/i18n';
+import { useI18n, formatAmount, formatCurrency, formatDateDmy } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
-import { parseCostAmounts } from '@/lib/cost-amounts';
+import { parseCostAmount } from '@/lib/cost-amounts';
 import type {
   CostEntryPrefill,
   CostPrefillNotice,
@@ -23,13 +23,8 @@ const API_BASE = getApiBaseUrl();
 const NEW_FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'ANNUAL'];
 const ALL_FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL'];
 
-// BugFix-22: every amount is computed and displayed PER BASIS (gross/net).
-// A missing basis stays null and renders as a dash – it is never replaced
-// by the other basis.
-type BasisAmounts = {
-  gross: number | null;
-  net: number | null;
-};
+// A cost amount; `null` is not recorded and renders as a dash.
+type Amount = number | null;
 
 // BugFix-08 (Q4): period table (incurred/expected) from GET .../costs/schedule.
 type SchedulePeriod = {
@@ -37,7 +32,7 @@ type SchedulePeriod = {
   periodLabel: string;
   periodStart: string;
   periodEnd: string;
-  amount: BasisAmounts;
+  amount: Amount;
   status: 'incurred' | 'expected';
   entryId: string | null;
 };
@@ -47,18 +42,18 @@ type Schedule = {
   asOf: string;
   anchor: string | null;
   frequency: string;
-  paidToDate: BasisAmounts;
+  paidToDate: Amount;
   current: {
     entryId: string;
     frequency: string;
     validFrom: string;
     validTo: string | null;
-    amount: BasisAmounts;
-    annual: BasisAmounts;
-    perFrequency: { MONTHLY: BasisAmounts; QUARTERLY: BasisAmounts; ANNUAL: BasisAmounts };
+    amount: Amount;
+    annual: Amount;
+    perFrequency: { MONTHLY: Amount; QUARTERLY: Amount; ANNUAL: Amount };
   } | null;
   periods: SchedulePeriod[];
-  perYear: { year: number; amount: BasisAmounts }[];
+  perYear: { year: number; amount: Amount }[];
   entryCount: number;
 };
 
@@ -67,9 +62,8 @@ type CostEntry = {
   policyId: string;
   validFrom: string;
   validTo: string | null;
-  /** BugFix-22: gross is optional – a net-only entry is valid. */
-  grossAmount: number | null;
-  netAmount: number | null;
+  /** A cost entry records exactly one amount. */
+  amount: number;
   frequency: string;
   bookingSource: string | null;
   note: string | null;
@@ -81,16 +75,14 @@ type CostEntry = {
 type EditForm = {
   validFrom: string;
   validTo: string;
-  grossAmount: string;
-  netAmount: string;
+  amount: string;
   frequency: string;
   note: string;
 };
 
 type CreateForm = {
   validFrom: string;
-  grossAmount: string;
-  netAmount: string;
+  amount: string;
   frequency: string;
   bookingSource: string;
   note: string;
@@ -98,8 +90,7 @@ type CreateForm = {
 
 const EMPTY_CREATE_FORM: CreateForm = {
   validFrom: '',
-  grossAmount: '',
-  netAmount: '',
+  amount: '',
   frequency: 'MONTHLY',
   bookingSource: '',
   note: '',
@@ -109,16 +100,15 @@ function toEditForm(entry: CostEntry): EditForm {
   return {
     validFrom: entry.validFrom.slice(0, 10),
     validTo: entry.validTo ? entry.validTo.slice(0, 10) : '',
-    grossAmount: entry.grossAmount != null ? String(Number(entry.grossAmount)) : '',
-    netAmount: entry.netAmount != null ? String(Number(entry.netAmount)) : '',
+    amount: String(Number(entry.amount)),
     frequency: entry.frequency,
     note: entry.note ?? '',
   };
 }
 
 /**
- * BugFix-22: message key of a rejected amount input. The rule itself lives in
- * `parseCostAmounts` (and in the API service) – here it is only translated.
+ * Message key of a rejected amount input. The rule itself lives in
+ * `parseCostAmount` (and in the API service) – here it is only translated.
  */
 function amountErrorKey(reason: 'missing' | 'invalid' | 'negative'): string {
   if (reason === 'missing') return 'costs.amountRequired';
@@ -164,10 +154,9 @@ export default function CostsOverviewCard({
   // exact timestamps (e.g. validTo 23:59:59.999) are preserved.
   const [editingOriginal, setEditingOriginal] = useState<CostEntry | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
-    validFrom: '', validTo: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '',
+    validFrom: '', validTo: '', amount: '', frequency: 'MONTHLY', note: '',
   });
   const [newEntry, setNewEntry] = useState<CreateForm>(EMPTY_CREATE_FORM);
-  // BugFix-22: "gross OR net is enough" – the field error of the amount inputs.
   const [newAmountError, setNewAmountError] = useState<string | null>(null);
   const [editAmountError, setEditAmountError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -238,8 +227,7 @@ export default function CostsOverviewCard({
     setNewEntry((current) => ({
       ...current,
       validFrom: prefill.validFrom || current.validFrom,
-      grossAmount: prefill.grossAmount,
-      netAmount: prefill.netAmount,
+      amount: prefill.amount,
       frequency: prefill.frequency ?? current.frequency,
       bookingSource: prefill.bookingSource,
       note: prefill.note,
@@ -255,12 +243,11 @@ export default function CostsOverviewCard({
 
   function handleCreate(e: FormEvent) {
     e.preventDefault();
-    // BugFix-22: the gross amount is no longer mandatory – one of gross/net
-    // is enough. The rule is validated before the request so the user gets
-    // the message at the field instead of a generic server error.
-    const amounts = parseCostAmounts(newEntry.grossAmount, newEntry.netAmount);
-    if (!amounts.ok) {
-      setNewAmountError(t(amountErrorKey(amounts.reason)));
+    // The amount is validated before the request so the user gets the
+    // message at the field instead of a generic server error.
+    const parsed = parseCostAmount(newEntry.amount);
+    if (!parsed.ok) {
+      setNewAmountError(t(amountErrorKey(parsed.reason)));
       return;
     }
     setNewAmountError(null);
@@ -269,10 +256,9 @@ export default function CostsOverviewCard({
     setActionError(null);
     const body: Record<string, unknown> = {
       validFrom: newEntry.validFrom,
+      amount: parsed.amount,
       frequency: newEntry.frequency,
     };
-    if (amounts.grossAmount !== undefined) body.grossAmount = amounts.grossAmount;
-    if (amounts.netAmount !== undefined) body.netAmount = amounts.netAmount;
     if (newEntry.note) body.note = newEntry.note;
     if (newEntry.bookingSource) body.bookingSource = newEntry.bookingSource;
     // AP-24 (§4.2): the reference to the billing document the values came
@@ -334,11 +320,9 @@ export default function CostsOverviewCard({
 
   function handleUpdate() {
     if (!editingId || !editingOriginal) return;
-    // BugFix-22: the same rule as on create – at least one of gross/net must
-    // remain, and both may be empty as long as the other one is filled in.
-    const amounts = parseCostAmounts(editForm.grossAmount, editForm.netAmount);
-    if (!amounts.ok) {
-      setEditAmountError(t(amountErrorKey(amounts.reason)));
+    const parsed = parseCostAmount(editForm.amount);
+    if (!parsed.ok) {
+      setEditAmountError(t(amountErrorKey(parsed.reason)));
       return;
     }
     setEditAmountError(null);
@@ -346,19 +330,13 @@ export default function CostsOverviewCard({
     setSubmitting(true);
     setActionError(null);
     // Only send fields that actually changed (BugFix-08 review 1):
-    //  - validTo / grossAmount / netAmount / note can thereby be cleared again
-    //    (null),
+    //  - validTo / note can thereby be cleared again (null),
     //  - unchanged timestamps stay exactly preserved (no midnight shift).
     const body: Record<string, unknown> = {};
     if (editForm.validFrom !== editingOriginal.validFrom.slice(0, 10)) body.validFrom = editForm.validFrom;
     const originalValidTo = editingOriginal.validTo ? editingOriginal.validTo.slice(0, 10) : '';
     if (editForm.validTo !== originalValidTo) body.validTo = editForm.validTo === '' ? null : editForm.validTo;
-    const originalGrossAmount = editingOriginal.grossAmount != null ? String(Number(editingOriginal.grossAmount)) : '';
-    if (editForm.grossAmount !== originalGrossAmount) {
-      body.grossAmount = amounts.grossAmount === undefined ? null : amounts.grossAmount;
-    }
-    const originalNetAmount = editingOriginal.netAmount != null ? String(Number(editingOriginal.netAmount)) : '';
-    if (editForm.netAmount !== originalNetAmount) body.netAmount = amounts.netAmount === undefined ? null : amounts.netAmount;
+    if (parsed.amount !== Number(editingOriginal.amount)) body.amount = parsed.amount;
     if (editForm.note !== (editingOriginal.note ?? '')) body.note = editForm.note === '' ? null : editForm.note;
     // BugFix-08: only send the frequency when it changed – thus
     // legacy entries (SEMI_ANNUAL) stay editable without a frequency
@@ -449,12 +427,8 @@ export default function CostsOverviewCard({
             <h2>{t('costs.paidToDate')}</h2>
             <span className="text-xs text-muted">{t('costs.asOf', { date: formatDateDmy(schedule.asOf) })}</span>
           </div>
-          {/* BugFix-22: every sum names its basis (brutto/netto); a missing
-              basis is shown as a dash, never borrowed from the other basis. */}
           <p style={{ fontSize: 'var(--versigo-font-size-3xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
-            {t('costs.basisGross')}: {formatBasisAmount(schedule.paidToDate.gross, language)}
-            {' · '}
-            {t('costs.basisNet')}: {formatBasisAmount(schedule.paidToDate.net, language)}
+            {formatAmount(schedule.paidToDate, language)}
           </p>
 
           {current && (
@@ -462,19 +436,15 @@ export default function CostsOverviewCard({
               <dt>{t('costs.currentEntry')}</dt>
               <dd>
                 {t(`costs.frequencies.${current.frequency}`) ?? current.frequency}:{' '}
-                {t('costs.basisGross')}: {formatBasisAmount(current.amount.gross, language)}
-                {' / '}
-                {t('costs.basisNet')}: {formatBasisAmount(current.amount.net, language)}
+                {formatAmount(current.amount, language)}
                 {' '}
                 <span className="text-xs text-muted">
                   ({t('costs.since', { date: formatDateDmy(current.validFrom) })}
                   {current.validTo ? `, ${t('costs.until', { date: formatDateDmy(current.validTo) })}` : ''})
                 </span>
               </dd>
-              <dt>{t('costs.annualGross')}</dt>
-              <dd>{formatBasisAmount(current.annual.gross, language)}</dd>
-              <dt>{t('costs.annualNet')}</dt>
-              <dd>{formatBasisAmount(current.annual.net, language)}</dd>
+              <dt>{t('costs.annual')}</dt>
+              <dd>{formatAmount(current.annual, language)}</dd>
             </dl>
           )}
         </Card>
@@ -495,9 +465,7 @@ export default function CostsOverviewCard({
                     <th>{t('costs.period')}</th>
                     <th>{t('costs.periodStart')}</th>
                     <th>{t('costs.periodEnd')}</th>
-                    {/* BugFix-22: one column per basis – no combined value. */}
-                    <th>{t('costs.amountGross')}</th>
-                    <th>{t('costs.amountNet')}</th>
+                    <th>{t('costs.amount')}</th>
                     <th>{t('costs.status')}</th>
                   </tr>
                 </thead>
@@ -507,8 +475,7 @@ export default function CostsOverviewCard({
                       <td data-label={t('costs.period')}>{period.periodLabel}</td>
                       <td data-label={t('costs.periodStart')}>{formatDateDmy(period.periodStart)}</td>
                       <td data-label={t('costs.periodEnd')}>{formatDateDmy(period.periodEnd)}</td>
-                      <td data-label={t('costs.amountGross')}>{formatBasisAmount(period.amount.gross, language)}</td>
-                      <td data-label={t('costs.amountNet')}>{formatBasisAmount(period.amount.net, language)}</td>
+                      <td data-label={t('costs.amount')}>{formatAmount(period.amount, language)}</td>
                       <td data-label={t('costs.status')}>
                         <span className={`badge ${period.status === 'incurred' ? 'badge-success' : 'badge-neutral'}`}>
                           {t(`costs.periodStatus.${period.status}`)}
@@ -534,8 +501,7 @@ export default function CostsOverviewCard({
                 <tr>
                   <th>{t('costs.validFrom')}</th>
                   <th>{t('costs.validTo')}</th>
-                  <th>{t('costs.gross')}</th>
-                  <th>{t('costs.net')}</th>
+                  <th>{t('costs.amount')}</th>
                   <th>{t('costs.frequency')}</th>
                   <th>{t('costs.note')}</th>
                   <th></th>
@@ -544,49 +510,50 @@ export default function CostsOverviewCard({
               <tbody>
                 {entries.map((e) =>
                   editingId === e.id ? (
+                    /* The edit row spans the whole table: one input per
+                       column left every field too narrow to be usable. The
+                       fields are laid out in a grid instead (.cost-entry-edit
+                       in globals.css). */
                     <tr key={e.id}>
-                      <td data-label={t('costs.validFrom')}>
-                        <Input type="date" value={editForm.validFrom} onChange={(ev) => setEditForm({ ...editForm, validFrom: ev.target.value })} />
-                      </td>
-                      <td data-label={t('costs.validTo')}>
-                        <Input type="date" value={editForm.validTo} onChange={(ev) => setEditForm({ ...editForm, validTo: ev.target.value })} />
-                      </td>
-                      <td data-label={t('costs.gross')}>
-                        {/* BugFix-22: gross is optional – an empty gross
-                            amount is allowed while net is filled in (the
-                            "at least one" rule is checked on save). */}
-                        <Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={(ev) => { setEditAmountError(null); setEditForm({ ...editForm, grossAmount: ev.target.value }); }} />
-                      </td>
-                      <td data-label={t('costs.net')}>
-                        <Input type="number" step="0.01" min="0" value={editForm.netAmount} onChange={(ev) => { setEditAmountError(null); setEditForm({ ...editForm, netAmount: ev.target.value }); }} />
-                      </td>
-                      <td data-label={t('costs.frequency')}>
-                        <Select value={editForm.frequency} onChange={(ev) => setEditForm({ ...editForm, frequency: ev.target.value })}>
-                          {/* Offer SEMI_ANNUAL only for legacy entries:
-                              the DTO rejects SEMI_ANNUAL for new values. */}
-                          {(editingOriginal?.frequency === 'SEMI_ANNUAL' ? ALL_FREQUENCIES : NEW_FREQUENCIES).map((frequency) => (
-                            <option key={frequency} value={frequency}>{t(`costs.frequencies.${frequency}`)}</option>
-                          ))}
-                        </Select>
-                      </td>
-                      <td data-label={t('costs.note')}>
-                        <Input type="text" value={editForm.note} onChange={(ev) => setEditForm({ ...editForm, note: ev.target.value })} />
-                      </td>
-                      <td>
-                        <Button size="sm" onClick={handleUpdate} disabled={submitting}>
-                          {submitting ? t('costs.saving') : t('costs.save')}
-                        </Button>
-                        <Button size="sm" variant="secondary" onClick={cancelEdit}>
-                          {t('costs.cancel')}
-                        </Button>
+                      <td colSpan={6}>
+                        <div className="cost-entry-edit">
+                          <FormField label={t('costs.validFrom')}>
+                            <Input type="date" value={editForm.validFrom} onChange={(ev) => setEditForm({ ...editForm, validFrom: ev.target.value })} />
+                          </FormField>
+                          <FormField label={t('costs.validTo')}>
+                            <Input type="date" value={editForm.validTo} onChange={(ev) => setEditForm({ ...editForm, validTo: ev.target.value })} />
+                          </FormField>
+                          <FormField label={t('costs.amount')}>
+                            <Input type="number" step="0.01" min="0" value={editForm.amount} onChange={(ev) => { setEditAmountError(null); setEditForm({ ...editForm, amount: ev.target.value }); }} />
+                          </FormField>
+                          <FormField label={t('costs.frequency')}>
+                            <Select value={editForm.frequency} onChange={(ev) => setEditForm({ ...editForm, frequency: ev.target.value })}>
+                              {/* Offer SEMI_ANNUAL only for legacy entries:
+                                  the DTO rejects SEMI_ANNUAL for new values. */}
+                              {(editingOriginal?.frequency === 'SEMI_ANNUAL' ? ALL_FREQUENCIES : NEW_FREQUENCIES).map((frequency) => (
+                                <option key={frequency} value={frequency}>{t(`costs.frequencies.${frequency}`)}</option>
+                              ))}
+                            </Select>
+                          </FormField>
+                          <FormField label={t('costs.note')}>
+                            <Input type="text" value={editForm.note} onChange={(ev) => setEditForm({ ...editForm, note: ev.target.value })} />
+                          </FormField>
+                        </div>
+                        <div className="cost-entry-edit-actions" style={{ marginTop: 'var(--versigo-space-3)' }}>
+                          <Button size="sm" onClick={handleUpdate} disabled={submitting}>
+                            {submitting ? t('costs.saving') : t('costs.save')}
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={cancelEdit}>
+                            {t('costs.cancel')}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ) : (
                     <tr key={e.id}>
                       <td data-label={t('costs.validFrom')}>{formatDateDmy(e.validFrom)}</td>
                       <td data-label={t('costs.validTo')}>{e.validTo ? formatDateDmy(e.validTo) : '—'}</td>
-                      <td data-label={t('costs.gross')}>{e.grossAmount != null ? formatCurrency(Number(e.grossAmount), language) : '—'}</td>
-                      <td data-label={t('costs.net')}>{e.netAmount != null ? formatCurrency(Number(e.netAmount), language) : '—'}</td>
+                      <td data-label={t('costs.amount')}>{formatCurrency(Number(e.amount), language)}</td>
                       <td data-label={t('costs.frequency')}>{t(`costs.frequencies.${e.frequency}`) ?? e.frequency}</td>
                       <td data-label={t('costs.note')}>
                         {/* AP-24 (§4.2): the entry names its source document. */}
@@ -614,8 +581,6 @@ export default function CostsOverviewCard({
             </table>
           </div>
         )}
-        {/* BugFix-22: message of the "at least one of gross/net" rule while
-            editing an entry. */}
         {editAmountError && (
           <div style={{ marginTop: 'var(--versigo-space-3)' }}>
             <Alert variant="danger">{editAmountError}</Alert>
@@ -628,7 +593,6 @@ export default function CostsOverviewCard({
       <Card>
         <h2>{t('costs.increaseTitle')}</h2>
         <p className="form-hint">{t('costs.increaseHint')}</p>
-        {/* BugFix-22: gross and net are both optional – one of them is enough. */}
         <p className="form-hint">{t('costs.amountHint')}</p>
         {/* AP-24 (§4.2): the values below come from an AI proposal, not from
             an automatic save. The user reviews and confirms them. */}
@@ -665,24 +629,17 @@ export default function CostsOverviewCard({
             />
           </FormField>
           <FormField
-            label={`${t('costs.grossAmount')} (${t('common.optional')})`}
+            label={t('costs.amount')}
+            required
             hint={prefillUnclearFields.includes('amount') ? t('costs.fieldUnclear') : undefined}
           >
             <Input
               type="number"
               step="0.01"
               min="0"
-              value={newEntry.grossAmount}
-              onChange={(e) => { setNewAmountError(null); setNewEntry({ ...newEntry, grossAmount: e.target.value }); }}
-            />
-          </FormField>
-          <FormField label={`${t('costs.netAmount')} (${t('common.optional')})`}>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={newEntry.netAmount}
-              onChange={(e) => { setNewAmountError(null); setNewEntry({ ...newEntry, netAmount: e.target.value }); }}
+              value={newEntry.amount}
+              onChange={(e) => { setNewAmountError(null); setNewEntry({ ...newEntry, amount: e.target.value }); }}
+              required
             />
           </FormField>
           <FormField

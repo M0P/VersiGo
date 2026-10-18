@@ -1058,6 +1058,26 @@
     gap: var(--versigo-space-6);
   }
 
+  /* --- Inline edit form of a cost entry ---
+   *
+   * Editing used to put one input into every table column, which left each
+   * field only a few dozen pixels wide – unusable once the entry table
+   * carried the source-document column. The edit row therefore spans the
+   * whole table and lays its fields out in a grid that adapts to the
+   * available width instead of to the column count. */
+  .cost-entry-edit {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: var(--versigo-space-3);
+    align-items: end;
+  }
+
+  .cost-entry-edit-actions {
+    display: flex;
+    gap: var(--versigo-space-2);
+    flex-wrap: wrap;
+  }
+
   /* --- AP-24 (§4.1): Kostenansicht mit Seitenleiste der Abrechnungsdokumente ---
    *
    * Mobile first: one column, the sidebar is collapsible and expanded it

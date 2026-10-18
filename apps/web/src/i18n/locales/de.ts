@@ -449,8 +449,7 @@ export const de = {
     policyCount: 'Anzahl Versicherungen',
     noData: 'Keine Daten.',
     type: 'Typ',
-    annualGross: 'Jahreskosten (brutto)',
-    annualNet: 'Jahreskosten (netto)',
+    annual: 'Jahreskosten',
     paidToDate: 'Bisher gezahlt',
     perMonth: 'Pro Monat',
     perYear: 'Pro Jahr',
@@ -464,15 +463,7 @@ export const de = {
     noEntries: 'Keine Einträge.',
     validFrom: 'Gültig von',
     validTo: 'Gültig bis',
-    gross: 'Brutto',
-    net: 'Netto',
-    // BugFix-22: Jede Summe und jede Spalte nennt ihre Basis (brutto/netto);
-    // fehlende Basis wird als Gedankenstrich angezeigt.
-    basisGross: 'brutto',
-    basisNet: 'netto',
     note: 'Notiz',
-    grossAmount: 'Bruttobetrag',
-    netAmount: 'Nettobetrag',
     save: 'Speichern',
     saving: 'Speichern...',
     addEntry: 'Eintrag hinzufügen',
@@ -490,10 +481,8 @@ export const de = {
     increaseTitle: 'Kosten-Erhöhung ab einem Datum',
     increaseHint:
       'Ein neuer Eintrag beendet den bisherigen automatisch. Zu jedem Zeitpunkt gilt genau eine Kostenposition.',
-    // BugFix-22: Brutto ODER Netto genügt – eines von beiden muss angegeben werden.
-    amountHint:
-      'Geben Sie den Brutto- oder den Nettobetrag an – einer von beiden genügt.',
-    amountRequired: 'Bitte den Brutto- oder den Nettobetrag angeben.',
+    amountHint: 'Geben Sie den Betrag an, den Sie tatsächlich zahlen.',
+    amountRequired: 'Bitte den Betrag angeben.',
     amountInvalid: 'Bitte einen gültigen Betrag angeben.',
     amountNegative: 'Der Betrag darf nicht negativ sein.',
     // BugFix-08 (Q4): Perioden-Tabelle (incurred/expected).
@@ -504,8 +493,6 @@ export const de = {
     periodStart: 'Beginn',
     periodEnd: 'Ende',
     amount: 'Betrag',
-    amountGross: 'Betrag (brutto)',
-    amountNet: 'Betrag (netto)',
     status: 'Status',
     periodStatus: {
       incurred: 'Angefallen',

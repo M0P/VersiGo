@@ -1,13 +1,18 @@
 import { PaymentFrequency } from '@prisma/client';
 
 /**
- * BugFix-22: central, pure domain function for the cost calculation.
+ * Cost calculation domain functions.
  *
  * Frontend and backend use the SAME logic: the web app renders only the
- * per-basis amounts computed here and never calculates its own variant.
- * All functions are pure (no DB, no clock) so every rule is unit-testable.
+ * amounts computed here and never calculates its own variant. All functions
+ * are pure (no DB, no clock) so every rule is unit-testable.
  *
- * Rules (BugFix-08 semantics kept, BugFix-22 corrections):
+ * Single amount field: a cost entry records exactly ONE amount. The former
+ * gross/net pair (BugFix-22) was removed because an end consumer books the
+ * amount they actually pay; existing rows were migrated with the gross value
+ * winning over the net one.
+ *
+ * Rules (BugFix-08 semantics kept, BugFix-22 corrections kept):
  * - Period anchor: the EARLIEST of the policy start date and the first
  *   cost entry's validFrom. Cost positions that begin before the policy
  *   start (e.g. imported history) are no longer dropped.
@@ -15,10 +20,8 @@ import { PaymentFrequency } from '@prisma/client';
  *   periods (period start <= asOf), due at period start. NO day shares.
  * - Status: a period is 'incurred' as soon as it has started
  *   (periodStart <= asOf), otherwise 'expected'.
- * - Gross and net are computed STRICTLY SEPARATE per basis. There is no
- *   gross -> net fallback: an entry without a net amount contributes
- *   nothing to net sums and vice versa. Missing bases render as null
- *   (UI shows a dash placeholder).
+ * - A period without a covered cost entry is `null` and rendered as a dash
+ *   placeholder – it is NEVER displayed as 0.
  * - Monetary sums are formed in integer cents; results are rounded to
  *   2 decimals.
  */
@@ -75,22 +78,17 @@ export function fromCents(cents: number): number {
 export type CostEntryLike = {
   id?: string;
   createdAt?: Date | string | null;
-  grossAmount: unknown;
-  netAmount?: unknown;
+  amount: unknown;
   frequency: PaymentFrequency;
   validFrom: Date;
   validTo: Date | null;
 };
 
 /**
- * BugFix-22: an amount per basis. `null` means "this basis is not recorded
- * here" - it is NEVER replaced by the other basis. The UI renders null as
- * a dash placeholder; sums only aggregate recorded values of their basis.
+ * An amount of a cost entry. `null` means "nothing is recorded here" – it is
+ * rendered as a dash placeholder and is never replaced by 0.
  */
-export type BasisAmounts = {
-  gross: number | null;
-  net: number | null;
-};
+export type Amount = number | null;
 
 /** Billing data of a policy (anchor + billing frequency). */
 export type BillingPlan = {
@@ -105,91 +103,75 @@ export type BillingPeriod = {
   periodLabel: string;
   periodStart: string;
   periodEnd: string;
-  amount: BasisAmounts;
+  amount: Amount;
   status: 'incurred' | 'expected';
   entryId: string | null;
 };
 
-/** Current cost entry projected per period/per basis. */
+/** Current cost entry projected per period. */
 export type CurrentCosts = {
   entryId: string;
   frequency: PaymentFrequency;
   validFrom: string;
   validTo: string | null;
-  /** Amount per period of the entry's own frequency, per basis. */
-  amount: BasisAmounts;
-  /** Annual amount (entry amount * periods per year), per basis. */
-  annual: BasisAmounts;
-  /** Annual amount projected to MONTHLY / QUARTERLY / ANNUAL, per basis. */
-  perFrequency: Record<'MONTHLY' | 'QUARTERLY' | 'ANNUAL', BasisAmounts>;
+  /** Amount per period of the entry's own frequency. */
+  amount: Amount;
+  /** Annual amount (entry amount * periods per year). */
+  annual: Amount;
+  /** Annual amount projected to MONTHLY / QUARTERLY / ANNUAL. */
+  perFrequency: Record<'MONTHLY' | 'QUARTERLY' | 'ANNUAL', Amount>;
 };
 
 export type PolicySchedule = {
   anchor: string | null;
   frequency: PaymentFrequency;
-  paidToDate: BasisAmounts;
+  paidToDate: Amount;
   current: CurrentCosts | null;
   periods: BillingPeriod[];
   /** Historical costs per calendar year (started periods in full). */
-  perYear: { year: number; amount: BasisAmounts }[];
+  perYear: { year: number; amount: Amount }[];
 };
 
-/** Sums recorded values per basis; a basis stays null when nothing is recorded. */
-export function sumBasisAmounts(values: BasisAmounts[]): BasisAmounts {
-  let grossCents = 0;
-  let netCents = 0;
-  let grossRecorded = false;
-  let netRecorded = false;
+/**
+ * Sums recorded values in integer cents; `null` when nothing is recorded –
+ * an empty sum must never surface as 0.
+ */
+export function sumAmounts(values: Amount[]): Amount {
+  let cents = 0;
+  let recorded = false;
   for (const value of values) {
-    if (value.gross != null) {
-      grossCents += toCents(value.gross);
-      grossRecorded = true;
-    }
-    if (value.net != null) {
-      netCents += toCents(value.net);
-      netRecorded = true;
-    }
+    if (value == null) continue;
+    cents += toCents(value);
+    recorded = true;
   }
-  return {
-    gross: grossRecorded ? fromCents(grossCents) : null,
-    net: netRecorded ? fromCents(netCents) : null,
-  };
+  return recorded ? fromCents(cents) : null;
 }
 
-/** Basis amounts of a raw entry amount pair (no cross-basis fallback). */
-function rawBasisAmounts(entry: CostEntryLike): BasisAmounts {
-  return {
-    gross: entry.grossAmount != null ? Number(entry.grossAmount) : null,
-    net: entry.netAmount != null ? Number(entry.netAmount) : null,
-  };
+/** Amount of a raw cost entry; `null` when it carries no amount. */
+function rawAmount(entry: CostEntryLike): Amount {
+  return entry.amount != null ? Number(entry.amount) : null;
 }
 
 /**
- * Due amount of one basis of a cost entry in a billing period of the step
- * frequency. If the entry's own frequency differs from the step frequency
- * (e.g. policy MONTHLY, entry QUARTERLY), the amount is prorated to the
- * period so that the annual total stays consistent (300 QUARTERLY = 100/month).
- * A basis without a recorded amount stays null.
+ * Due amount of a cost entry in a billing period of the step frequency. If
+ * the entry's own frequency differs from the step frequency (e.g. policy
+ * MONTHLY, entry QUARTERLY), the amount is prorated to the period so that
+ * the annual total stays consistent (300 QUARTERLY = 100/month).
  */
-export function periodBasisAmounts(
-  entry: CostEntryLike,
-  stepFrequency: PaymentFrequency,
-): BasisAmounts {
+export function periodAmount(entry: CostEntryLike, stepFrequency: PaymentFrequency): Amount {
+  const amount = rawAmount(entry);
+  if (amount == null) return null;
   const stepMonths = FREQUENCY_MONTHS[stepFrequency];
   const entryMonths = FREQUENCY_MONTHS[entry.frequency];
   const factor = stepMonths === entryMonths ? 1 : stepMonths / entryMonths;
-  const raw = rawBasisAmounts(entry);
-  return {
-    gross: raw.gross != null ? roundMoney(raw.gross * factor) : null,
-    net: raw.net != null ? roundMoney(raw.net * factor) : null,
-  };
+  return roundMoney(amount * factor);
 }
 
 /**
- * BugFix-22: period anchor = the EARLIEST of the policy start date and the
- * first cost entry's validFrom. This guarantees that every cost position
- * contributes: entries that begin before the policy start are no longer
- * dropped. Returns null when neither a start date nor an entry exists.
+ * Period anchor = the EARLIEST of the policy start date and the first cost
+ * entry's validFrom. This guarantees that every cost position contributes:
+ * entries that begin before the policy start are no longer dropped.
+ * Returns null when neither a start date nor an entry exists.
  */
 export function resolveCostAnchor(
   policyStartDate: Date | null | undefined,
@@ -259,7 +241,7 @@ export function selectActiveOrLatestEntry<T extends CostEntryLike>(entries: T[],
 
 /**
  * Generates all billing periods from the anchor to `horizonEnd` (inclusive)
- * and derives the per-basis schedule (paid to date, current entry, history).
+ * and derives the schedule (paid to date, current entry, history).
  * A period is 'incurred' once it has started (periodStart <= asOf).
  * Empty cost entry list -> empty schedule (no periods without entries).
  */
@@ -274,7 +256,7 @@ export function computePolicySchedule(
       anchor: null,
       frequency:
         policy.paymentFrequency ?? entries[0]?.frequency ?? PaymentFrequency.MONTHLY,
-      paidToDate: { gross: null, net: null },
+      paidToDate: null,
       current: null,
       periods: [],
       perYear: [],
@@ -287,8 +269,8 @@ export function computePolicySchedule(
   const asOfMs = asOf.getTime();
 
   const periods: BillingPeriod[] = [];
-  const startedPeriodAmounts: BasisAmounts[] = [];
-  const perYearCents = new Map<number, { grossCents: number; netCents: number; gross: boolean; net: boolean }>();
+  const startedPeriodAmounts: Amount[] = [];
+  const perYearCents = new Map<number, { cents: number; recorded: boolean }>();
 
   let index = 0;
   for (;;) {
@@ -299,22 +281,16 @@ export function computePolicySchedule(
     const periodEnd = new Date(periodEndExclusive.getTime() - 1);
 
     const entry = entryForPeriod(entries, periodStart);
-    const amount = entry
-      ? periodBasisAmounts(entry, frequency)
-      : { gross: null, net: null };
+    const amount = entry ? periodAmount(entry, frequency) : null;
     const started = periodStart.getTime() <= asOfMs;
 
     if (started) {
       startedPeriodAmounts.push(amount);
       const year = periodStart.getFullYear();
-      const bucket = perYearCents.get(year) ?? { grossCents: 0, netCents: 0, gross: false, net: false };
-      if (amount.gross != null) {
-        bucket.grossCents += toCents(amount.gross);
-        bucket.gross = true;
-      }
-      if (amount.net != null) {
-        bucket.netCents += toCents(amount.net);
-        bucket.net = true;
+      const bucket = perYearCents.get(year) ?? { cents: 0, recorded: false };
+      if (amount != null) {
+        bucket.cents += toCents(amount);
+        bucket.recorded = true;
       }
       perYearCents.set(year, bucket);
     }
@@ -332,35 +308,24 @@ export function computePolicySchedule(
   }
 
   const active = selectActiveOrLatestEntry(entries, asOf)!;
-  const rawActive = rawBasisAmounts(active);
-  const annualize = (value: number | null): number | null =>
-    value != null ? roundMoney(value * FREQUENCY_PER_YEAR[active.frequency]) : null;
-  const annual: BasisAmounts = {
-    gross: annualize(rawActive.gross),
-    net: annualize(rawActive.net),
-  };
+  const raw = rawAmount(active);
+  const annual = raw != null ? roundMoney(raw * FREQUENCY_PER_YEAR[active.frequency]) : null;
 
   return {
     anchor: anchor.toISOString(),
     frequency,
-    paidToDate: sumBasisAmounts(startedPeriodAmounts),
+    paidToDate: sumAmounts(startedPeriodAmounts),
     current: {
       entryId: active.id!,
       frequency: active.frequency,
       validFrom: active.validFrom.toISOString(),
       validTo: active.validTo ? active.validTo.toISOString() : null,
-      amount: rawActive,
+      amount: raw,
       annual,
       perFrequency: {
-        MONTHLY: {
-          gross: annual.gross != null ? roundMoney(annual.gross / 12) : null,
-          net: annual.net != null ? roundMoney(annual.net / 12) : null,
-        },
-        QUARTERLY: {
-          gross: annual.gross != null ? roundMoney(annual.gross / 4) : null,
-          net: annual.net != null ? roundMoney(annual.net / 4) : null,
-        },
-        ANNUAL: { gross: annual.gross, net: annual.net },
+        MONTHLY: annual != null ? roundMoney(annual / 12) : null,
+        QUARTERLY: annual != null ? roundMoney(annual / 4) : null,
+        ANNUAL: annual,
       },
     },
     periods,
@@ -368,26 +333,22 @@ export function computePolicySchedule(
       .sort(([a], [b]) => a - b)
       .map(([year, bucket]) => ({
         year,
-        amount: {
-          gross: bucket.gross ? fromCents(bucket.grossCents) : null,
-          net: bucket.net ? fromCents(bucket.netCents) : null,
-        },
+        amount: bucket.recorded ? fromCents(bucket.cents) : null,
       })),
   };
 }
 
-/** Per-policy aggregates of the household cost overview (per basis). */
+/** Per-policy aggregates of the household cost overview. */
 export type PolicyCostSummary = {
-  paidToDate: BasisAmounts;
-  /** Projected monthly/annual amount of the active entry, per basis. */
-  perMonth: BasisAmounts;
-  perYear: BasisAmounts;
+  paidToDate: Amount;
+  /** Projected monthly/annual amount of the active entry. */
+  perMonth: Amount;
+  perYear: Amount;
 };
 
 /**
  * Household summary of ONE policy: paid to date (all started periods) plus
- * projected per-month/per-year amounts of the currently valid entry - all
- * strictly per basis (BugFix-22).
+ * projected per-month/per-year amounts of the currently valid entry.
  */
 export function summarizePolicyCosts(
   policy: { startDate?: Date | null; paymentFrequency?: PaymentFrequency | null },
@@ -395,20 +356,13 @@ export function summarizePolicyCosts(
   asOf: Date,
 ): PolicyCostSummary {
   if (entries.length === 0) {
-    return {
-      paidToDate: { gross: null, net: null },
-      perMonth: { gross: null, net: null },
-      perYear: { gross: null, net: null },
-    };
+    return { paidToDate: null, perMonth: null, perYear: null };
   }
   const schedule = computePolicySchedule(policy, entries, asOf, asOf);
-  const annual = schedule.current?.annual ?? { gross: null, net: null };
+  const annual = schedule.current?.annual ?? null;
   return {
     paidToDate: schedule.paidToDate,
-    perMonth: {
-      gross: annual.gross != null ? roundMoney(annual.gross / 12) : null,
-      net: annual.net != null ? roundMoney(annual.net / 12) : null,
-    },
+    perMonth: annual != null ? roundMoney(annual / 12) : null,
     perYear: annual,
   };
 }

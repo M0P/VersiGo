@@ -73,12 +73,21 @@ Interne Dokumentenablage, Metadaten, Versionierung und Vorschau. Optionaler Adap
 
 ## 4. Cost Tracking
 Pflege von Beiträgen, Zahlintervallen, Historien und Jahresauswertungen.
-- **BugFix-22:** Brutto und Netto sind beide optional – es genügt **einer** der
-  beiden Beträge (Anlegen und Bearbeiten). Basis aller Kostenkennzahlen ist
-  Brutto, ersatzweise Netto („effektiver Betrag“); ein fehlender Betrag wird in
-  der Liste als „-“ dargestellt, die Betragsfelder sind als optional
-  beschriftet. Ein nicht-numerischer oder negativer Wert wird mit eigener
-  Meldung abgewiesen; ein vollständig leerer Kosteneintrag ebenso.
+- **Ein Betrag pro Kostenposition:** Jeder Kosteneintrag speichert genau
+  **einen** Betrag (das ist der Betrag, der tatsächlich gezahlt wird). Das
+  frühere Brutto/Netto-Paar (BugFix-22) wurde entfernt, weil es für einen
+  Endverbraucher nur verwirrend war und die Tabellen doppelt so breit machte.
+  Bestandsdaten wurden migriert: Wo beide Beträge gesetzt waren, gewinnt der
+  Bruttowert, weil er der tatsächlich überwiesene Betrag ist; netto-only
+  Einträge behalten ihren Wert (`prisma/migrations/20261018160000_single_amount_field`).
+  Der Betrag ist beim Anlegen Pflicht und kann beim Bearbeiten nicht geleert
+  werden. Ein fehlender Betrag einer Periode wird als „-“ dargestellt und nie
+  als 0; ein nicht-numerischer oder negativer Wert wird mit eigener Meldung
+  abgewiesen.
+- **Bedienung:** Das Bearbeitungsformular einer Kostenposition liegt als
+  **volle Tabellenzeile** im Raster (`.cost-entry-edit`), nicht mehr als ein
+  Eingabefeld je Spalte. Mit der Quelle-Spalte der Abrechnungsdokumente waren
+  die einzelnen Felder sonst zu schmal zum Bearbeiten.
 Optionales Feature für Extraktion und Zusammenfassungen über Provider-Adapter.
 
 ## 6. Portal Connectors

@@ -7,9 +7,9 @@ import {
   computePolicySchedule,
   entryForPeriod,
   selectActiveOrLatestEntry,
-  sumBasisAmounts,
+  sumAmounts,
   summarizePolicyCosts,
-  type BasisAmounts,
+  type Amount,
   type CostEntryLike,
 } from './cost-schedule';
 
@@ -153,9 +153,9 @@ export class CostTrackingService {
   async create(householdId: string, userId: string, policyId: string, dto: CreateCostEntryDto) {
     await this.assertPolicyAccess(householdId, userId, policyId);
 
-    // BugFix-22: "Kostenerhöhung" – at least one of gross/net is required.
-    if (dto.grossAmount == null && dto.netAmount == null) {
-      throw new BadRequestException('At least one of grossAmount or netAmount is required');
+    // A cost entry without an amount would contribute nothing to any sum.
+    if (dto.amount == null) {
+      throw new BadRequestException('An amount is required');
     }
 
     // AP-24 (§4.2): a cost entry may name the billing document it was derived
@@ -189,8 +189,7 @@ export class CostTrackingService {
           policyId,
           validFrom,
           validTo,
-          grossAmount: dto.grossAmount,
-          netAmount: dto.netAmount,
+          amount: dto.amount,
           frequency: dto.frequency,
           bookingSource: dto.bookingSource,
           note: dto.note,
@@ -216,8 +215,7 @@ export class CostTrackingService {
             policyId,
             validFrom: dto.validFrom,
             validTo: dto.validTo ?? null,
-            grossAmount: dto.grossAmount,
-            netAmount: dto.netAmount ?? null,
+            amount: dto.amount,
             frequency: dto.frequency,
             bookingSource: dto.bookingSource ?? null,
             note: dto.note ?? null,
@@ -279,7 +277,7 @@ export class CostTrackingService {
     const references = await this.db.policyCostEntry.findMany({
       where: { policyId, sourceDocumentId: { not: null } },
       orderBy: { validFrom: 'desc' },
-      select: { id: true, sourceDocumentId: true, validFrom: true, grossAmount: true, netAmount: true, frequency: true },
+      select: { id: true, sourceDocumentId: true, validFrom: true, amount: true, frequency: true },
     });
 
     const byDocument = new Map<string, typeof references>();
@@ -298,8 +296,7 @@ export class CostTrackingService {
           usedByCostEntries: used.map((entry) => ({
             id: entry.id,
             validFrom: entry.validFrom,
-            grossAmount: entry.grossAmount,
-            netAmount: entry.netAmount,
+            amount: entry.amount,
             frequency: entry.frequency,
           })),
         };
@@ -334,11 +331,10 @@ export class CostTrackingService {
         throw new NotFoundException('Cost entry not found');
       }
 
-      // BugFix-22: an update must never leave the entry without any amount.
-      const nextGross = dto.grossAmount !== undefined ? dto.grossAmount : existing.grossAmount;
-      const nextNet = dto.netAmount !== undefined ? dto.netAmount : existing.netAmount;
-      if (nextGross == null && nextNet == null) {
-        throw new BadRequestException('At least one of grossAmount or netAmount is required');
+      // An update must never leave the entry without an amount.
+      const nextAmount = dto.amount !== undefined ? dto.amount : existing.amount;
+      if (nextAmount == null) {
+        throw new BadRequestException('An amount is required');
       }
 
       const finalValidFrom = dto.validFrom ? new Date(dto.validFrom) : existing.validFrom;
@@ -379,8 +375,7 @@ export class CostTrackingService {
           validTo: dto.validTo !== undefined
             ? (dto.validTo ? new Date(dto.validTo) : null)
             : (finalValidTo === null && existing.validTo !== null ? null : undefined),
-          grossAmount: dto.grossAmount,
-          netAmount: dto.netAmount,
+          amount: dto.amount,
           frequency: dto.frequency,
           bookingSource: dto.bookingSource,
           note: dto.note,
@@ -452,10 +447,7 @@ export class CostTrackingService {
           diffJson: {
             policyId,
             entryId,
-            // BugFix-22: a net-only entry has no gross amount – keep `null`
-            // instead of `Number(null) === 0` in the audit record.
-            grossAmount: existing.grossAmount == null ? null : Number(existing.grossAmount),
-            netAmount: existing.netAmount == null ? null : Number(existing.netAmount),
+            amount: existing.amount == null ? null : Number(existing.amount),
             frequency: existing.frequency,
           },
         },
@@ -474,11 +466,11 @@ export class CostTrackingService {
    * - `periods`: one row per billing period from the EARLIEST of policy
    *   start and first cost position until the end of the following year
    *   (past 'incurred' once started, future 'expected', projected from the
-   *   currently valid entry). Amounts are strictly per basis (gross/net).
-   * - `paidToDate`: per-basis sum of the full amounts of all started periods
-   *   (due at period start, no day shares).
-   * - `current`: annual/monthly/quarterly amounts per basis from the active
-   *   entry. A basis that is not recorded anywhere stays null (UI: dash).
+   *   currently valid entry). A period without a covered entry stays null
+   *   (UI: dash).
+   * - `paidToDate`: sum of the full amounts of all started periods (due at
+   *   period start, no day shares).
+   * - `current`: annual/monthly/quarterly amounts from the active entry.
    */
   async getSchedule(
     householdId: string,
@@ -561,18 +553,18 @@ export class CostTrackingService {
       name: string;
       type: string;
       frequency: PaymentFrequency | null;
-      paidToDate: BasisAmounts;
-      perMonth: BasisAmounts;
-      perYear: BasisAmounts;
+      paidToDate: Amount;
+      perMonth: Amount;
+      perYear: Amount;
       entryCount: number;
     }> = [];
 
-    const paidToDateValues: BasisAmounts[] = [];
-    const perMonthValues: BasisAmounts[] = [];
-    const perYearValues: BasisAmounts[] = [];
-    // Historical calendar-year buckets per basis: every started period
-    // contributes its full amount to the year of its period start.
-    const perYearBuckets = new Map<number, BasisAmounts[]>();
+    const paidToDateValues: Amount[] = [];
+    const perMonthValues: Amount[] = [];
+    const perYearValues: Amount[] = [];
+    // Historical calendar-year buckets: every started period contributes its
+    // full amount to the year of its period start.
+    const perYearBuckets = new Map<number, Amount[]>();
 
     for (const policy of policies) {
       const entries = policy.costEntries;
@@ -605,15 +597,15 @@ export class CostTrackingService {
     }
 
     const perYear = Array.from(perYearBuckets.entries())
-      .map(([year, values]) => ({ year, amount: sumBasisAmounts(values) }))
+      .map(([year, values]) => ({ year, amount: sumAmounts(values) }))
       .sort((a, b) => a.year - b.year);
 
     return {
       asOf: now.toISOString(),
       totals: {
-        paidToDate: sumBasisAmounts(paidToDateValues),
-        perMonth: sumBasisAmounts(perMonthValues),
-        perYear: sumBasisAmounts(perYearValues),
+        paidToDate: sumAmounts(paidToDateValues),
+        perMonth: sumAmounts(perMonthValues),
+        perYear: sumAmounts(perYearValues),
       },
       perYear,
       policyCount: policies.length,

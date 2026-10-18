@@ -28,7 +28,7 @@ function suggestion(partial: Partial<CostExtractionSuggestion>): CostExtractionS
 }
 
 describe('cost-suggestion prefill', () => {
-  it('falls back from validFrom to invoiceDate and never derives netAmount', () => {
+  it('falls back from validFrom to invoiceDate and fills the single amount', () => {
     const prefill = buildCostEntryPrefill(
       suggestion({
         amount: 120,
@@ -40,11 +40,15 @@ describe('cost-suggestion prefill', () => {
       'tok1',
     );
     expect(prefill.validFrom).toBe('2026-10-18');
-    expect(prefill.netAmount).toBe('');
-    expect(prefill.grossAmount).toBe('120');
+    expect(prefill.amount).toBe('120');
     expect(prefill.frequency).toBe('ANNUAL');
     expect(prefill.sourceDocumentId).toBe('doc1');
     expect(prefill.token).toBe('tok1');
+  });
+
+  it('leaves the amount empty when the model read none', () => {
+    const prefill = buildCostEntryPrefill(suggestion({ amount: null }), 'doc1', 'tok1');
+    expect(prefill.amount).toBe('');
   });
 
   it('reports credit notes, existing entries and legacy frequency', () => {

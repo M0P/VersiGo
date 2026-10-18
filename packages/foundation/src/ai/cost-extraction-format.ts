@@ -36,9 +36,10 @@ export type CostExtractionConfidence = (typeof COST_EXTRACTION_CONFIDENCES)[numb
 export interface CostExtractionSuggestion {
   version: number;
   /**
-   * Billed gross amount, always >= 0. `null` when no amount could be read
-   * reliably. Credits/refunds are expressed via `isCredit` because a cost
-   * entry stores positive amounts.
+   * Billed amount, always >= 0. `null` when no amount could be read
+   * reliably. A cost entry stores exactly one amount – this is the amount
+   * the policyholder pays. Credits/refunds are expressed via `isCredit`
+   * because a cost entry stores positive amounts.
    */
   amount: number | null;
   currency: string | null;
@@ -104,8 +105,8 @@ Code-Block und ohne Text davor oder danach. Schema:
 }
 
 Regeln:
-- "amount" ist der Bruttobetrag als Zahl (Punkt als Dezimaltrennzeichen, ohne
-  Tausenderpunkte, ohne Waehrungssymbol), niemals negativ.
+- "amount" ist der abgerechnete Betrag als Zahl (Punkt als Dezimaltrennzeichen,
+  ohne Tausenderpunkte, ohne Waehrungssymbol), niemals negativ.
 - Bei Gutschrift, Erstattung oder Rueckzahlung: "isCredit": true und "amount"
   weiterhin positiv.
 - Datumsangaben immer im ISO-Format "YYYY-MM-DD", sonst null.

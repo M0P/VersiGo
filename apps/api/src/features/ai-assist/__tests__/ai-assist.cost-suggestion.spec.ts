@@ -109,7 +109,7 @@ describe('AiAssistService.extractCostSuggestion (AP-24 §4.2)', () => {
     });
     extractCostFromDocument.mockResolvedValue({ costJson: validCostJson(), model: 'test-model' });
     mockDb.policyCostEntry.findMany.mockResolvedValue([
-      { id: 'entry-1', validFrom: new Date('2026-01-01'), validTo: null, grossAmount: 100, netAmount: null, frequency: 'ANNUAL' },
+      { id: 'entry-1', validFrom: new Date('2026-01-01'), validTo: null, amount: 100, frequency: 'ANNUAL' },
     ]);
 
     const result = await service.extractCostSuggestion(householdId, user, policyId, documentId);

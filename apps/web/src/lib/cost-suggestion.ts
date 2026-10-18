@@ -44,7 +44,6 @@ export function knownCostSuggestionFields(value: unknown): CostSuggestionField[]
  *
  * Rules:
  * - uncertain values are never filled in (no guessing on top of the model),
- * - a net amount is never derived from the gross amount,
  * - a credit note keeps its positive amount (cost entries store amounts >= 0)
  *   and is reported as a notice instead,
  * - unknown `unclearFields` entries are dropped.
@@ -78,8 +77,8 @@ export interface CostEntryPrefill {
   token: string;
   validFrom: string;
   validTo: string;
-  grossAmount: string;
-  netAmount: string;
+  /** The amount read from the billing document; '' when none was read. */
+  amount: string;
   /** Creatable frequency of the suggestion; `null` when it must be chosen. */
   frequency: string | null;
   bookingSource: string;
@@ -161,9 +160,7 @@ export function buildCostEntryPrefill(
     // user to fill in.
     validFrom: suggestion.validFrom ?? suggestion.invoiceDate ?? '',
     validTo: suggestion.validTo ?? '',
-    grossAmount: suggestion.amount !== null ? String(suggestion.amount) : '',
-    // Never derived from the gross amount – the model did not read a net one.
-    netAmount: '',
+    amount: suggestion.amount !== null ? String(suggestion.amount) : '',
     frequency,
     bookingSource: suggestion.bookingSource ?? '',
     note: joinNoteParts([suggestion.description, suggestion.invoiceDate, suggestion.notes]),

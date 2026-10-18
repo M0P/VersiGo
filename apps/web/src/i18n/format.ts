@@ -29,11 +29,10 @@ export function formatCurrency(value: number, language: Language): string {
 }
 
 /**
- * BugFix-22: renders one per-basis amount (gross or net). A missing basis
- * is shown as a dash placeholder – never as 0 and never with a value
- * borrowed from the other basis.
+ * Renders a cost amount. A missing amount is shown as a dash placeholder –
+ * never as 0 (an entry without an amount must not look like a free one).
  */
-export function formatBasisAmount(value: number | null, language: Language): string {
+export function formatAmount(value: number | null, language: Language): string {
   return value == null ? '—' : formatCurrency(value, language);
 }
 

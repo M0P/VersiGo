@@ -51,8 +51,7 @@ export interface CostExtractionSuggestionResponse {
     id: string;
     validFrom: Date;
     validTo: Date | null;
-    grossAmount: Prisma.Decimal | null;
-    netAmount: Prisma.Decimal | null;
+    amount: Prisma.Decimal;
     frequency: string;
   }[];
   model: string;
@@ -699,7 +698,7 @@ export class AiAssistService {
     const existingEntries = await this.db.policyCostEntry.findMany({
       where: { policyId, sourceDocumentId: document.id },
       orderBy: { validFrom: 'desc' },
-      select: { id: true, validFrom: true, validTo: true, grossAmount: true, netAmount: true, frequency: true },
+      select: { id: true, validFrom: true, validTo: true, amount: true, frequency: true },
     });
 
     return {

@@ -4,19 +4,18 @@ import {
   addMonthsClamped,
   computePolicySchedule,
   entryForPeriod,
-  periodBasisAmounts,
+  periodAmount,
   resolveCostAnchor,
   selectActiveOrLatestEntry,
   summarizePolicyCosts,
-  sumBasisAmounts,
+  sumAmounts,
   type CostEntryLike,
 } from '../cost-schedule';
 
 function entry(partial: Partial<CostEntryLike> & { validFrom: Date }): CostEntryLike {
   return {
     id: partial.id ?? 'e',
-    grossAmount: partial.grossAmount ?? null,
-    netAmount: partial.netAmount ?? null,
+    amount: partial.amount ?? null,
     frequency: partial.frequency ?? PaymentFrequency.ANNUAL,
     validFrom: partial.validFrom,
     validTo: partial.validTo ?? null,
@@ -48,11 +47,13 @@ describe('resolveCostAnchor (BugFix-22)', () => {
 
 describe('computePolicySchedule (BugFix-22 acceptance dataset)', () => {
   // Reported defect: cost positions 701.59 (23.10.2024), 761.01 (23.10.2025)
-  // and 718.22 (23.10.2026), annual, net only; policy start 16.08.2026.
+  // and 718.22 (23.10.2026), annual; policy start 16.08.2026. The amounts
+  // used to be recorded net-only; with the single amount field they are plain
+  // amounts.
   const entries = [
-    entry({ id: 'c1', netAmount: 701.59, validFrom: new Date('2024-10-23') }),
-    entry({ id: 'c2', netAmount: 761.01, validFrom: new Date('2025-10-23') }),
-    entry({ id: 'c3', netAmount: 718.22, validFrom: new Date('2026-10-23') }),
+    entry({ id: 'c1', amount: 701.59, validFrom: new Date('2024-10-23') }),
+    entry({ id: 'c2', amount: 761.01, validFrom: new Date('2025-10-23') }),
+    entry({ id: 'c3', amount: 718.22, validFrom: new Date('2026-10-23') }),
   ];
   const policy = {
     startDate: new Date('2026-08-16'),
@@ -83,7 +84,7 @@ describe('computePolicySchedule (BugFix-22 acceptance dataset)', () => {
 
   it('sums all started periods: paid to date = 701.59 + 761.01 = 1462.60', () => {
     const schedule = computePolicySchedule(policy, entries, asOf, horizonEnd);
-    expect(schedule.paidToDate).toEqual({ gross: null, net: 1462.6 });
+    expect(schedule.paidToDate).toBe(1462.6);
   });
 
   it('marks started periods as incurred and future periods as expected', () => {
@@ -96,26 +97,25 @@ describe('computePolicySchedule (BugFix-22 acceptance dataset)', () => {
     ]);
   });
 
-  it('uses the entry amounts per basis without gross/net fallback', () => {
+  it('uses the entry amount of the entry in force on the as-of date', () => {
     const schedule = computePolicySchedule(policy, entries, asOf, horizonEnd);
     // Current entry at the as-of date: c3 only starts on 23.10.2026, so the
-    // entry in force on 18.10.2026 is c2 (761.01, net only). Gross stays
-    // null – it is never filled with the net amount.
+    // entry in force on 18.10.2026 is c2 (761.01).
     expect(schedule.current?.entryId).toBe('c2');
-    expect(schedule.current?.amount).toEqual({ gross: null, net: 761.01 });
-    expect(schedule.current?.annual).toEqual({ gross: null, net: 761.01 });
-    expect(schedule.current?.perFrequency.MONTHLY).toEqual({ gross: null, net: 63.42 });
+    expect(schedule.current?.amount).toBe(761.01);
+    expect(schedule.current?.annual).toBe(761.01);
+    expect(schedule.current?.perFrequency.MONTHLY).toBe(63.42);
   });
 
-  it('sums the per-year history per basis (net only here)', () => {
+  it('sums the per-year history (started periods in full)', () => {
     const schedule = computePolicySchedule(policy, entries, asOf, horizonEnd);
     // perYear = full amounts of STARTED periods, keyed by period start year
     // (BugFix-08 rule, unchanged). On 18.10.2026 only 10/2024 and 10/2025
     // have started; 10/2026 begins after the as-of date and is therefore
     // not part of the historical series.
     expect(schedule.perYear).toEqual([
-      { year: 2024, amount: { gross: null, net: 701.59 } },
-      { year: 2025, amount: { gross: null, net: 761.01 } },
+      { year: 2024, amount: 701.59 },
+      { year: 2025, amount: 761.01 },
     ]);
   });
 });
@@ -123,49 +123,48 @@ describe('computePolicySchedule (BugFix-22 acceptance dataset)', () => {
 describe('computePolicySchedule (regressions of the BugFix-08 suite)', () => {
   const horizonEnd = new Date(2025, 11, 31, 23, 59, 59, 999);
 
-  it('sums the full amounts of all started periods per basis', () => {
+  it('sums the full amounts of all started periods', () => {
     // Policy billing is MONTHLY, so the positions are monthly too (100 / 150
     // per month) – identical fixture to the service-level test.
     const schedule = computePolicySchedule(
       { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
       [
-        entry({ id: 'c1', grossAmount: 100, frequency: PaymentFrequency.MONTHLY, validFrom: new Date('2024-01-01'), validTo: new Date('2024-05-31') }),
-        entry({ id: 'c2', grossAmount: 150, frequency: PaymentFrequency.MONTHLY, validFrom: new Date('2024-06-01') }),
+        entry({ id: 'c1', amount: 100, frequency: PaymentFrequency.MONTHLY, validFrom: new Date('2024-01-01'), validTo: new Date('2024-05-31') }),
+        entry({ id: 'c2', amount: 150, frequency: PaymentFrequency.MONTHLY, validFrom: new Date('2024-06-01') }),
       ],
       new Date('2024-12-15T12:00:00.000Z'),
       horizonEnd,
     );
 
     // All 12 periods of 2024 started: 5 * 100 + 7 * 150.
-    expect(schedule.paidToDate.gross).toBe(5 * 100 + 7 * 150);
-    expect(schedule.paidToDate.net).toBeNull();
-    expect(schedule.periods[4].amount.gross).toBe(100);
-    expect(schedule.periods[5].amount.gross).toBe(150);
+    expect(schedule.paidToDate).toBe(5 * 100 + 7 * 150);
+    expect(schedule.periods[4].amount).toBe(100);
+    expect(schedule.periods[5].amount).toBe(150);
     // Horizon runs beyond 2024 into 2025 (default horizon end is 2025-12-31).
     // In the BugFix-08 logic, periods are emitted as long as periodStart <= horizonEnd.
     expect(schedule.periods[0].periodStart).toBe('2024-01-01T00:00:00.000Z');
     expect(schedule.periods[schedule.periods.length - 1].periodStart).toBe('2025-12-01T00:00:00.000Z');
-    expect(schedule.periods[11].amount.gross).toBe(150);
+    expect(schedule.periods[11].amount).toBe(150);
   });
 
   it('prorates entries whose frequency differs from the billing frequency', () => {
     const schedule = computePolicySchedule(
       { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
-      [entry({ id: 'c1', grossAmount: 300, frequency: PaymentFrequency.QUARTERLY, validFrom: new Date('2024-01-01') })],
+      [entry({ id: 'c1', amount: 300, frequency: PaymentFrequency.QUARTERLY, validFrom: new Date('2024-01-01') })],
       new Date('2024-03-20T12:00:00.000Z'),
       horizonEnd,
     );
 
-    expect(schedule.paidToDate.gross).toBe(300);
+    expect(schedule.paidToDate).toBe(300);
     for (const period of schedule.periods.slice(0, 3)) {
-      expect(period.amount.gross).toBe(100);
+      expect(period.amount).toBe(100);
     }
   });
 
   it('realigns periods after short months at the anchor (leap year 2024)', () => {
     const schedule = computePolicySchedule(
       { startDate: new Date('2024-01-31'), paymentFrequency: PaymentFrequency.MONTHLY },
-      [entry({ id: 'c1', grossAmount: 100, validFrom: new Date('2024-01-31') })],
+      [entry({ id: 'c1', amount: 100, validFrom: new Date('2024-01-31') })],
       new Date('2024-03-31T12:00:00.000Z'),
       horizonEnd,
     );
@@ -183,95 +182,83 @@ describe('computePolicySchedule (regressions of the BugFix-08 suite)', () => {
       horizonEnd,
     );
 
-    expect(schedule.paidToDate).toEqual({ gross: null, net: null });
+    expect(schedule.paidToDate).toBeNull();
     expect(schedule.current).toBeNull();
     expect(schedule.periods).toEqual([]);
     expect(schedule.perYear).toEqual([]);
   });
 
-  it('keeps gross and net strictly separate (no cross-basis fallback)', () => {
+  it('keeps a period without a recorded amount null instead of 0', () => {
     const schedule = computePolicySchedule(
       { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
       [
-        // The helper defaults to ANNUAL; without an explicit MONTHLY frequency
-        // the amounts would be prorated to 10/10 respectively per period.
-        entry({ id: 'c1', grossAmount: 120, netAmount: 100, frequency: PaymentFrequency.MONTHLY, validFrom: new Date('2024-01-01') }),
-        entry({ id: 'c2', netAmount: 90, frequency: PaymentFrequency.MONTHLY, validFrom: new Date('2024-04-01') }),
+        entry({ id: 'c1', amount: 120, frequency: PaymentFrequency.MONTHLY, validFrom: new Date('2024-01-01'), validTo: new Date('2024-03-31') }),
       ],
       new Date('2024-06-20T12:00:00.000Z'),
       horizonEnd,
     );
 
-    // Started periods: 01-03 gross 120 each, 04-06 gross not recorded.
-    expect(schedule.paidToDate.gross).toBe(360);
-    // Net: 100 for periods 01-03 and 90 for periods 04-06.
-    expect(schedule.paidToDate.net).toBe(3 * 100 + 3 * 90);
-    // Last period still covered by c1 reports both bases.
-    expect(schedule.periods[2].amount).toEqual({ gross: 120, net: 100 });
-    // A period whose entry has no gross amount reports null, not 0.
-    expect(schedule.periods[3].amount).toEqual({ gross: null, net: 90 });
+    // Periods 01-03 are covered by c1; from 04 on no entry exists any more.
+    expect(schedule.periods[2].amount).toBe(120);
+    expect(schedule.periods[3].amount).toBeNull();
+    expect(schedule.paidToDate).toBe(360);
   });
 });
 
 describe('summarizePolicyCosts', () => {
-  it('projects per month/per year from the active entry per basis', () => {
+  it('projects per month/per year from the active entry', () => {
     const summary = summarizePolicyCosts(
       { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
       [
-        entry({ id: 'c1', grossAmount: 1200, netAmount: 1000, frequency: PaymentFrequency.ANNUAL, validFrom: new Date('2024-01-01') }),
+        entry({ id: 'c1', amount: 1200, frequency: PaymentFrequency.ANNUAL, validFrom: new Date('2024-01-01') }),
       ],
       new Date('2024-03-01T12:00:00.000Z'),
     );
 
-    expect(summary.perMonth).toEqual({ gross: 100, net: 83.33 });
-    expect(summary.perYear).toEqual({ gross: 1200, net: 1000 });
-    expect(summary.paidToDate).toEqual({ gross: 300, net: 249.99 });
+    expect(summary.perMonth).toBe(100);
+    expect(summary.perYear).toBe(1200);
+    expect(summary.paidToDate).toBe(300);
   });
 
-  it('returns null bases without entries', () => {
+  it('returns null without entries', () => {
     const summary = summarizePolicyCosts({ startDate: null }, [], new Date());
-    expect(summary).toEqual({
-      paidToDate: { gross: null, net: null },
-      perMonth: { gross: null, net: null },
-      perYear: { gross: null, net: null },
-    });
+    expect(summary).toEqual({ paidToDate: null, perMonth: null, perYear: null });
   });
 });
 
-describe('sumBasisAmounts', () => {
-  it('sums recorded values per basis and keeps missing bases null', () => {
-    expect(
-      sumBasisAmounts([
-        { gross: 10.05, net: null },
-        { gross: null, net: 8.1 },
-        { gross: 0.05, net: 0.9 },
-      ]),
-    ).toEqual({ gross: 10.1, net: 9 });
+describe('sumAmounts', () => {
+  it('sums recorded values as integer cents and rounds to 2 decimals', () => {
+    expect(sumAmounts([10.05, 0.05, null])).toBe(10.1);
   });
 
-  it('returns null for a basis without any recorded value', () => {
-    expect(sumBasisAmounts([{ gross: null, net: 5 }, { gross: null, net: null }])).toEqual({
-      gross: null,
-      net: 5,
-    });
+  it('returns null when nothing is recorded (never 0)', () => {
+    expect(sumAmounts([null, null])).toBeNull();
+  });
+
+  it('returns null for an empty list', () => {
+    expect(sumAmounts([])).toBeNull();
+  });
+
+  it('treats a recorded 0 as a recorded value', () => {
+    expect(sumAmounts([0, null])).toBe(0);
   });
 });
 
-describe('periodBasisAmounts', () => {
-  it('prorates each basis independently', () => {
-    const amounts = periodBasisAmounts(
-      entry({ grossAmount: 300, netAmount: 240, frequency: PaymentFrequency.QUARTERLY, validFrom: new Date() }),
+describe('periodAmount', () => {
+  it('prorates the amount to the step frequency', () => {
+    const amount = periodAmount(
+      entry({ amount: 300, frequency: PaymentFrequency.QUARTERLY, validFrom: new Date() }),
       PaymentFrequency.MONTHLY,
     );
-    expect(amounts).toEqual({ gross: 100, net: 80 });
+    expect(amount).toBe(100);
   });
 
-  it('keeps an unrecorded basis null', () => {
-    const amounts = periodBasisAmounts(
-      entry({ netAmount: 90, frequency: PaymentFrequency.ANNUAL, validFrom: new Date() }),
+  it('keeps an unrecorded amount null', () => {
+    const amount = periodAmount(
+      entry({ amount: null, frequency: PaymentFrequency.ANNUAL, validFrom: new Date() }),
       PaymentFrequency.MONTHLY,
     );
-    expect(amounts).toEqual({ gross: null, net: 7.5 });
+    expect(amount).toBeNull();
   });
 });
 
@@ -286,8 +273,8 @@ describe('addMonthsClamped', () => {
 describe('entryForPeriod / selectActiveOrLatestEntry', () => {
   it('selects the newest entry valid at the period start', () => {
     const entries = [
-      entry({ id: 'old', grossAmount: 100, validFrom: new Date('2024-01-01'), validTo: new Date('2024-12-31T23:59:59.999') }),
-      entry({ id: 'new', grossAmount: 150, validFrom: new Date('2025-01-01') }),
+      entry({ id: 'old', amount: 100, validFrom: new Date('2024-01-01'), validTo: new Date('2024-12-31T23:59:59.999') }),
+      entry({ id: 'new', amount: 150, validFrom: new Date('2025-01-01') }),
     ];
     expect(entryForPeriod(entries, new Date('2024-06-01'))?.id).toBe('old');
     expect(entryForPeriod(entries, new Date('2025-06-01'))?.id).toBe('new');

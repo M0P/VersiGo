@@ -64,13 +64,13 @@ describe('CostTrackingService', () => {
         id: entryId,
         policyId,
         validFrom: new Date('2025-01-01'),
-        grossAmount: 1200,
+        amount: 1200,
         frequency: 'MONTHLY',
       });
 
       const result = await service.create(householdId, userId, policyId, {
         validFrom: '2025-01-01',
-        grossAmount: 1200,
+        amount: 1200,
         frequency: PaymentFrequency.MONTHLY,
       });
 
@@ -85,33 +85,32 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('BugFix-22: accepts an entry with only a net amount', async () => {
+    it('accepts an amount of 0 (a free contribution is a valid amount)', async () => {
       mockMembership();
       mockPolicy();
       mockDb.policyCostEntry.create.mockResolvedValue({
         id: entryId,
         policyId,
         validFrom: new Date('2025-01-01'),
-        grossAmount: null,
-        netAmount: 1000,
+        amount: 0,
         frequency: 'MONTHLY',
       });
 
       const result = await service.create(householdId, userId, policyId, {
         validFrom: '2025-01-01',
-        netAmount: 1000,
+        amount: 0,
         frequency: PaymentFrequency.MONTHLY,
       });
 
       expect(result.id).toBe(entryId);
       expect(mockDb.policyCostEntry.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ netAmount: 1000 }),
+          data: expect.objectContaining({ amount: 0 }),
         }),
       );
     });
 
-    it('BugFix-22: refuses an entry without any amount', async () => {
+    it('refuses a cost entry without an amount', async () => {
       mockMembership();
       mockPolicy();
 
@@ -119,7 +118,7 @@ describe('CostTrackingService', () => {
         service.create(householdId, userId, policyId, {
           validFrom: '2025-01-01',
           frequency: PaymentFrequency.MONTHLY,
-        }),
+        } as never),
       ).rejects.toThrow(BadRequestException);
 
       expect(mockDb.policyCostEntry.create).not.toHaveBeenCalled();
@@ -136,20 +135,20 @@ describe('CostTrackingService', () => {
         id: entryId,
         policyId,
         validFrom: new Date('2025-01-01'),
-        grossAmount: 150,
+        amount: 150,
         frequency: 'MONTHLY',
       });
       mockDb.policyCostEntry.findMany.mockResolvedValue([
         {
           id: 'c1',
-          grossAmount: 100,
+          amount: 100,
           frequency: 'MONTHLY',
           validFrom: new Date('2024-01-01'),
           validTo: null,
         },
         {
           id: entryId,
-          grossAmount: 150,
+          amount: 150,
           frequency: 'MONTHLY',
           validFrom: new Date('2025-01-01'),
           validTo: null,
@@ -158,7 +157,7 @@ describe('CostTrackingService', () => {
 
       await service.create(householdId, userId, policyId, {
         validFrom: '2025-01-01',
-        grossAmount: 150,
+        amount: 150,
         frequency: PaymentFrequency.MONTHLY,
       });
 
@@ -183,7 +182,7 @@ describe('CostTrackingService', () => {
       await expect(
         service.create(householdId, userId, policyId, {
           validFrom: '2025-01-01',
-          grossAmount: 1200,
+          amount: 1200,
           frequency: PaymentFrequency.MONTHLY,
         }),
       ).rejects.toThrow(ForbiddenException);
@@ -196,7 +195,7 @@ describe('CostTrackingService', () => {
       await expect(
         service.create(householdId, userId, policyId, {
           validFrom: '2025-01-01',
-          grossAmount: 1200,
+          amount: 1200,
           frequency: PaymentFrequency.MONTHLY,
         }),
       ).rejects.toThrow(NotFoundException);
@@ -210,7 +209,7 @@ describe('CostTrackingService', () => {
         service.create(householdId, userId, policyId, {
           validFrom: '2025-06-01',
           validTo: '2025-01-01',
-          grossAmount: 100,
+          amount: 100,
           frequency: PaymentFrequency.MONTHLY,
         }),
       ).rejects.toThrow(BadRequestException);
@@ -224,7 +223,7 @@ describe('CostTrackingService', () => {
       await expect(
         service.create(householdId, userId, policyId, {
           validFrom: '2025-01-01',
-          grossAmount: 100,
+          amount: 100,
           frequency: PaymentFrequency.MONTHLY,
         }),
       ).rejects.toThrow(BadRequestException);
@@ -236,8 +235,8 @@ describe('CostTrackingService', () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
       mockDb.policyCostEntry.findMany.mockResolvedValue([
-        { id: 'e1', policyId, grossAmount: 100, frequency: 'MONTHLY' },
-        { id: 'e2', policyId, grossAmount: 200, frequency: 'ANNUAL' },
+        { id: 'e1', policyId, amount: 100, frequency: 'MONTHLY' },
+        { id: 'e2', policyId, amount: 200, frequency: 'ANNUAL' },
       ]);
 
       const result = await service.findAll(householdId, user, policyId);
@@ -266,7 +265,7 @@ describe('CostTrackingService', () => {
       mockDb.policyCostEntry.findFirst.mockResolvedValue({
         id: entryId,
         policyId,
-        grossAmount: 500,
+        amount: 500,
         frequency: 'QUARTERLY',
       });
 
@@ -288,15 +287,15 @@ describe('CostTrackingService', () => {
       });
       mockDb.policyCostEntry.update.mockResolvedValue({
         id: entryId,
-        grossAmount: 1500,
+        amount: 1500,
         frequency: 'MONTHLY',
       });
 
       const result = await service.update(householdId, userId, policyId, entryId, {
-        grossAmount: 1500,
+        amount: 1500,
       });
 
-      expect(result.grossAmount).toBe(1500);
+      expect(result.amount).toBe(1500);
       expect(mockDb.auditEvent.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ action: 'UPDATE' }),
@@ -304,7 +303,7 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('BugFix-22: refuses an update that would clear both amounts', async () => {
+    it('refuses an update that would clear the amount', async () => {
       mockMembership();
       mockPolicy();
       mockDb.policyCostEntry.findFirst.mockResolvedValue({
@@ -312,19 +311,18 @@ describe('CostTrackingService', () => {
         policyId,
         validFrom: new Date('2025-01-01'),
         validTo: null,
-        grossAmount: null,
-        netAmount: 1000,
+        amount: 1000,
         frequency: 'MONTHLY',
       });
 
       await expect(
-        service.update(householdId, userId, policyId, entryId, { netAmount: null as never }),
+        service.update(householdId, userId, policyId, entryId, { amount: null as never }),
       ).rejects.toThrow(BadRequestException);
 
       expect(mockDb.policyCostEntry.update).not.toHaveBeenCalled();
     });
 
-    it('BugFix-22: allows an update that keeps the net amount as the only amount', async () => {
+    it('accepts an update of the amount', async () => {
       mockMembership();
       mockPolicy();
       mockDb.policyCostEntry.findFirst.mockResolvedValue({
@@ -332,21 +330,20 @@ describe('CostTrackingService', () => {
         policyId,
         validFrom: new Date('2025-01-01'),
         validTo: null,
-        grossAmount: null,
-        netAmount: 1000,
+        amount: 1000,
         frequency: 'MONTHLY',
       });
       mockDb.policyCostEntry.update.mockResolvedValue({
         id: entryId,
-        netAmount: 1100,
+        amount: 1100,
         frequency: 'MONTHLY',
       });
 
       const result = await service.update(householdId, userId, policyId, entryId, {
-        netAmount: 1100,
+        amount: 1100,
       });
 
-      expect(result.netAmount).toBe(1100);
+      expect(result.amount).toBe(1100);
     });
 
     it('refuses update when validTo <= validFrom', async () => {
@@ -357,7 +354,7 @@ describe('CostTrackingService', () => {
         policyId,
         validFrom: new Date('2025-06-01'),
         validTo: null,
-        grossAmount: 100,
+        amount: 100,
         frequency: PaymentFrequency.MONTHLY,
       });
 
@@ -378,14 +375,14 @@ describe('CostTrackingService', () => {
           policyId,
           validFrom: new Date('2025-06-01'),
           validTo: null,
-          grossAmount: 150,
+          amount: 150,
           frequency: 'MONTHLY',
         })
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null);
       mockDb.policyCostEntry.update.mockResolvedValue({
         id: entryId,
-        grossAmount: 150,
+        amount: 150,
         frequency: 'MONTHLY',
       });
       // findMany mirrors the transaction view: the edited entry is also
@@ -393,14 +390,14 @@ describe('CostTrackingService', () => {
       mockDb.policyCostEntry.findMany.mockResolvedValue([
         {
           id: 'c1',
-          grossAmount: 100,
+          amount: 100,
           frequency: 'MONTHLY',
           validFrom: new Date('2024-01-01'),
           validTo: null,
         },
         {
           id: entryId,
-          grossAmount: 150,
+          amount: 150,
           frequency: 'MONTHLY',
           validFrom: new Date('2025-06-01'),
           validTo: null,
@@ -431,14 +428,14 @@ describe('CostTrackingService', () => {
           policyId,
           validFrom: new Date('2025-01-01'),
           validTo: null,
-          grossAmount: 150,
+          amount: 150,
           frequency: 'MONTHLY',
         })
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ id: 'c1' });
       // update: 1) the entry itself, 2) c1 reopened, 3) c1 ended at the new validFrom.
       mockDb.policyCostEntry.update
-        .mockResolvedValueOnce({ id: entryId, grossAmount: 150, frequency: 'MONTHLY' })
+        .mockResolvedValueOnce({ id: entryId, amount: 150, frequency: 'MONTHLY' })
         .mockResolvedValueOnce({ id: 'c1', validTo: null })
         .mockResolvedValueOnce({ id: 'c1', validTo: new Date('2026-12-31T23:59:59.999Z') });
       // Transaction view AFTER restorePredecessor: c1 is reopened (validTo
@@ -446,14 +443,14 @@ describe('CostTrackingService', () => {
       mockDb.policyCostEntry.findMany.mockResolvedValue([
         {
           id: 'c1',
-          grossAmount: 100,
+          amount: 100,
           frequency: 'MONTHLY',
           validFrom: new Date('2024-01-01'),
           validTo: null,
         },
         {
           id: entryId,
-          grossAmount: 150,
+          amount: 150,
           frequency: 'MONTHLY',
           validFrom: new Date('2025-01-01'),
           validTo: null,
@@ -492,7 +489,7 @@ describe('CostTrackingService', () => {
           policyId,
           validFrom: new Date('2025-01-01'),
           validTo: new Date('2025-05-31T23:59:59.999Z'),
-          grossAmount: 150,
+          amount: 150,
           frequency: 'MONTHLY',
         })
         .mockResolvedValueOnce({ id: 'c3' })
@@ -501,15 +498,15 @@ describe('CostTrackingService', () => {
       // update: 1) c2 itself (obsolete validTo removed), 2) c1 reopened,
       // 3) c3 ended at the new validFrom.
       mockDb.policyCostEntry.update
-        .mockResolvedValueOnce({ id: entryId, grossAmount: 150, frequency: 'MONTHLY', validTo: null })
+        .mockResolvedValueOnce({ id: entryId, amount: 150, frequency: 'MONTHLY', validTo: null })
         .mockResolvedValueOnce({ id: 'c1', validTo: null })
         .mockResolvedValueOnce({ id: 'c3', validTo: new Date('2025-12-31T23:59:59.999Z') });
       // Transaction view after restorePredecessor: c1 open, c2 excluded,
       // c3 open.
       mockDb.policyCostEntry.findMany.mockResolvedValue([
-        { id: 'c1', grossAmount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: null },
-        { id: entryId, grossAmount: 150, frequency: 'MONTHLY', validFrom: new Date('2025-01-01'), validTo: null },
-        { id: 'c3', grossAmount: 200, frequency: 'MONTHLY', validFrom: new Date('2025-06-01'), validTo: null },
+        { id: 'c1', amount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: null },
+        { id: entryId, amount: 150, frequency: 'MONTHLY', validFrom: new Date('2025-01-01'), validTo: null },
+        { id: 'c3', amount: 200, frequency: 'MONTHLY', validFrom: new Date('2025-06-01'), validTo: null },
       ]);
 
       await service.update(householdId, userId, policyId, entryId, {
@@ -548,7 +545,7 @@ describe('CostTrackingService', () => {
           policyId,
           validFrom: new Date('2025-01-01'),
           validTo: new Date('2025-06-30'),
-          grossAmount: 150,
+          amount: 150,
           frequency: 'MONTHLY',
         })
         .mockResolvedValueOnce(null);
@@ -571,7 +568,7 @@ describe('CostTrackingService', () => {
           id: entryId,
           policyId,
           validFrom: new Date('2025-01-01'),
-          grossAmount: 100,
+          amount: 100,
           frequency: 'MONTHLY',
         })
         .mockResolvedValueOnce(null);
@@ -590,7 +587,7 @@ describe('CostTrackingService', () => {
       );
     });
 
-    it('BugFix-22: audit diff of a net-only entry stays null instead of NaN', async () => {
+    it('writes the amount as a plain number into the audit diff', async () => {
       mockMembership();
       mockPolicy();
       // findFirst: 1) entry to delete, 2) restorePredecessor (nothing ended).
@@ -599,8 +596,7 @@ describe('CostTrackingService', () => {
           id: entryId,
           policyId,
           validFrom: new Date('2025-01-01'),
-          grossAmount: null,
-          netAmount: 900,
+          amount: 900,
           frequency: 'MONTHLY',
         })
         .mockResolvedValueOnce(null);
@@ -612,7 +608,7 @@ describe('CostTrackingService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             action: 'DELETE',
-            diffJson: expect.objectContaining({ grossAmount: null, netAmount: 900 }),
+            diffJson: expect.objectContaining({ amount: 900 }),
           }),
         }),
       );
@@ -629,7 +625,7 @@ describe('CostTrackingService', () => {
           policyId,
           validFrom: new Date('2025-01-01'),
           validTo: null,
-          grossAmount: 150,
+          amount: 150,
           frequency: 'MONTHLY',
         })
         .mockResolvedValueOnce({ id: 'c1' });
@@ -664,8 +660,7 @@ describe('CostTrackingService', () => {
         [
           {
             id: 'c1',
-            grossAmount: 100,
-            netAmount: null,
+            amount: 100,
             frequency: 'MONTHLY',
             validFrom: new Date('2024-01-15'),
             validTo: null,
@@ -682,28 +677,26 @@ describe('CostTrackingService', () => {
       );
 
       expect(result.current?.frequency).toBe('MONTHLY');
-      expect(result.paidToDate.gross).toBe(300);
-      expect(result.paidToDate.net).toBeNull();
+      expect(result.paidToDate).toBe(300);
       // Past = incurred, future = expected (projected from the active entry).
       expect(result.periods[0].status).toBe('incurred');
-      expect(result.periods[0].amount.gross).toBe(100);
+      expect(result.periods[0].amount).toBe(100);
       expect(result.periods[2].periodLabel).toBe('03/2024');
       expect(result.periods[2].status).toBe('incurred');
       expect(result.periods[3].status).toBe('expected');
-      expect(result.periods[3].amount.gross).toBe(100);
+      expect(result.periods[3].amount).toBe(100);
     });
 
-    it('BugFix-22: does NOT fall back to net when no gross amount is set', async () => {
+    it('a period without a covered cost entry stays null (rendered as a dash)', async () => {
       mockScheduleData(
         { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
         [
           {
             id: 'c1',
-            grossAmount: null,
-            netAmount: 90,
+            amount: 90,
             frequency: 'MONTHLY',
             validFrom: new Date('2024-01-01'),
-            validTo: null,
+            validTo: new Date('2024-01-31T23:59:59.999'),
           },
         ],
       );
@@ -715,12 +708,12 @@ describe('CostTrackingService', () => {
         new Date('2024-03-20T12:00:00.000Z'),
       );
 
-      // 3 incurred monthly periods (01-03/2024) at 90 net each; the gross
-      // basis stays null (UI: dash) and is never replaced by the net amount.
-      expect(result.paidToDate).toEqual({ gross: null, net: 270 });
-      expect(result.current?.amount).toEqual({ gross: null, net: 90 });
-      expect(result.current?.annual).toEqual({ gross: null, net: 1080 });
-      expect(result.periods[0].amount).toEqual({ gross: null, net: 90 });
+      // 3 incurred monthly periods (01-03/2024); only 01 is covered by c1.
+      // The uncovered periods are null – never 0.
+      expect(result.paidToDate).toEqual(90);
+      expect(result.periods[0].amount).toEqual(90);
+      expect(result.periods[1].amount).toBeNull();
+      expect(result.periods[2].amount).toBeNull();
     });
 
     it('BugFix-22: periods start at the first cost position when it precedes the policy start', async () => {
@@ -729,24 +722,21 @@ describe('CostTrackingService', () => {
         [
           {
             id: 'c1',
-            grossAmount: null,
-            netAmount: 701.59,
+            amount: 701.59,
             frequency: 'ANNUAL',
             validFrom: new Date('2024-10-23'),
             validTo: new Date('2025-10-22T23:59:59.999'),
           },
           {
             id: 'c2',
-            grossAmount: null,
-            netAmount: 761.01,
+            amount: 761.01,
             frequency: 'ANNUAL',
             validFrom: new Date('2025-10-23'),
             validTo: new Date('2026-10-22T23:59:59.999'),
           },
           {
             id: 'c3',
-            grossAmount: null,
-            netAmount: 718.22,
+            amount: 718.22,
             frequency: 'ANNUAL',
             validFrom: new Date('2026-10-23'),
             validTo: null,
@@ -769,7 +759,7 @@ describe('CostTrackingService', () => {
         '10/2026',
         '10/2027',
       ]);
-      expect(result.paidToDate).toEqual({ gross: null, net: 1462.6 });
+      expect(result.paidToDate).toEqual(1462.6);
       expect(result.periods.map((p) => p.status)).toEqual([
         'incurred',
         'incurred',
@@ -784,8 +774,7 @@ describe('CostTrackingService', () => {
         [
           {
             id: 'c1',
-            grossAmount: 500,
-            netAmount: null,
+            amount: 500,
             frequency: 'ANNUAL',
             validFrom: new Date('2024-01-01'),
             validTo: null,
@@ -800,10 +789,10 @@ describe('CostTrackingService', () => {
         new Date('2024-03-20T12:00:00.000Z'),
       );
 
-      expect(result.paidToDate.gross).toBe(500);
+      expect(result.paidToDate).toBe(500);
       expect(result.periods[0].periodLabel).toBe('01/2024');
       expect(result.periods[0].status).toBe('incurred');
-      expect(result.current?.annual.gross).toBe(500);
+      expect(result.current?.annual).toBe(500);
     });
 
     it('BugFix-08: frequency switch – increase from 06/2024 flows into all following periods', async () => {
@@ -812,16 +801,14 @@ describe('CostTrackingService', () => {
         [
           {
             id: 'c1',
-            grossAmount: 100,
-            netAmount: null,
+            amount: 100,
             frequency: 'MONTHLY',
             validFrom: new Date('2024-01-15'),
             validTo: new Date('2024-06-14'),
           },
           {
             id: 'c2',
-            grossAmount: 120,
-            netAmount: null,
+            amount: 120,
             frequency: 'MONTHLY',
             validFrom: new Date('2024-06-15'),
             validTo: null,
@@ -837,11 +824,11 @@ describe('CostTrackingService', () => {
       );
 
       // 5 periods of 100 (01-05/2024) + 3 periods of 120 (06-08/2024).
-      expect(result.paidToDate.gross).toBe(5 * 100 + 3 * 120);
+      expect(result.paidToDate).toBe(5 * 100 + 3 * 120);
       expect(result.periods[5].periodLabel).toBe('06/2024');
-      expect(result.periods[5].amount.gross).toBe(120);
-      expect(result.periods[6].amount.gross).toBe(120);
-      expect(result.current?.amount.gross).toBe(120);
+      expect(result.periods[5].amount).toBe(120);
+      expect(result.periods[6].amount).toBe(120);
+      expect(result.current?.amount).toBe(120);
     });
 
     it('BugFix-08: cost increase mid-year (increase-mid-year)', async () => {
@@ -850,16 +837,14 @@ describe('CostTrackingService', () => {
         [
           {
             id: 'c1',
-            grossAmount: 100,
-            netAmount: null,
+            amount: 100,
             frequency: 'MONTHLY',
             validFrom: new Date('2024-01-01'),
             validTo: new Date('2024-05-31'),
           },
           {
             id: 'c2',
-            grossAmount: 150,
-            netAmount: null,
+            amount: 150,
             frequency: 'MONTHLY',
             validFrom: new Date('2024-06-01'),
             validTo: null,
@@ -875,9 +860,9 @@ describe('CostTrackingService', () => {
       );
 
       // All 12 periods of 2024 started: 5 * 100 + 7 * 150.
-      expect(result.paidToDate.gross).toBe(5 * 100 + 7 * 150);
-      expect(result.periods[4].amount.gross).toBe(100);
-      expect(result.periods[5].amount.gross).toBe(150);
+      expect(result.paidToDate).toBe(5 * 100 + 7 * 150);
+      expect(result.periods[4].amount).toBe(100);
+      expect(result.periods[5].amount).toBe(150);
     });
 
     it('scales entries whose frequency differs from the billing frequency', async () => {
@@ -888,8 +873,7 @@ describe('CostTrackingService', () => {
         [
           {
             id: 'c1',
-            grossAmount: 300,
-            netAmount: null,
+            amount: 300,
             frequency: 'QUARTERLY',
             validFrom: new Date('2024-01-01'),
             validTo: null,
@@ -904,9 +888,9 @@ describe('CostTrackingService', () => {
         new Date('2024-03-20T12:00:00.000Z'),
       );
 
-      expect(result.paidToDate.gross).toBe(300);
+      expect(result.paidToDate).toBe(300);
       for (const period of result.periods.slice(0, 3)) {
-        expect(period.amount.gross).toBe(100);
+        expect(period.amount).toBe(100);
       }
     });
 
@@ -916,8 +900,7 @@ describe('CostTrackingService', () => {
         [
           {
             id: 'c1',
-            grossAmount: 100,
-            netAmount: null,
+            amount: 100,
             frequency: 'MONTHLY',
             validFrom: new Date('2024-01-31'),
             validTo: null,
@@ -950,7 +933,7 @@ describe('CostTrackingService', () => {
         new Date('2024-03-20T12:00:00.000Z'),
       );
 
-      expect(result.paidToDate).toEqual({ gross: null, net: null });
+      expect(result.paidToDate).toEqual(null);
       expect(result.current).toBeNull();
       expect(result.periods).toEqual([]);
     });
@@ -975,7 +958,7 @@ describe('CostTrackingService', () => {
           type: 'HAFTPFLICHT',
           insurerName: 'P1',
           costEntries: [
-            { id: 'c1', grossAmount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: null },
+            { id: 'c1', amount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: null },
           ],
         },
         {
@@ -984,7 +967,7 @@ describe('CostTrackingService', () => {
           type: 'HAUSRAT',
           insurerName: 'P2',
           costEntries: [
-            { id: 'c2', grossAmount: 500, frequency: 'ANNUAL', validFrom: new Date('2024-01-01'), validTo: null },
+            { id: 'c2', amount: 500, frequency: 'ANNUAL', validFrom: new Date('2024-01-01'), validTo: null },
           ],
         },
       ]);
@@ -997,17 +980,17 @@ describe('CostTrackingService', () => {
 
       expect(result.policyCount).toBe(2);
       // p1: 15 monthly periods started (01/2024-03/2025) -> 1500, p2: 2 yearly periods -> 1000.
-      expect(result.totals.paidToDate).toEqual({ gross: 2500, net: null });
-      expect(result.totals.perYear).toEqual({ gross: 1700, net: null });
+      expect(result.totals.paidToDate).toEqual(2500);
+      expect(result.totals.perYear).toEqual(1700);
       // 100 (MONTHLY) + 500/12 (ANNUAL) = 141.67.
-      expect(result.totals.perMonth).toEqual({ gross: 141.67, net: null });
+      expect(result.totals.perMonth).toEqual(141.67);
       // Historical buckets: 2024 -> 1200 + 500, 2025 -> 3 * 100 + 500.
       expect(result.perYear).toEqual([
-        { year: 2024, amount: { gross: 1700, net: null } },
-        { year: 2025, amount: { gross: 800, net: null } },
+        { year: 2024, amount: 1700 },
+        { year: 2025, amount: 800 },
       ]);
-      expect(result.policies[0].paidToDate).toEqual({ gross: 1500, net: null });
-      expect(result.policies[0].perMonth).toEqual({ gross: 100, net: null });
+      expect(result.policies[0].paidToDate).toEqual(1500);
+      expect(result.policies[0].perMonth).toEqual(100);
     });
 
     it('bugFix-08: perYear bucket accounts for a cost increase mid-year', async () => {
@@ -1019,8 +1002,8 @@ describe('CostTrackingService', () => {
           type: 'KFZ',
           insurerName: 'P1',
           costEntries: [
-            { id: 'c1', grossAmount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: new Date('2024-06-30') },
-            { id: 'c2', grossAmount: 150, frequency: 'MONTHLY', validFrom: new Date('2024-07-01'), validTo: null },
+            { id: 'c1', amount: 100, frequency: 'MONTHLY', validFrom: new Date('2024-01-01'), validTo: new Date('2024-06-30') },
+            { id: 'c2', amount: 150, frequency: 'MONTHLY', validFrom: new Date('2024-07-01'), validTo: null },
           ],
         },
       ]);
@@ -1032,8 +1015,8 @@ describe('CostTrackingService', () => {
       );
 
       // 6 * 100 + 6 * 150 = 1500 in the year 2024.
-      expect(result.perYear).toEqual([{ year: 2024, amount: { gross: 1500, net: null } }]);
-      expect(result.totals.paidToDate).toEqual({ gross: 1500, net: null });
+      expect(result.perYear).toEqual([{ year: 2024, amount: 1500 }]);
+      expect(result.totals.paidToDate).toEqual(1500);
     });
 
     it('ignores archived policies', async () => {
@@ -1047,8 +1030,8 @@ describe('CostTrackingService', () => {
       );
 
       expect(result.policyCount).toBe(0);
-      expect(result.totals.paidToDate).toEqual({ gross: null, net: null });
-      expect(result.totals.perYear).toEqual({ gross: null, net: null });
+      expect(result.totals.paidToDate).toEqual(null);
+      expect(result.totals.perYear).toEqual(null);
       expect(mockDb.insurancePolicy.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { householdId, archivedAt: null },
@@ -1066,7 +1049,7 @@ describe('CostTrackingService', () => {
           type: 'HAUSRAT',
           insurerName: 'P2',
           costEntries: [
-            { id: 'c2', grossAmount: 1000, frequency: 'ANNUAL', validFrom: new Date('2024-01-01'), validTo: null },
+            { id: 'c2', amount: 1000, frequency: 'ANNUAL', validFrom: new Date('2024-01-01'), validTo: null },
           ],
         },
       ]);
@@ -1078,9 +1061,9 @@ describe('CostTrackingService', () => {
       );
 
       expect(result.policyCount).toBe(2);
-      expect(result.policies[0].paidToDate).toEqual({ gross: null, net: null });
+      expect(result.policies[0].paidToDate).toEqual(null);
       expect(result.policies[0].entryCount).toBe(0);
-      expect(result.totals.paidToDate).toEqual({ gross: 1000, net: null });
+      expect(result.totals.paidToDate).toEqual(1000);
     });
 
     it('READ_ONLY: sums only explicitly shared policies (AP-16)', async () => {

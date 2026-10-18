@@ -44,19 +44,19 @@ describe('CostTrackingController', () => {
   it('create delegates to the service and returns the result', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
-    const expected = { id: entryId, grossAmount: 1200 };
+    const expected = { id: entryId, amount: 1200 };
     service.create.mockResolvedValue(expected);
 
     const result = await controller.create(householdId, policyId, mockUser, {
       validFrom: '2025-01-01',
-      grossAmount: 1200,
+      amount: 1200,
       frequency: PaymentFrequency.MONTHLY,
     });
 
     expect(result).toEqual(expected);
     expect(service.create).toHaveBeenCalledWith(householdId, mockUser.id, policyId, {
       validFrom: '2025-01-01',
-      grossAmount: 1200,
+      amount: 1200,
       frequency: PaymentFrequency.MONTHLY,
     });
   });
@@ -97,15 +97,15 @@ describe('CostTrackingController', () => {
   it('update delegates to the service', async () => {
     const service = createMockService();
     const controller = new CostTrackingController(service as never);
-    service.update.mockResolvedValue({ id: entryId, grossAmount: 1500 });
+    service.update.mockResolvedValue({ id: entryId, amount: 1500 });
 
     const result = await controller.update(householdId, policyId, entryId, mockUser, {
-      grossAmount: 1500,
+      amount: 1500,
     });
 
-    expect(result.grossAmount).toBe(1500);
+    expect(result.amount).toBe(1500);
     expect(service.update).toHaveBeenCalledWith(householdId, mockUser.id, policyId, entryId, {
-      grossAmount: 1500,
+      amount: 1500,
     });
   });
 

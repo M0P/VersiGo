@@ -68,12 +68,12 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     setupMemberships([{ userId: userA.id, householdId: householdA, role: 'OWNER' }]);
     mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyInA, householdId: householdA });
     mockDb.policyCostEntry.create.mockResolvedValue({
-      id: 'ce-1', policyId: policyInA, grossAmount: 100, frequency: 'MONTHLY',
+      id: 'ce-1', policyId: policyInA, amount: 100, frequency: 'MONTHLY',
     });
 
     const result = await service.create(householdA, userA.id, policyInA, {
       validFrom: '2025-01-01',
-      grossAmount: 100,
+      amount: 100,
       frequency: PaymentFrequency.MONTHLY,
     });
 
@@ -88,7 +88,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     await expect(
       service.create(householdB, userA.id, policyInB, {
         validFrom: '2025-01-01',
-        grossAmount: 100,
+        amount: 100,
         frequency: PaymentFrequency.MONTHLY,
       }),
     ).rejects.toThrow(ForbiddenException);
@@ -129,7 +129,7 @@ describe('Cost-Tracking Household-Isolation (Integration)', () => {
     });
 
     await expect(
-      service.update(householdA, userB.id, policyInA, 'ce-1', { grossAmount: 999 }),
+      service.update(householdA, userB.id, policyInA, 'ce-1', { amount: 999 }),
     ).rejects.toThrow(ForbiddenException);
   });
 
