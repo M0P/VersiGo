@@ -177,6 +177,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
       .then(() => {
         if (seq !== requestSeq.current) return;
         setNewEntry({ validFrom: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '' });
+        // reload() increments requestSeq itself – the .finally below must
+        // therefore NOT gate setSubmitting(false) on the captured seq
+        // (BugFix-22: after a successful save the button stayed blocked).
         reload();
       })
       .catch(() => {
@@ -184,7 +187,12 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
         setActionError(t('costs.createErrorDetail'));
       })
       .finally(() => {
-        if (seq === requestSeq.current) setSubmitting(false);
+        // The submit lock belongs to this promise chain only: exactly one
+        // submit can be active at a time (both buttons are disabled while
+        // `submitting` is true), so it is cleared unconditionally – like
+        // every other form in the codebase. Only data writes above remain
+        // seq-guarded.
+        setSubmitting(false);
       });
   }
 
@@ -239,6 +247,8 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
         if (seq !== requestSeq.current) return;
         setEditingId(null);
         setEditingOriginal(null);
+        // reload() increments requestSeq – see handleCreate: the .finally
+        // below must not depend on the captured seq (BugFix-22).
         reload();
       })
       .catch(() => {
@@ -246,7 +256,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
         setActionError(t('costs.updateErrorDetail'));
       })
       .finally(() => {
-        if (seq === requestSeq.current) setSubmitting(false);
+        // Unconditional UI-lock reset (BugFix-22); data writes stay
+        // seq-guarded above.
+        setSubmitting(false);
       });
   }
 
