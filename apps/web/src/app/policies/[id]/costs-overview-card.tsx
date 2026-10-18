@@ -201,13 +201,11 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
       .then(() => {
         if (seq !== requestSeq.current) return;
         setNewEntry({ validFrom: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '' });
-<<<<<<< HEAD
+        // Successful save also clears any previous amount-validation error.
+        setNewAmountError(null);
         // reload() increments requestSeq itself – the .finally below must
         // therefore NOT gate setSubmitting(false) on the captured seq
         // (BugFix-22: after a successful save the button stayed blocked).
-=======
-        setNewAmountError(null);
->>>>>>> d980afbbe06fa15cb1e735c49413095b19c57e7d
         reload();
       })
       .catch(() => {
