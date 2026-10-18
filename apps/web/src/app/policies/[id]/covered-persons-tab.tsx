@@ -16,6 +16,10 @@ import {
   DEFAULT_COVERED_SUBJECT_TYPE,
   coveredSubjectIcon,
   coveredSubjectLabelKey,
+  coveredSubjectNameLabelKey,
+  coveredSubjectNamePlaceholderKey,
+  coveredSubjectRelationLabelKey,
+  coveredSubjectRelationPlaceholderKey,
   isBirthDateRelevant,
   normalizeCoveredSubjectType,
   type CoveredSubjectType,
@@ -264,19 +268,26 @@ export default function CoveredPersonsTab({ policyId }: { policyId: string }): R
                 ))}
               </Select>
             </FormField>
-            <FormField label={t('policies.personName')} required>
+            {/* AP-24 (§5.1): label, placeholder and (via FormField's
+                htmlFor/id association) the accessible name follow the
+                selected kind and switch immediately – entered values are
+                kept. An extra aria-label is deliberately NOT set: it would
+                override the visible label instead of reinforcing it. */}
+            <FormField label={t(coveredSubjectNameLabelKey(form.subjectType))} required>
               <Input
                 value={form.personName}
                 onChange={(e) => setForm({ ...form, personName: e.target.value })}
                 required
-                placeholder={t('policies.personNamePlaceholder')}
+                placeholder={t(coveredSubjectNamePlaceholderKey(form.subjectType))}
               />
             </FormField>
-            <FormField label={`${t('policies.relationType')} (${t('common.optional')})`}>
+            {/* AP-24 (§5.2): still technically optional, but without the
+                "(Optional)" suffix in the label. */}
+            <FormField label={t(coveredSubjectRelationLabelKey(form.subjectType))}>
               <Input
                 value={form.relationType}
                 onChange={(e) => setForm({ ...form, relationType: e.target.value })}
-                placeholder={t('policies.relationTypePlaceholder')}
+                placeholder={t(coveredSubjectRelationPlaceholderKey(form.subjectType))}
               />
             </FormField>
             {isBirthDateRelevant(form.subjectType) && (

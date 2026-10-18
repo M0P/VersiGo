@@ -89,7 +89,8 @@ Konfigurationswerte, Secrets, Metadaten oder Änderungsmöglichkeiten preis.
 | `PAPERLESS_ENABLED` | boolean | runtime | `false` | `true`/`false` |
 | `PAPERLESS_URL` | string | runtime | – | URL; Connectivity-Test |
 | `PAPERLESS_API_TOKEN` | string | **secret** | – | verschlüsselt; Connectivity-Test |
-| `PAPERLESS_TAG_SYNC_INTERVAL_MS` | number | runtime | `300000` | 30.000–86.400.000 (ms) |
+| `PAPERLESS_TAG_SYNC_ENABLED` | boolean | runtime | `true` | `true`/`false` |
+| `PAPERLESS_TAG_SYNC_INTERVAL_MS` | number | runtime | `300000` | 30.000–86.400.000 (ms); Auswahlwerte 5/15/30 Min., 1/6/24 Std. |
 
 #### Connectivity / SSRF relaxation (BugFix-06, opt-in)
 

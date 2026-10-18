@@ -42,3 +42,56 @@ export function coveredSubjectLabelKey(type: CoveredSubjectType): string {
 export function isBirthDateRelevant(type: CoveredSubjectType): boolean {
   return type === 'PERSON';
 }
+
+// --- AP-24 (§5): type-dependent field labels -------------------------------
+//
+// The name field used to be statically called "Personenname" even when an
+// object (car, house, ...) was being recorded. Every wording of that field –
+// label, placeholder and accessible name – is therefore derived from the
+// selected type and switches immediately when the type changes.
+
+const NAME_LABEL_KEYS: Record<CoveredSubjectType, string> = {
+  PERSON: 'policies.subjectNamePERSON',
+  OBJECT: 'policies.subjectNameOBJECT',
+};
+
+const NAME_PLACEHOLDER_KEYS: Record<CoveredSubjectType, string> = {
+  PERSON: 'policies.subjectNamePlaceholderPERSON',
+  OBJECT: 'policies.subjectNamePlaceholderOBJECT',
+};
+
+/** i18n key of the name field label ("Name der Person" / "Bezeichnung des Objekts"). */
+export function coveredSubjectNameLabelKey(type: CoveredSubjectType): string {
+  return NAME_LABEL_KEYS[type];
+}
+
+export function coveredSubjectNamePlaceholderKey(type: CoveredSubjectType): string {
+  return NAME_PLACEHOLDER_KEYS[type];
+}
+
+/**
+ * AP-24 (§5.2): the relation field stays technically optional, but the label
+ * no longer spells that out.
+ *
+ * For an object the word "Beziehung" is misleading – an insured car has no
+ * relation to the policyholder in the family sense. Objects therefore use
+ * "Rolle des Objekts" (e.g. Zweitwagen, Mietobjekt), which is documented in
+ * the user documentation rather than being implied by the label.
+ */
+const RELATION_LABEL_KEYS: Record<CoveredSubjectType, string> = {
+  PERSON: 'policies.subjectRelationPERSON',
+  OBJECT: 'policies.subjectRelationOBJECT',
+};
+
+const RELATION_PLACEHOLDER_KEYS: Record<CoveredSubjectType, string> = {
+  PERSON: 'policies.subjectRelationPlaceholderPERSON',
+  OBJECT: 'policies.subjectRelationPlaceholderOBJECT',
+};
+
+export function coveredSubjectRelationLabelKey(type: CoveredSubjectType): string {
+  return RELATION_LABEL_KEYS[type];
+}
+
+export function coveredSubjectRelationPlaceholderKey(type: CoveredSubjectType): string {
+  return RELATION_PLACEHOLDER_KEYS[type];
+}

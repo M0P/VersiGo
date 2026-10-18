@@ -14,7 +14,7 @@ import CoverageSummarySection from './coverage-summary-section';
 import CoveredPersonsTab from './covered-persons-tab';
 import DocumentsTab from './documents-tab';
 import PortalLinksTab from './portal-links-tab';
-import CostsOverviewCard from './costs-overview-card';
+import CostsTab from './costs-tab';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 
@@ -244,7 +244,14 @@ export default function PolicyDetailPage(): ReactElement {
 
       case 'costs':
         // BugFix-05 (finding 3): embedded costs overview instead of a link card.
-        return <CostsOverviewCard policyId={policyId} />;
+        // AP-24 (§4.1): plus the sidebar with the BILLING documents; the empty
+        // state links straight to the classification in the documents tab.
+        return (
+          <CostsTab
+            policyId={policyId}
+            onOpenClassification={() => setActiveTab('documents')}
+          />
+        );
 
       default:
         return null;

@@ -3,11 +3,15 @@ import { HttpService } from '@nestjs/axios';
 import { SettingsResolverService } from '@versigo/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import type {
-  IAIAdapter,
-  AiExtractResult,
-  AiSummarizeResult,
-  AiHealthStatus,
+import {
+  COST_EXTRACTION_SYSTEM_PROMPT,
+  COVERAGE_SUMMARY_SYSTEM_PROMPT,
+  type IAIAdapter,
+  type AiCostExtractionResult,
+  type AiExtractResult,
+  type AiSummarizeResult,
+  type AiSummarizeOptions,
+  type AiHealthStatus,
 } from '@versigo/foundation';
 import { tryParseExtractionResponse } from './ai-json.helper';
 import { classifyAiHealthError } from './ai-health-error.helper';
@@ -36,11 +40,6 @@ Antworte NUR mit einem gueltigen JSON-Objekt, das folgende Felder enthalten kann
 
 Jedes Feld muss einen confidence-Wert zwischen 0 und 1 haben.
 Antworte NUR mit JSON, keinem anderen Text.`;
-
-const SUMMARIZE_SYSTEM_PROMPT = `Du fasst Versicherungsvertraege zusammen.
-Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format.
-Wenn vorhanden, gib Deckungssummen, Ausschluesse, Selbstbehalte und Kuendigungsfristen an.
-Halte die Zusammenfassung auf max. 500 Zeichen.`;
 
 interface OllamaRuntimeConfig {
   baseUrl: string;
@@ -115,10 +114,28 @@ export class OllamaAdapter implements IAIAdapter {
       .join('\n\n')}\n\nAntworte NUR mit JSON.`;
   }
 
-  private buildSummarizePrompt(documentContents: string[]): string {
-    return `Fasse folgende Versicherungsdokumente zusammen:\n\n${documentContents
+  private buildSummarizePrompt(documentContents: string[], options?: AiSummarizeOptions): string {
+    const base = `Fasse folgende Versicherungsdokumente zusammen:\n\n${documentContents
       .map((content, i) => `--- Dokument ${i + 1} ---\n${content}`)
       .join('\n\n')}`;
+    // AP-24 (§3.2): the single bounded retry explains what was wrong with the
+    // previous answer – and only that, never additional document content.
+    if (options?.repairHint) {
+      return `${base}\n\nKORREKTURHINWEIS: ${options.repairHint}`;
+    }
+    return base;
+  }
+
+  /** AP-24 (§4.2): prompt for a single billing document. */
+  private buildCostExtractionPrompt(
+    documentContent: string,
+    options?: AiSummarizeOptions,
+  ): string {
+    const base = `Lies die Beitragsdaten aus folgendem Dokument:\n\n--- Dokument ---\n${documentContent}`;
+    if (options?.repairHint) {
+      return `${base}\n\nKORREKTURHINWEIS: ${options.repairHint}`;
+    }
+    return base;
   }
 
   async extractContractFacts(
@@ -154,6 +171,7 @@ export class OllamaAdapter implements IAIAdapter {
   async summarizeCoverage(
     documentContents: string[],
     _policyId: string,
+    options?: AiSummarizeOptions,
   ): Promise<AiSummarizeResult | null> {
     void _policyId;
 
@@ -161,8 +179,8 @@ export class OllamaAdapter implements IAIAdapter {
 
     const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
-      SUMMARIZE_SYSTEM_PROMPT,
-      this.buildSummarizePrompt(documentContents),
+      COVERAGE_SUMMARY_SYSTEM_PROMPT,
+      this.buildSummarizePrompt(documentContents, options),
       config,
     );
 
@@ -173,6 +191,33 @@ export class OllamaAdapter implements IAIAdapter {
       sourceDocumentRefs: [],
       model: config.model,
     };
+  }
+
+  /**
+   * AP-24 (§4.2): reads cost data from a single billing document.
+   *
+   * The answer stays raw here on purpose – only `AiAssistService` validates
+   * and converts it, so every adapter shares exactly one contract.
+   */
+  async extractCostFromDocument(
+    documentContent: string,
+    _policyId: string,
+    options?: AiSummarizeOptions,
+  ): Promise<AiCostExtractionResult | null> {
+    void _policyId;
+
+    if (documentContent.trim() === '') return null;
+
+    const config = await this.runtimeConfig();
+    const raw = await this.chatCompletion(
+      COST_EXTRACTION_SYSTEM_PROMPT,
+      this.buildCostExtractionPrompt(documentContent, options),
+      config,
+    );
+
+    if (!raw) return null;
+
+    return { costJson: raw, model: config.model };
   }
 
   async healthCheck(): Promise<boolean> {

@@ -50,6 +50,16 @@ export class CreateCostEntryDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  /**
+   * AP-24 (§4.2): billing document this entry was derived from.
+   *
+   * Optional – manually typed entries have no source. The service verifies
+   * that the document belongs to the policy and is classified as BILLING.
+   */
+  @IsOptional()
+  @IsString()
+  sourceDocumentId?: string;
 }
 
 export class UpdateCostEntryDto {

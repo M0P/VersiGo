@@ -90,6 +90,10 @@
 - frequency
 - bookingSource
 - note
+- sourceDocumentId (AP-24 §4.2; nullable FK -> `policy_documents.id`,
+  `ON DELETE SET NULL` – verweist auf das Abrechnungsdokument, aus dem der
+  Eintrag erstellt wurde, damit Doppelerfassungen auffallen; `null` bei
+  manuell erfassten Einträgen)
 
 ### PolicyDocument
 - id
@@ -105,6 +109,12 @@
 - linkOriginTag (AP-22; bool, Default `false` – Dokument trägt den konfigurierten Paperless-Tag)
 - taggingStatus (AP-22; nullable `PENDING` | `APPLIED` | `FAILED` – Stand der externen Tag-Zuweisung)
 - taggingErrorCode (AP-22; nullable, nicht sensitiver Fehlercode der Tag-Zuweisung)
+- documentClass (AP-24 §2; enum `DocumentClass`: `CONTRACT`, `BILLING`,
+  `CORRESPONDENCE`, `CLAIM`, `OTHER`, `UNCLASSIFIED`; Default `UNCLASSIFIED`
+  – bestehende Dokumente erhalten den Wert bei der Migration. Die
+  Tag-Synchronisation schreibt das Feld nie an, die Klassifikation überlebt
+  also jeden Abgleich. `CONTRACT` speist die optionale KI-Leistungs-
+  zusammenfassung, `BILLING` die Kosten-Seitenleiste)
 
 ### PolicyPaperlessTag (AP-22)
 - id
@@ -180,6 +190,10 @@
 - providerKey
 - model
 - summaryMarkdown
+- summaryJson (AP-24 §3.2; nullable `Json?` – validiertes, strukturiertes
+  Zusammenfassungsdokument der Format-Version 1; `null` bei Zeilen, die vor
+  AP-24 geschrieben wurden. Solche Altzeilen werden weiterhin aus
+  `summaryMarkdown` dargestellt)
 - sourceDocumentRefsJson
 - createdAt
 

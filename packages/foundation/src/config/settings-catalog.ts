@@ -42,6 +42,14 @@ export interface SettingDefinition {
   defaultValue?: string | number | boolean;
   /** For string values: allowed choices (e.g. provider names). */
   allowedValues?: readonly string[];
+  /**
+   * For number values: predefined choices offered by the admin UI.
+   *
+   * Presets are a convenience, not a restriction: the stored value is still
+   * validated against `min`/`max`, so a free value remains possible exactly
+   * as long as it passes those bounds (AP-24 §1.2).
+   */
+  presets?: readonly number[];
   /** Numeric lower/upper bounds. */
   min?: number;
   max?: number;
@@ -218,6 +226,21 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     permission: 'ADMIN',
   },
   {
+    key: 'PAPERLESS_TAG_SYNC_ENABLED',
+    envVar: 'PAPERLESS_TAG_SYNC_ENABLED',
+    category: 'runtime',
+    type: 'boolean',
+    group: 'Paperless-ngx',
+    description:
+      'Schaltet den automatischen Hintergrundabgleich der tag-basierten ' +
+      'Dokumentzuordnung ein oder aus. Ausgeschaltet laufen keine neuen ' +
+      'automatischen Abgleiche an (laufende Jobs laufen zu Ende, manuelle ' +
+      'Abgleiche bleiben moeglich). Aenderungen wirken ohne Neustart.',
+    defaultValue: true,
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
+  {
     key: 'PAPERLESS_TAG_SYNC_INTERVAL_MS',
     envVar: 'PAPERLESS_TAG_SYNC_INTERVAL_MS',
     category: 'runtime',
@@ -225,8 +248,12 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     group: 'Paperless-ngx',
     description:
       'Intervall des regelmaessigen Hintergrundabgleichs fuer die tag-basierte ' +
-      'Dokumentzuordnung in Millisekunden. Wird bei jedem Abgleich-Tick neu gelesen.',
+      'Dokumentzuordnung in Millisekunden. Wird bei jedem Abgleich-Tick neu gelesen, ' +
+      'eine Aenderung wirkt ohne Neustart.',
     defaultValue: 300_000,
+    // AP-24 (§1.2): predefined choices (5/15/30 min, 1/6/24 h). Free values
+    // stay allowed – they are validated against min/max below.
+    presets: [300_000, 900_000, 1_800_000, 3_600_000, 21_600_000, 86_400_000],
     min: 30_000,
     max: 86_400_000,
     validationHint: 'Zwischen 30.000 ms (30 s) und 86.400.000 ms (24 h).',

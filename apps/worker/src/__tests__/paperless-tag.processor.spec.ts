@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { paperlessTagSyncStaggerMs } from '@versigo/foundation';
 import { PaperlessTagProcessor } from '../paperless-tag.processor';
 
 const policyId = '33333333-3333-4333-3333-333333333333';
@@ -43,7 +44,10 @@ function createMockQueue(): any {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createMockSettings(): any {
-  return { getEffectiveNumber: vi.fn().mockResolvedValue(300_000) };
+  return {
+    getEffectiveNumber: vi.fn().mockResolvedValue(300_000),
+    getEffectiveBoolean: vi.fn().mockResolvedValue(true),
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -798,6 +802,74 @@ describe('PaperlessTagProcessor', () => {
       const threshold = where.OR[1].lastSyncedAt.lt as Date;
       expect(Date.now() - threshold.getTime()).toBeGreaterThanOrEqual(59_000);
     });
+
+    // AP-24 (§1.2): switching the background sync off stops *new* runs
+    // without a restart, but must neither drop durable jobs nor abort
+    // anything that is already queued.
+    it('keeps re-dispatching durable jobs but schedules nothing new when disabled', async () => {
+      settings.getEffectiveBoolean.mockResolvedValue(false);
+      db.paperlessTagJob.findMany.mockResolvedValue([
+        { id: 'job-pending', policyId, kind: 'SYNC_POLICY' },
+      ]);
+      db.policyPaperlessTag.findMany.mockResolvedValue([{ policyId, configVersion: 3 }]);
+
+      await processor.process(job('reconcile', {}));
+
+      expect(queue.add).toHaveBeenCalledWith(
+        'sync-policy',
+        { jobId: 'job-pending', policyId },
+        expect.anything(),
+      );
+      // The due-check is not even performed.
+      expect(db.policyPaperlessTag.findMany).not.toHaveBeenCalled();
+      expect(db.paperlessTagJob.create).not.toHaveBeenCalled();
+    });
+
+    it('treats a missing enable flag as enabled (catalog default)', async () => {
+      settings.getEffectiveBoolean.mockResolvedValue(undefined);
+      db.paperlessTagJob.findMany.mockResolvedValue([]);
+      db.policyPaperlessTag.findMany.mockResolvedValue([{ policyId, configVersion: 3 }]);
+      db.paperlessTagJob.findFirst.mockResolvedValue(null);
+      db.paperlessTagJob.create.mockResolvedValue({ id: 'job-new' });
+
+      await processor.process(job('reconcile', {}));
+
+      expect(db.paperlessTagJob.create).toHaveBeenCalledTimes(1);
+    });
+
+    // AP-24 (§1.2): insurances that became due in the same tick must not all
+    // start at the same instant.
+    it('staggers the start time by the deterministic per-policy offset', async () => {
+      const intervalMs = 300_000;
+      const stagger = paperlessTagSyncStaggerMs(policyId, intervalMs);
+      settings.getEffectiveNumber.mockResolvedValue(intervalMs);
+      db.paperlessTagJob.findMany.mockResolvedValue([]);
+      db.paperlessTagJob.findFirst.mockResolvedValue(null);
+      db.paperlessTagJob.create.mockResolvedValue({ id: 'job-new' });
+
+      // Just inside the interval: the stagger has not elapsed yet.
+      db.policyPaperlessTag.findMany.mockResolvedValue([
+        {
+          policyId,
+          configVersion: 3,
+          lastSyncedAt: new Date(Date.now() - intervalMs - stagger + 5_000),
+        },
+      ]);
+      await processor.process(job('reconcile', {}));
+      expect(db.paperlessTagJob.create).not.toHaveBeenCalled();
+
+      // Past interval + stagger: now the policy is really due.
+      db.paperlessTagJob.create.mockClear();
+      db.policyPaperlessTag.findMany.mockResolvedValue([
+        {
+          policyId,
+          configVersion: 3,
+          lastSyncedAt: new Date(Date.now() - intervalMs - stagger - 5_000),
+        },
+      ]);
+      await processor.process(job('reconcile', {}));
+      expect(db.paperlessTagJob.create).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('returns an error result for an unknown job name', async () => {
@@ -805,5 +877,265 @@ describe('PaperlessTagProcessor', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('UNKNOWN_JOB');
+  });
+
+  // AP-24 (§2.2/§2.3): the document class belongs to Insura, not to
+  // Paperless. A reconciliation may add/update/archive link rows, but it
+  // must never write `documentClass` – otherwise a sync would silently
+  // throw away a user's classification.
+  describe('AP-24 §2: classification survives the tag sync', () => {
+    /** Every write the processor performs against policy_documents. */
+    function documentWrites() {
+      return [
+        ...db.policyDocument.update.mock.calls.map((c: unknown[]) => c[0]),
+        ...db.policyDocument.updateMany.mock.calls.map((c: unknown[]) => c[0]),
+        ...db.policyDocument.create.mock.calls.map((c: unknown[]) => c[0]),
+      ] as { data?: Record<string, unknown> }[];
+    }
+
+    it('never writes documentClass while reconciling', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        { paperlessId: 100, title: 'Police 2026' },
+      ]);
+      db.policyDocument.findMany
+        // Existing rows: one already classified (must survive), one to update.
+        .mockResolvedValueOnce([
+          {
+            id: 'doc-classified',
+            storageRef: '100',
+            linkOriginManual: true,
+            linkOriginTag: false,
+            fileName: 'Police 2026',
+            documentDate: null,
+            mimeType: null,
+            documentClass: 'BILLING',
+          },
+          {
+            id: 'doc-lost-tag-only',
+            storageRef: '200',
+            linkOriginManual: false,
+            linkOriginTag: true,
+          },
+        ])
+        // Backfill query for manual links.
+        .mockResolvedValueOnce([]);
+      db.policyDocument.create.mockResolvedValue({ id: 'doc-new' });
+
+      const result = await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+      expect(result.success).toBe(true);
+
+      // The classified row is touched (origin update)…
+      expect(db.policyDocument.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'doc-classified' } }),
+      );
+      // …but no write of any kind carries the classification.
+      const writes = documentWrites();
+      expect(writes.length).toBeGreaterThan(0);
+      for (const write of writes) {
+        expect(write.data ?? {}).not.toHaveProperty('documentClass');
+      }
+    });
+
+    it('lets a freshly synced document fall back to the UNCLASSIFIED default', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        { paperlessId: 100, title: 'Police 2026' },
+      ]);
+      db.policyDocument.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      db.policyDocument.create.mockResolvedValue({ id: 'doc-new' });
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      expect(db.policyDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.not.objectContaining({ documentClass: expect.anything() }),
+        }),
+      );
+    });
+  });
+
+  // AP-24 (§1.1): the UI polls these counters, so their lifecycle is a
+  // contract, not an implementation detail.
+  describe('progress counters (AP-24 §1.1)', () => {
+    /** All `paperlessTagJob.update` payloads written during one run. */
+    function jobUpdates(): Record<string, unknown>[] {
+      return db.paperlessTagJob.update.mock.calls.map(
+        (call: unknown[]) => (call[0] as { data: Record<string, unknown> }).data,
+      );
+    }
+
+    it('clears the previous run and publishes the total when the run starts', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        { paperlessId: 1, title: 'A' },
+        { paperlessId: 2, title: 'B' },
+      ]);
+      db.policyDocument.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      const updates = jobUpdates();
+      // The RUNNING transition must wipe the stale counters of an earlier run.
+      expect(updates).toContainEqual(
+        expect.objectContaining({
+          status: 'RUNNING',
+          processedCount: 0,
+          totalCount: null,
+          addedCount: 0,
+          removedCount: 0,
+          unchangedCount: 0,
+        }),
+      );
+      // The total becomes known as soon as the remote list is in – before the
+      // reconciliation walks it.
+      expect(updates).toContainEqual({ totalCount: 2 });
+    });
+
+    it('persists added/unchanged counts together with the terminal state', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([
+        { paperlessId: 1, title: 'Neu' },
+        { paperlessId: 2, title: 'Unveraendert' },
+      ]);
+      db.policyDocument.findMany.mockResolvedValueOnce([
+        {
+          id: 'doc-existing',
+          storageRef: '2',
+          linkOriginManual: false,
+          linkOriginTag: true,
+          fileName: 'Unveraendert',
+          documentDate: null,
+          mimeType: null,
+        },
+      ]);
+      db.policyDocument.create.mockResolvedValue({ id: 'doc-new' });
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      expect(db.paperlessTagJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'COMPLETED',
+            addedCount: 1,
+            removedCount: 0,
+            unchangedCount: 1,
+            processedCount: 2,
+          }),
+        }),
+      );
+    });
+
+    it('counts removed links when the tag membership shrank', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue([]);
+      db.policyDocument.findMany.mockResolvedValueOnce([
+        {
+          id: 'doc-lost',
+          storageRef: '99',
+          linkOriginManual: false,
+          linkOriginTag: true,
+          fileName: 'Alt',
+          documentDate: null,
+          mimeType: null,
+        },
+      ]);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      expect(db.paperlessTagJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'COMPLETED',
+            removedCount: 1,
+            addedCount: 0,
+            unchangedCount: 0,
+            processedCount: 0,
+          }),
+        }),
+      );
+    });
+
+    it('flushes the intermediate count during the walk without one write per document', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      // 25 remote documents: the stride of 10 flushes 10 and 20, the final
+      // values are written with the COMPLETED update.
+      client.listDocumentsByTag.mockResolvedValue(
+        Array.from({ length: 25 }, (_, i) => ({ paperlessId: i + 1, title: `Doc ${i + 1}` })),
+      );
+      db.policyDocument.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+      db.policyDocument.create.mockImplementation(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (args: any) => Promise.resolve({ id: `doc-${args.data.storageRef}` }),
+      );
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      const progressWrites = jobUpdates().filter(
+        (data) => 'processedCount' in data && !('status' in data),
+      );
+      expect(progressWrites.map((d) => d.processedCount)).toEqual([10, 20]);
+      expect(db.paperlessTagJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'COMPLETED', processedCount: 25 }),
+        }),
+      );
+    });
+
+    it('keeps the partial counts when the configuration changes mid-run', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique
+        .mockResolvedValueOnce(config()) // pre-flight version check
+        .mockResolvedValue(config({ configVersion: 4 })); // changed during the walk
+      client.listDocumentsByTag.mockResolvedValue([{ paperlessId: 1, title: 'A' }]);
+      db.policyDocument.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      // The run is superseded, not completed – but the progress made so far
+      // must still be visible instead of showing a reset row.
+      expect(db.paperlessTagJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'SKIPPED', errorCode: 'STALE_CONFIG' }),
+        }),
+      );
+      expect(db.paperlessTagJob.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'COMPLETED' }),
+        }),
+      );
+    });
+
+    it('leaves the total unknown when the remote list cannot be fetched', async () => {
+      db.paperlessTagJob.findUnique.mockResolvedValue(syncJobRow());
+      db.policyPaperlessTag.findUnique.mockResolvedValue(config());
+      client.listDocumentsByTag.mockResolvedValue(null);
+
+      await processor.process(job('sync-policy', { jobId: 'job-1', policyId }));
+
+      // No fabricated total: totalCount may only ever be null here.
+      const totals = jobUpdates()
+        .filter((d) => 'totalCount' in d)
+        .map((d) => d.totalCount);
+      expect(totals).toEqual([null]);
+      // …and therefore no percentage-like processed counter either.
+      expect(
+        jobUpdates().filter((d) => typeof d.processedCount === 'number' && d.processedCount > 0),
+      ).toEqual([]);
+    });
   });
 });

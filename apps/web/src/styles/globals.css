@@ -665,6 +665,40 @@
     to { transform: rotate(360deg); }
   }
 
+  /* --- AP-24 (§1.1): progress of a running Paperless synchronization.
+         The indeterminate variant deliberately has NO width animation tied
+         to a value: without a known total the bar must not suggest a
+         percentage, it only signals "work in progress". --- */
+  .sync-progress {
+    position: relative;
+    width: 100%;
+    height: 8px;
+    overflow: hidden;
+    background-color: var(--versigo-border);
+    border-radius: var(--versigo-radius-full);
+  }
+
+  .sync-progress-fill {
+    height: 100%;
+    background-color: var(--versigo-accent);
+    border-radius: inherit;
+    transition: width 240ms ease;
+  }
+
+  .sync-progress-indeterminate {
+    position: absolute;
+    inset-block: 0;
+    width: 35%;
+    background-color: var(--versigo-accent);
+    border-radius: inherit;
+    animation: sync-progress-slide 1.4s ease-in-out infinite;
+  }
+
+  @keyframes sync-progress-slide {
+    0%   { left: -35%; }
+    100% { left: 100%; }
+  }
+
   .loading-page {
     display: flex;
     flex-direction: column;
@@ -1024,6 +1058,103 @@
     gap: var(--versigo-space-6);
   }
 
+  /* --- AP-24 (§4.1): Kostenansicht mit Seitenleiste der Abrechnungsdokumente ---
+   *
+   * Mobile first: one column, the sidebar is collapsible and expanded it
+   * becomes a bottom sheet with a backdrop. From 1024px on the sidebar is a
+   * fixed column on the left and always visible. */
+  .costs-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--versigo-space-6);
+    align-items: start;
+  }
+
+  .costs-main {
+    min-width: 0;
+  }
+
+  .costs-sidebar {
+    border: 1px solid var(--versigo-border);
+    border-radius: var(--versigo-radius-md);
+    background: var(--versigo-surface);
+    padding: var(--versigo-space-4);
+  }
+
+  .costs-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--versigo-space-2);
+  }
+
+  .costs-sidebar-body {
+    margin-top: var(--versigo-space-3);
+  }
+
+  .costs-sidebar[data-collapsed='true'] .costs-sidebar-body {
+    display: none;
+  }
+
+  /* Backdrop of the bottom sheet – only rendered/visible on smartphones. */
+  .costs-sidebar-backdrop {
+    display: none;
+  }
+
+  .costs-document-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 26rem;
+    overflow-y: auto;
+  }
+
+  .costs-document-item {
+    padding: var(--versigo-space-3) 0;
+    border-bottom: 1px solid var(--versigo-border);
+  }
+
+  .costs-document-item:last-child {
+    border-bottom: none;
+  }
+
+  .costs-document-title {
+    font-weight: var(--versigo-font-weight-semibold);
+    /* Long file names must wrap instead of overflowing the sidebar. */
+    overflow-wrap: anywhere;
+  }
+
+  .costs-document-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem var(--versigo-space-2);
+    margin-top: 0.15rem;
+    font-size: var(--versigo-font-size-xs);
+    color: var(--versigo-text-muted);
+  }
+
+  .costs-document-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--versigo-space-2);
+    margin-top: var(--versigo-space-2);
+  }
+
+  .costs-preview-frame {
+    display: block;
+    width: 100%;
+    height: 26rem;
+    margin-top: var(--versigo-space-3);
+    border: 1px solid var(--versigo-border);
+    border-radius: var(--versigo-radius-sm);
+    background: var(--versigo-surface);
+  }
+
+  .costs-sidebar-toggle {
+    display: inline-flex;
+  }
+
   /* --- Button group --- */
   .btn-group {
     display: flex;
@@ -1130,10 +1261,65 @@
   .split-layout {
     grid-template-columns: repeat(3, 1fr);
   }
+
+  /* AP-24 (§4.1): on desktop the sidebar of billing documents is a fixed,
+     always visible column. Its toggle is hidden and a collapsed state is
+     deliberately ignored. */
+  .costs-layout {
+    grid-template-columns: 22rem 1fr;
+  }
+
+  .costs-sidebar {
+    position: sticky;
+    top: var(--versigo-space-4);
+    max-height: calc(100vh - var(--versigo-space-8));
+    overflow-y: auto;
+  }
+
+  .costs-sidebar-toggle {
+    display: none;
+  }
+
+  .costs-sidebar[data-collapsed='true'] .costs-sidebar-body {
+    display: block;
+  }
+
+  .costs-preview-frame {
+    height: 34rem;
+  }
 }
 
 /* Mobile (< 640px) */
 @media (max-width: 639px) {
+  /* AP-24 (§4.1): on smartphones the expanded sidebar becomes a bottom sheet
+     above the cost view, with a backdrop to close it. Collapsed it stays a
+     normal bar inside the layout. */
+  .costs-sidebar[data-collapsed='false'] {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: var(--versigo-z-drawer);
+    max-height: 85vh;
+    overflow-y: auto;
+    padding-bottom: var(--versigo-space-6);
+    border-radius: var(--versigo-radius-md) var(--versigo-radius-md) 0 0;
+    box-shadow: var(--versigo-shadow-lg);
+  }
+
+  .costs-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--versigo-z-drawer) - 1);
+    background: rgb(0 0 0 / 0.4);
+  }
+
+  .costs-document-list {
+    max-height: none;
+  }
+
   .app-sidebar {
     display: none;
     position: fixed;

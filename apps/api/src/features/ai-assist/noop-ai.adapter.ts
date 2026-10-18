@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type {
   IAIAdapter,
   AiExtractResult,
+  AiCostExtractionResult,
   AiSummarizeResult,
   AiHealthStatus,
 } from '@versigo/foundation';
@@ -30,6 +31,20 @@ export class NoOpAIAdapter implements IAIAdapter {
     _policyId: string,
   ): Promise<AiSummarizeResult | null> {
     void _documentContents;
+    void _policyId;
+    return null;
+  }
+
+  /**
+   * AP-24 (§4.2): cost extraction needs a provider – without one there is
+   * nothing to propose, and the UI never offers the action (it is gated on
+   * `capable` from `GET /ai/status`).
+   */
+  async extractCostFromDocument(
+    _documentContent: string,
+    _policyId: string,
+  ): Promise<AiCostExtractionResult | null> {
+    void _documentContent;
     void _policyId;
     return null;
   }

@@ -8,4 +8,5 @@ export type {
   IAIAdapter,
   AiExtractResult,
   AiSummarizeResult,
+  AiSummarizeOptions,
 } from '@versigo/foundation';

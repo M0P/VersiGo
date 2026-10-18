@@ -35,6 +35,12 @@ export class SystemConfigEntryDto {
   description!: string;
   validationHint!: string | null;
   allowedValues!: string[] | null;
+  /**
+   * AP-24 (§1.2): predefined choices for numeric settings. A convenience
+   * for the UI, never a restriction – `min`/`max` still validate free
+   * values server-side.
+   */
+  presets!: number[] | null;
   min!: number | null;
   max!: number | null;
   connectivityTestable!: boolean;

@@ -6,3 +6,4 @@ export * from './settings-validation';
 export * from './settings-resolver.service';
 export * from './settings.module';
 export * from './settings-preload';
+export * from './paperless-sync-schedule';

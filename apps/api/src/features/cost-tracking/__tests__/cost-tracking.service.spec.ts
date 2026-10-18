@@ -682,17 +682,18 @@ describe('CostTrackingService', () => {
       );
 
       expect(result.current?.frequency).toBe('MONTHLY');
-      expect(result.paidToDate).toBe(300);
+      expect(result.paidToDate.gross).toBe(300);
+      expect(result.paidToDate.net).toBeNull();
       // Past = incurred, future = expected (projected from the active entry).
       expect(result.periods[0].status).toBe('incurred');
-      expect(result.periods[0].amount).toBe(100);
+      expect(result.periods[0].amount.gross).toBe(100);
       expect(result.periods[2].periodLabel).toBe('03/2024');
       expect(result.periods[2].status).toBe('incurred');
       expect(result.periods[3].status).toBe('expected');
-      expect(result.periods[3].amount).toBe(100);
+      expect(result.periods[3].amount.gross).toBe(100);
     });
 
-    it('BugFix-22: falls back to the net amount when no gross amount is set', async () => {
+    it('BugFix-22: does NOT fall back to net when no gross amount is set', async () => {
       mockScheduleData(
         { startDate: new Date('2024-01-01'), paymentFrequency: PaymentFrequency.MONTHLY },
         [
@@ -714,10 +715,67 @@ describe('CostTrackingService', () => {
         new Date('2024-03-20T12:00:00.000Z'),
       );
 
-      // 3 incurred monthly periods (01-03/2024) at 90 each.
-      expect(result.paidToDate).toBe(270);
-      expect(result.current?.grossAmount).toBe(90);
-      expect(result.current?.annualGross).toBe(1080);
+      // 3 incurred monthly periods (01-03/2024) at 90 net each; the gross
+      // basis stays null (UI: dash) and is never replaced by the net amount.
+      expect(result.paidToDate).toEqual({ gross: null, net: 270 });
+      expect(result.current?.amount).toEqual({ gross: null, net: 90 });
+      expect(result.current?.annual).toEqual({ gross: null, net: 1080 });
+      expect(result.periods[0].amount).toEqual({ gross: null, net: 90 });
+    });
+
+    it('BugFix-22: periods start at the first cost position when it precedes the policy start', async () => {
+      mockScheduleData(
+        { startDate: new Date('2026-08-16'), paymentFrequency: PaymentFrequency.ANNUAL },
+        [
+          {
+            id: 'c1',
+            grossAmount: null,
+            netAmount: 701.59,
+            frequency: 'ANNUAL',
+            validFrom: new Date('2024-10-23'),
+            validTo: new Date('2025-10-22T23:59:59.999'),
+          },
+          {
+            id: 'c2',
+            grossAmount: null,
+            netAmount: 761.01,
+            frequency: 'ANNUAL',
+            validFrom: new Date('2025-10-23'),
+            validTo: new Date('2026-10-22T23:59:59.999'),
+          },
+          {
+            id: 'c3',
+            grossAmount: null,
+            netAmount: 718.22,
+            frequency: 'ANNUAL',
+            validFrom: new Date('2026-10-23'),
+            validTo: null,
+          },
+        ],
+      );
+
+      const result = await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2026-10-18T09:00:00.000Z'),
+      );
+
+      // Anchor 23.10.2024 (not the policy start 16.08.2026): all earlier
+      // periods are present, paid to date = 701.59 + 761.01 = 1462.60.
+      expect(result.periods.map((p) => p.periodLabel)).toEqual([
+        '10/2024',
+        '10/2025',
+        '10/2026',
+        '10/2027',
+      ]);
+      expect(result.paidToDate).toEqual({ gross: null, net: 1462.6 });
+      expect(result.periods.map((p) => p.status)).toEqual([
+        'incurred',
+        'incurred',
+        'expected',
+        'expected',
+      ]);
     });
 
     it('uses the yearly frequency of the policy (annual, 01/2024, ...)', async () => {
@@ -742,10 +800,10 @@ describe('CostTrackingService', () => {
         new Date('2024-03-20T12:00:00.000Z'),
       );
 
-      expect(result.paidToDate).toBe(500);
+      expect(result.paidToDate.gross).toBe(500);
       expect(result.periods[0].periodLabel).toBe('01/2024');
       expect(result.periods[0].status).toBe('incurred');
-      expect(result.current?.annualGross).toBe(500);
+      expect(result.current?.annual.gross).toBe(500);
     });
 
     it('BugFix-08: frequency switch – increase from 06/2024 flows into all following periods', async () => {
@@ -779,11 +837,11 @@ describe('CostTrackingService', () => {
       );
 
       // 5 periods of 100 (01-05/2024) + 3 periods of 120 (06-08/2024).
-      expect(result.paidToDate).toBe(5 * 100 + 3 * 120);
+      expect(result.paidToDate.gross).toBe(5 * 100 + 3 * 120);
       expect(result.periods[5].periodLabel).toBe('06/2024');
-      expect(result.periods[5].amount).toBe(120);
-      expect(result.periods[6].amount).toBe(120);
-      expect(result.current?.grossAmount).toBe(120);
+      expect(result.periods[5].amount.gross).toBe(120);
+      expect(result.periods[6].amount.gross).toBe(120);
+      expect(result.current?.amount.gross).toBe(120);
     });
 
     it('BugFix-08: cost increase mid-year (increase-mid-year)', async () => {
@@ -817,9 +875,9 @@ describe('CostTrackingService', () => {
       );
 
       // All 12 periods of 2024 started: 5 * 100 + 7 * 150.
-      expect(result.paidToDate).toBe(5 * 100 + 7 * 150);
-      expect(result.periods[4].amount).toBe(100);
-      expect(result.periods[5].amount).toBe(150);
+      expect(result.paidToDate.gross).toBe(5 * 100 + 7 * 150);
+      expect(result.periods[4].amount.gross).toBe(100);
+      expect(result.periods[5].amount.gross).toBe(150);
     });
 
     it('scales entries whose frequency differs from the billing frequency', async () => {
@@ -846,9 +904,9 @@ describe('CostTrackingService', () => {
         new Date('2024-03-20T12:00:00.000Z'),
       );
 
-      expect(result.paidToDate).toBe(300);
+      expect(result.paidToDate.gross).toBe(300);
       for (const period of result.periods.slice(0, 3)) {
-        expect(period.amount).toBe(100);
+        expect(period.amount.gross).toBe(100);
       }
     });
 
@@ -892,7 +950,7 @@ describe('CostTrackingService', () => {
         new Date('2024-03-20T12:00:00.000Z'),
       );
 
-      expect(result.paidToDate).toBe(0);
+      expect(result.paidToDate).toEqual({ gross: null, net: null });
       expect(result.current).toBeNull();
       expect(result.periods).toEqual([]);
     });
@@ -939,17 +997,17 @@ describe('CostTrackingService', () => {
 
       expect(result.policyCount).toBe(2);
       // p1: 15 monthly periods started (01/2024-03/2025) -> 1500, p2: 2 yearly periods -> 1000.
-      expect(result.totals.paidToDate).toBe(2500);
-      expect(result.totals.perYear).toBe(1700);
+      expect(result.totals.paidToDate).toEqual({ gross: 2500, net: null });
+      expect(result.totals.perYear).toEqual({ gross: 1700, net: null });
       // 100 (MONTHLY) + 500/12 (ANNUAL) = 141.67.
-      expect(result.totals.perMonth).toBe(141.67);
+      expect(result.totals.perMonth).toEqual({ gross: 141.67, net: null });
       // Historical buckets: 2024 -> 1200 + 500, 2025 -> 3 * 100 + 500.
       expect(result.perYear).toEqual([
-        { year: 2024, amount: 1700 },
-        { year: 2025, amount: 800 },
+        { year: 2024, amount: { gross: 1700, net: null } },
+        { year: 2025, amount: { gross: 800, net: null } },
       ]);
-      expect(result.policies[0].paidToDate).toBe(1500);
-      expect(result.policies[0].perMonth).toBe(100);
+      expect(result.policies[0].paidToDate).toEqual({ gross: 1500, net: null });
+      expect(result.policies[0].perMonth).toEqual({ gross: 100, net: null });
     });
 
     it('bugFix-08: perYear bucket accounts for a cost increase mid-year', async () => {
@@ -974,8 +1032,8 @@ describe('CostTrackingService', () => {
       );
 
       // 6 * 100 + 6 * 150 = 1500 in the year 2024.
-      expect(result.perYear).toEqual([{ year: 2024, amount: 1500 }]);
-      expect(result.totals.paidToDate).toBe(1500);
+      expect(result.perYear).toEqual([{ year: 2024, amount: { gross: 1500, net: null } }]);
+      expect(result.totals.paidToDate).toEqual({ gross: 1500, net: null });
     });
 
     it('ignores archived policies', async () => {
@@ -989,8 +1047,8 @@ describe('CostTrackingService', () => {
       );
 
       expect(result.policyCount).toBe(0);
-      expect(result.totals.paidToDate).toBe(0);
-      expect(result.totals.perYear).toBe(0);
+      expect(result.totals.paidToDate).toEqual({ gross: null, net: null });
+      expect(result.totals.perYear).toEqual({ gross: null, net: null });
       expect(mockDb.insurancePolicy.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { householdId, archivedAt: null },
@@ -1020,9 +1078,9 @@ describe('CostTrackingService', () => {
       );
 
       expect(result.policyCount).toBe(2);
-      expect(result.policies[0].paidToDate).toBe(0);
+      expect(result.policies[0].paidToDate).toEqual({ gross: null, net: null });
       expect(result.policies[0].entryCount).toBe(0);
-      expect(result.totals.paidToDate).toBe(1000);
+      expect(result.totals.paidToDate).toEqual({ gross: 1000, net: null });
     });
 
     it('READ_ONLY: sums only explicitly shared policies (AP-16)', async () => {
@@ -1127,6 +1185,59 @@ describe('CostTrackingService', () => {
       await expect(
         service.getSchedule(householdId, readOnlyUser, policyId),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    // Review round 2 (M1): a mock answers whatever it is handed, so a query
+    // that silently lost its scoping filter would still return rows and the
+    // behavioural assertion above would keep passing. Pinning the argument an
+    // implementation accident has nowhere to hide.
+    it('scopes the policy lookup used by read access to id AND household', async () => {
+      mockMembership();
+      mockPolicy();
+      mockDb.policyCostEntry.findMany.mockResolvedValue([]);
+
+      await service.findAll(householdId, user, policyId);
+
+      expect(mockDb.insurancePolicy.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: policyId, householdId } }),
+      );
+    });
+
+    it('scopes findOne to the entry id AND the policy at once', async () => {
+      mockMembership();
+      mockPolicy();
+      mockDb.policyCostEntry.findFirst.mockResolvedValue({ id: entryId, policyId });
+
+      await service.findOne(householdId, user, policyId, entryId);
+
+      expect(mockDb.policyCostEntry.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: entryId, policyId } }),
+      );
+    });
+
+    it('scopes getSchedule to one household and one policy', async () => {
+      mockMembership();
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({
+        id: policyId,
+        householdId,
+        startDate: new Date('2024-01-15'),
+        paymentFrequency: PaymentFrequency.MONTHLY,
+      });
+      mockDb.policyCostEntry.findMany.mockResolvedValue([]);
+
+      await service.getSchedule(
+        householdId,
+        user,
+        policyId,
+        new Date('2024-03-20T12:00:00.000Z'),
+      );
+
+      expect(mockDb.insurancePolicy.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: policyId, householdId } }),
+      );
+      expect(mockDb.policyCostEntry.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { policyId } }),
+      );
     });
   });
 });

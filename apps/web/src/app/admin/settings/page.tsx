@@ -393,6 +393,21 @@ export default function AdminSettingsPage(): ReactElement {
   );
 }
 
+/**
+ * AP-24 (§1.2): human-readable label of an interval preset given in
+ * milliseconds. Catalog presets are whole minutes/hours; anything else
+ * falls back to whole seconds so a future preset never renders blank.
+ */
+function formatIntervalPreset(ms: number, t: (key: string) => string): string {
+  if (ms > 0 && ms % 3_600_000 === 0) {
+    return `${ms / 3_600_000} ${t('admin.settings.hours')}`;
+  }
+  if (ms > 0 && ms % 60_000 === 0) {
+    return `${ms / 60_000} ${t('admin.settings.minutes')}`;
+  }
+  return `${Math.round(ms / 1000)} s`;
+}
+
 type SettingRowProps = {
   entry: SystemConfigEntry;
   editing: boolean;
@@ -483,6 +498,38 @@ function SettingRow({
                 autoFocus
               />
             )}
+            {/* AP-24 (§1.2): predefined choices. Selecting one only fills the
+                input – the value still passes the regular min/max validation. */}
+            {entry.type === 'number' &&
+              !entry.allowedValues &&
+              !!entry.presets &&
+              entry.presets.length > 0 && (
+                <div style={{ marginTop: 'var(--versigo-space-2)' }}>
+                  <label className="form-label" htmlFor={`${editFieldId}-preset`}>
+                    {t('admin.settings.preset')}
+                  </label>
+                  <Select
+                    id={`${editFieldId}-preset`}
+                    value={
+                      entry.presets.includes(Number(editValue)) && editValue !== ''
+                        ? editValue
+                        : ''
+                    }
+                    onChange={(e) => {
+                      if (e.target.value !== '') onEditValueChange(e.target.value);
+                    }}
+                  >
+                    <option value="" disabled>
+                      {t('admin.settings.presetCustom')}
+                    </option>
+                    {entry.presets.map((preset) => (
+                      <option key={preset} value={String(preset)}>
+                        {formatIntervalPreset(preset, t)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
             {entry.validationHint && <span className="form-hint">{entry.validationHint}</span>}
           </div>
           <div className="btn-group" style={{ alignItems: 'end' }}>

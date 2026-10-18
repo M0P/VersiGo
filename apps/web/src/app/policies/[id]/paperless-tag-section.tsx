@@ -9,6 +9,7 @@ import { InlineSpinner } from '@/components/ui/loading';
 import { useI18n } from '@/i18n';
 import { getApiBaseUrl } from '@/lib/runtime-config';
 import { paperlessTagErrorKey } from '@/lib/paperless-tag-error';
+import { isSyncActive as isSyncJobActive, syncProgressAria, type SyncJobStatus } from '@/lib/sync-progress';
 
 const API_BASE = getApiBaseUrl();
 
@@ -27,6 +28,79 @@ type TagConfig = {
 
 type TagHit = { tagId: number; name: string };
 
+type SyncProgress = {
+  jobId: string;
+  status: SyncJobStatus;
+  processed: number;
+  /** `null` while unknown – the bar must stay indeterminate in that case. */
+  total: number | null;
+  added: number;
+  removed: number;
+  unchanged: number;
+  errorCode: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+};
+
+type SyncStatusResponse = {
+  configured: boolean;
+  lastSyncedAt?: string | null;
+  syncStatus?: TagConfig['syncStatus'];
+  syncErrorCode?: string | null;
+  jobStatus: SyncJobStatus | null;
+  progress: SyncProgress | null;
+  /** AP-24 (§1.2): background schedule (only for configured policies). */
+  autoSyncEnabled?: boolean;
+  intervalMs?: number;
+  nextSyncAt?: string | null;
+};
+
+/**
+ * AP-24 (§1.2): the part of the status response that describes *when* the
+ * next automatic run happens. Kept separate from `progress` because it does
+ * not change while a run is in flight.
+ */
+type SyncSchedule = {
+  autoSyncEnabled: boolean;
+  intervalMs: number;
+  nextSyncAt: string | null;
+};
+
+const toSyncSchedule = (data: SyncStatusResponse): SyncSchedule | null =>
+  data.autoSyncEnabled === undefined
+    ? null
+    : {
+        autoSyncEnabled: data.autoSyncEnabled,
+        intervalMs: data.intervalMs ?? 0,
+        nextSyncAt: data.nextSyncAt ?? null,
+      };
+
+type SyncStartResponse = {
+  jobId: string;
+  status: SyncJobStatus;
+  configVersion: number;
+  alreadyRunning: boolean;
+};
+
+/** Poll cadence: fast enough to feel immediate, slow enough to stay cheap. */
+const SYNC_POLL_INTERVAL_MS = 1000;
+
+/** Give up after this many consecutive failed status requests. */
+const MAX_POLL_FAILURES = 5;
+
+const progressStatusKey = (status: SyncJobStatus): string => {
+  switch (status) {
+    case 'QUEUED':
+      return 'policies.paperlessTagProgressQUEUED';
+    case 'RUNNING':
+      return 'policies.paperlessTagProgressRUNNING';
+    case 'SUCCEEDED':
+      return 'policies.paperlessTagProgressSUCCEEDED';
+    default:
+      return 'policies.paperlessTagProgressFAILED';
+  }
+};
+
 /**
  * AP-22: "Paperless-ngx-Dokumentzuordnung" section inside the policy's
  * **Documents** tab (the tag decides which documents appear there, so the
@@ -42,10 +116,17 @@ export default function PaperlessTagSection({
   policyId,
   insurerName,
   onConfigChange,
+  onDocumentsChanged,
 }: {
   policyId: string;
   insurerName: string;
   onConfigChange?: () => void;
+  /**
+   * AP-24 (§1.1): called after a successful reconciliation so the parent can
+   * refresh ONLY the document list (query/router level) – a full page reload
+   * would throw away scroll position, filters and unsaved input.
+   */
+  onDocumentsChanged?: () => void;
 }): ReactElement {
   const { t } = useI18n();
   const [config, setConfig] = useState<TagConfig | null>(null);
@@ -61,9 +142,18 @@ export default function PaperlessTagSection({
   const [busy, setBusy] = useState(false);
   const [newTagName, setNewTagName] = useState('');
 
+  // AP-24 (§1.1): progress of the last/running manual reconciliation.
+  const [progress, setProgress] = useState<SyncProgress | null>(null);
+  // AP-24 (§1.2): last/next scheduled background run as reported by the API.
+  const [schedule, setSchedule] = useState<SyncSchedule | null>(null);
+  /** AP-24 (§1.1): a run is queued or running – the trigger stays disabled. */
+  const syncActive = isSyncJobActive(progress?.status);
+
   const seq = useRef(0);
   const searchSeq = useRef(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollingRef = useRef(false);
 
   const loadConfig = useCallback(async () => {
     const mySeq = ++seq.current;
@@ -88,6 +178,106 @@ export default function PaperlessTagSection({
     }
   }, [policyId, t]);
 
+  const statusUrl = `${API_BASE}/households/default/policies/${policyId}/paperless-tag/status`;
+
+  const stopPolling = useCallback(() => {
+    pollingRef.current = false;
+    if (pollRef.current) {
+      clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  // AP-24 (§1.1): polls the status endpoint until the run reaches a terminal
+  // state. Every exit path (terminal state, unmount, policy change) goes
+  // through `stopPolling`, so no timer can outlive the component or keep
+  // polling for another insurance.
+  const startPolling = useCallback(() => {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    let failures = 0;
+
+    const tick = async () => {
+      if (!pollingRef.current) return;
+      let next: SyncStatusResponse | null = null;
+      let failed = false;
+      try {
+        const res = await fetch(statusUrl, { credentials: 'include' });
+        if (!pollingRef.current) return;
+        if (res.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        next = (await res.json()) as SyncStatusResponse;
+      } catch {
+        failed = true;
+      }
+      if (!pollingRef.current) return;
+
+      if (failed || !next) {
+        // Transient network problem: keep the last known state and retry a
+        // bounded number of times instead of polling forever.
+        failures += 1;
+        if (failures > MAX_POLL_FAILURES) {
+          stopPolling();
+          setError(t('policies.paperlessTagLoadError'));
+          return;
+        }
+      } else {
+        failures = 0;
+        if (next.progress) setProgress(next.progress);
+        const nextSchedule = toSyncSchedule(next);
+        if (nextSchedule) setSchedule(nextSchedule);
+        if (!next.jobStatus || next.jobStatus === 'SUCCEEDED' || next.jobStatus === 'FAILED') {
+          const outcome = next.jobStatus;
+          stopPolling();
+          if (outcome === 'SUCCEEDED') {
+            // Reload only the configuration (last successful sync) and let the
+            // parent refresh the document list – never a full page reload.
+            await loadConfig();
+            setNotice(t('policies.paperlessTagProgressListRefreshed'));
+            onDocumentsChanged?.();
+          } else if (outcome === 'FAILED') {
+            await loadConfig();
+            setNotice(null);
+            setError(t('policies.paperlessTagProgressFAILED'));
+          }
+          return;
+        }
+      }
+
+      pollRef.current = setTimeout(() => void tick(), SYNC_POLL_INTERVAL_MS);
+    };
+
+    void tick();
+  }, [statusUrl, stopPolling, t, loadConfig, onDocumentsChanged]);
+
+  // AP-24 (§1.1): pick up a run that is still active after a page reload, and
+  // guarantee that leaving the page stops the polling.
+  useEffect(() => {
+    let cancelled = false;
+    const resume = async () => {
+      try {
+        const res = await fetch(statusUrl, { credentials: 'include' });
+        if (cancelled || res.status === 401 || !res.ok) return;
+        const data = (await res.json()) as SyncStatusResponse;
+        if (cancelled) return;
+        if (data.progress) setProgress(data.progress);
+        const nextSchedule = toSyncSchedule(data);
+        if (nextSchedule) setSchedule(nextSchedule);
+        if (data.jobStatus === 'QUEUED' || data.jobStatus === 'RUNNING') startPolling();
+      } catch {
+        // Status is best-effort: a failed resume must not break the section.
+      }
+    };
+    void resume();
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
+  }, [statusUrl, startPolling, stopPolling]);
+
   useEffect(() => {
     setEditing(false);
     setSearch('');
@@ -95,6 +285,8 @@ export default function PaperlessTagSection({
     setSearchError(null);
     setError(null);
     setNotice(null);
+    // AP-24 (§1.2): never show the previous insurance' schedule here.
+    setSchedule(null);
     void loadConfig();
     return () => {
       seq.current += 1;
@@ -289,8 +481,29 @@ export default function PaperlessTagSection({
         { method: 'POST', credentials: 'include' },
       );
       if (!res.ok) throw new Error(t('policies.paperlessTagLoadError'));
+      const data = (await res.json().catch(() => null)) as SyncStartResponse | null;
       if (mySeq === seq.current) {
-        setNotice(t('policies.paperlessTagSyncQueued'));
+        setNotice(
+          data?.alreadyRunning
+            ? t('policies.paperlessTagSyncAlreadyRunning')
+            : t('policies.paperlessTagSyncQueued'),
+        );
+        // Show the queued state immediately instead of waiting for the first
+        // poll – the acceptance criterion is visible progress shortly after
+        // the start.
+        setProgress({
+          jobId: data?.jobId ?? '',
+          status: data?.status ?? 'QUEUED',
+          processed: 0,
+          total: null,
+          added: 0,
+          removed: 0,
+          unchanged: 0,
+          errorCode: null,
+          createdAt: null,
+          completedAt: null,
+        });
+        startPolling();
         await loadConfig();
       }
     } catch (err) {
@@ -313,6 +526,60 @@ export default function PaperlessTagSection({
       {notice && (
         <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
           <Alert variant="success">{notice}</Alert>
+        </div>
+      )}
+
+      {/* AP-24 (§1.1): live progress of the manual reconciliation. The status
+          text is the aria-live region; the bar only shows a percentage when
+          the total is known, otherwise it stays deliberately indeterminate. */}
+      {progress && (
+        <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
+          <div aria-live="polite" className="text-sm">
+            {t(progressStatusKey(progress.status))}
+          </div>
+          {(() => {
+            const aria = syncProgressAria(progress);
+            const valueText = aria.determinate
+              ? t('policies.paperlessTagProgressOf', {
+                  processed: progress.processed,
+                  total: progress.total ?? 0,
+                })
+              : t('policies.paperlessTagProgressIndeterminate', {
+                  processed: progress.processed,
+                });
+            return (
+              <>
+                <div
+                  className="sync-progress"
+                  role="progressbar"
+                  aria-label={t('policies.paperlessTagProgressLabel')}
+                  aria-valuemin={0}
+                  aria-valuemax={aria.ariaValuemax}
+                  aria-valuenow={aria.ariaValuenow}
+                  aria-valuetext={valueText}
+                  style={{ marginTop: 'var(--versigo-space-2)' }}
+                >
+                  {aria.determinate ? (
+                    <div className="sync-progress-fill" style={{ width: `${aria.percent}%` }} />
+                  ) : (
+                    <div className="sync-progress-indeterminate" />
+                  )}
+                </div>
+                <div
+                  className="text-xs text-muted"
+                  style={{ marginTop: 'var(--versigo-space-1)' }}
+                >
+                  {valueText}
+                  {' · '}
+                  {t('policies.paperlessTagProgressChanges', {
+                    added: progress.added,
+                    removed: progress.removed,
+                    unchanged: progress.unchanged,
+                  })}
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -342,13 +609,35 @@ export default function PaperlessTagSection({
             {' · '}
             {statusLabel(config.syncStatus)}
           </div>
+          {/* AP-24 (§1.2): next scheduled background run – or an explicit hint
+              that the automatic sync has been switched off by an admin. */}
+          {schedule && (
+            <div className="text-xs text-muted">
+              {schedule.autoSyncEnabled
+                ? schedule.nextSyncAt
+                  ? t('policies.paperlessTagNextSync', {
+                      date: new Date(schedule.nextSyncAt).toLocaleString(),
+                    })
+                  : null
+                : t('policies.paperlessTagAutoSyncOff')}
+            </div>
+          )}
           {config.syncStatus === 'ERROR' && (
             <Alert variant="warning">{errorLabel(config.syncErrorCode)}</Alert>
           )}
           <p className="text-xs text-muted">{t('policies.paperlessTagSharedWarning')}</p>
           <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexWrap: 'wrap' }}>
-            <Button variant="secondary" disabled={busy} onClick={refreshNow}>
-              {busy ? <><InlineSpinner /> {t('policies.paperlessTagRefreshing')}</> : t('policies.paperlessTagRefresh')}
+            {/* AP-24 (§1.1): a running reconciliation disables the trigger – a
+                second click (or a second tab) can never start a parallel run;
+                the API would return the already active job anyway. */}
+            <Button variant="secondary" disabled={busy || syncActive} onClick={refreshNow}>
+              {busy || syncActive ? (
+                <>
+                  <InlineSpinner /> {t('policies.paperlessTagRefreshing')}
+                </>
+              ) : (
+                t('policies.paperlessTagRefresh')
+              )}
             </Button>
             <Button
               variant="secondary"

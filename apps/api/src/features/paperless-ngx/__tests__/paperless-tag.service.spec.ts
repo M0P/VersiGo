@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadGatewayException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { GlobalRole, UserStatus } from '@prisma/client';
-import { PaperlessTagService } from '../paperless-tag.service';
+import { PaperlessTagService, mapJobStatus, sanitizeErrorCode } from '../paperless-tag.service';
+import { PAPERLESS_TAG_RECONCILE_TICK_MS } from '../paperless-tag.constants';
+import { PAPERLESS_TAG_SYNC_STAGGER_MAX_MS } from '@versigo/foundation';
 import type { AuthenticatedUser } from '../../identity/auth.service';
 
 /**
@@ -56,6 +58,8 @@ function createMockAuth(): any {
 function createMockSettings(url = 'https://paperless.example.com/'): any {
   return {
     getEffectiveString: vi.fn().mockResolvedValue(url),
+    getEffectiveBoolean: vi.fn().mockResolvedValue(true),
+    getEffectiveNumber: vi.fn().mockResolvedValue(300_000),
   };
 }
 
@@ -528,6 +532,60 @@ describe('PaperlessTagService', () => {
         NotFoundException,
       );
     });
+
+    // AP-24 (§1.1): a second click or a second tab must never start a second
+    // run for the same insurance.
+    it('returns the active job instead of starting a parallel run', async () => {
+      db.policyPaperlessTag.findUnique.mockResolvedValue({ policyId, configVersion: 5 });
+      db.paperlessTagJob.findFirst.mockResolvedValue({
+        id: 'job-active',
+        kind: 'SYNC_POLICY',
+        status: 'RUNNING',
+        configVersion: 5,
+      });
+
+      const result = await service.requestSync(householdId, userId, policyId);
+
+      expect(result.jobId).toBe('job-active');
+      expect(result.status).toBe('RUNNING');
+      expect(result.alreadyRunning).toBe(true);
+      expect(db.paperlessTagJob.create).not.toHaveBeenCalled();
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it('treats a queued job as active too (no second queue entry)', async () => {
+      db.policyPaperlessTag.findUnique.mockResolvedValue({ policyId, configVersion: 5 });
+      db.paperlessTagJob.findFirst.mockResolvedValue({
+        id: 'job-queued',
+        kind: 'SYNC_POLICY',
+        status: 'PENDING',
+        configVersion: 5,
+      });
+
+      const result = await service.requestSync(householdId, userId, policyId);
+
+      expect(result).toEqual(
+        expect.objectContaining({ jobId: 'job-queued', status: 'QUEUED', alreadyRunning: true }),
+      );
+      expect(db.paperlessTagJob.create).not.toHaveBeenCalled();
+    });
+
+    it('starts a new run and reports the public QUEUED state when none is active', async () => {
+      db.policyPaperlessTag.findUnique.mockResolvedValue({ policyId, configVersion: 5 });
+      db.paperlessTagJob.findFirst.mockResolvedValue(null);
+      db.paperlessTagJob.create.mockResolvedValue({ id: 'job-new' });
+
+      const result = await service.requestSync(householdId, userId, policyId);
+
+      expect(result).toEqual(
+        expect.objectContaining({ jobId: 'job-new', status: 'QUEUED', alreadyRunning: false }),
+      );
+      expect(queue.add).toHaveBeenCalledWith(
+        'sync-policy',
+        { jobId: 'job-new', policyId },
+        expect.anything(),
+      );
+    });
   });
 
   describe('retryTagging', () => {
@@ -602,6 +660,196 @@ describe('PaperlessTagService', () => {
       const result = await service.getStatus(householdId, user, policyId);
 
       expect(result.configured).toBe(false);
+    });
+
+    // AP-24 (§1.1): the four public states plus the progress projection.
+    it('maps the last SYNC_POLICY job onto the public status vocabulary', async () => {
+      db.policyPaperlessTag.findUnique.mockResolvedValue({
+        policyId,
+        paperlessTagId: 7,
+        paperlessTagName: 'KFZ',
+        configVersion: 1,
+        lastSyncedAt: null,
+        syncStatus: 'ACTIVE',
+        syncErrorCode: null,
+      });
+      db.policyDocument.findMany.mockResolvedValue([]);
+      db.paperlessTagJob.findFirst.mockImplementation(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (args: any) =>
+          Promise.resolve(
+            args?.where?.kind === 'SYNC_POLICY'
+              ? {
+                  id: 'job-sync',
+                  status: 'RUNNING',
+                  errorCode: null,
+                  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+                  completedAt: null,
+                  processedCount: 40,
+                  totalCount: 100,
+                  addedCount: 7,
+                  removedCount: 2,
+                  unchangedCount: 31,
+                }
+              : { id: 'job-any', status: 'PENDING', errorCode: null },
+          ),
+      );
+
+      const result = await service.getStatus(householdId, user, policyId);
+
+      expect(result.jobStatus).toBe('RUNNING');
+      expect(result.progress).toEqual({
+        jobId: 'job-sync',
+        status: 'RUNNING',
+        processed: 40,
+        total: 100,
+        added: 7,
+        removed: 2,
+        unchanged: 31,
+        errorCode: null,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        completedAt: null,
+      });
+    });
+
+    it('keeps the total null so the UI can show an indeterminate bar', async () => {
+      db.policyPaperlessTag.findUnique.mockResolvedValue({
+        policyId,
+        paperlessTagId: 7,
+        paperlessTagName: 'KFZ',
+        configVersion: 1,
+        lastSyncedAt: null,
+        syncStatus: 'PENDING',
+        syncErrorCode: null,
+      });
+      db.policyDocument.findMany.mockResolvedValue([]);
+      db.paperlessTagJob.findFirst.mockResolvedValue({
+        id: 'job-sync',
+        status: 'RUNNING',
+        errorCode: null,
+        createdAt: new Date(),
+        completedAt: null,
+        processedCount: 12,
+        totalCount: null,
+        addedCount: 0,
+        removedCount: 0,
+        unchangedCount: 0,
+      });
+
+      const result = await service.getStatus(householdId, user, policyId);
+
+      expect(result.progress?.total).toBeNull();
+      expect(result.progress?.processed).toBe(12);
+    });
+
+    it('sanitises the stored error code before it leaves the API', async () => {
+      db.policyPaperlessTag.findUnique.mockResolvedValue(null);
+      db.policyDocument.findMany.mockResolvedValue([]);
+      db.paperlessTagJob.findFirst.mockResolvedValue({
+        id: 'job-sync',
+        status: 'FAILED',
+        // A defensive case: an unexpected value must not be echoed verbatim.
+        errorCode: 'https://user:secret@paperless.example.com/err',
+        createdAt: new Date(),
+        completedAt: new Date(),
+        processedCount: 0,
+        totalCount: null,
+        addedCount: 0,
+        removedCount: 0,
+        unchangedCount: 0,
+      });
+
+      const result = await service.getStatus(householdId, user, policyId);
+
+      expect(result.progress?.status).toBe('FAILED');
+      // Non-alphanumeric characters are stripped, so only a token survives –
+      // the URL (and with it any credential in it) is not echoed back.
+      expect(result.progress?.errorCode).toBe('HTTPSUSERSECRETPAPERLESSEXAMPLECOMERR');
+      expect(result.progress?.errorCode).toMatch(/^[A-Z0-9_]+$/);
+      expect(result.progress?.errorCode).not.toContain('secret');
+    });
+  });
+
+  // AP-24 (§1.2): the status endpoint projects the schedule the worker will
+  // actually keep – never a made-up time and never one while disabled.
+  describe('background sync schedule (AP-24 §1.2)', () => {
+    const configuredTag = (lastSyncedAt: Date | null) => ({
+      policyId,
+      paperlessTagId: 7,
+      paperlessTagName: 'KFZ',
+      configVersion: 1,
+      lastSyncedAt,
+      syncStatus: 'ACTIVE',
+      syncErrorCode: null,
+    });
+
+    it('announces the next scheduled run for an enabled background sync', async () => {
+      const lastSyncedAt = new Date(Date.now() - 60_000);
+      db.policyPaperlessTag.findUnique.mockResolvedValue(configuredTag(lastSyncedAt));
+      db.policyDocument.findMany.mockResolvedValue([]);
+      db.paperlessTagJob.findFirst.mockResolvedValue(null);
+
+      const result = await service.getStatus(householdId, user, policyId);
+
+      expect(result.autoSyncEnabled).toBe(true);
+      expect(result.intervalMs).toBe(300_000);
+      expect(result.nextSyncAt).toEqual(expect.any(String));
+      const next = new Date(result.nextSyncAt as string).getTime();
+      // Never before now, never after interval + stagger.
+      expect(next).toBeGreaterThanOrEqual(Date.now());
+      expect(next).toBeLessThanOrEqual(
+        lastSyncedAt.getTime() + 300_000 + PAPERLESS_TAG_SYNC_STAGGER_MAX_MS + 5_000,
+      );
+    });
+
+    it('reports no next run while the automatic sync is switched off', async () => {
+      settings.getEffectiveBoolean.mockResolvedValue(false);
+      db.policyPaperlessTag.findUnique.mockResolvedValue(configuredTag(new Date()));
+      db.policyDocument.findMany.mockResolvedValue([]);
+      db.paperlessTagJob.findFirst.mockResolvedValue(null);
+
+      const result = await service.getStatus(householdId, user, policyId);
+
+      expect(result.autoSyncEnabled).toBe(false);
+      expect(result.nextSyncAt).toBeNull();
+      // The last successful sync stays visible even when the sync is off.
+      expect(result.lastSyncedAt).toEqual(expect.any(Date));
+    });
+
+    it('falls back to the enabled default when the setting is absent', async () => {
+      settings.getEffectiveBoolean.mockResolvedValue(undefined);
+      db.policyPaperlessTag.findUnique.mockResolvedValue(configuredTag(null));
+      db.policyDocument.findMany.mockResolvedValue([]);
+      db.paperlessTagJob.findFirst.mockResolvedValue(null);
+
+      const result = await service.getStatus(householdId, user, policyId);
+
+      expect(result.autoSyncEnabled).toBe(true);
+      // Never synchronized → due now, only waiting for the next tick.
+      expect(new Date(result.nextSyncAt as string).getTime()).toBeLessThanOrEqual(
+        Date.now() + PAPERLESS_TAG_RECONCILE_TICK_MS + 5_000,
+      );
+    });
+  });
+
+  describe('status vocabulary helpers (AP-24 §1.1)', () => {
+    it('maps every internal job state', () => {
+      expect(mapJobStatus('PENDING')).toBe('QUEUED');
+      expect(mapJobStatus('RUNNING')).toBe('RUNNING');
+      expect(mapJobStatus('COMPLETED')).toBe('SUCCEEDED');
+      expect(mapJobStatus('FAILED')).toBe('FAILED');
+      // A skipped run did not synchronise anything – never "succeeded".
+      expect(mapJobStatus('SKIPPED')).toBe('FAILED');
+    });
+
+    it('strips everything that is not a plain code token', () => {
+      expect(sanitizeErrorCode('STALE_CONFIG')).toBe('STALE_CONFIG');
+      expect(sanitizeErrorCode('unreachable')).toBe('UNREACHABLE');
+      expect(sanitizeErrorCode('a b/c:d')).toBe('ABCD');
+      expect(sanitizeErrorCode('')).toBeNull();
+      expect(sanitizeErrorCode(null)).toBeNull();
+      expect(sanitizeErrorCode('!!!')).toBeNull();
+      expect(sanitizeErrorCode('x'.repeat(100))).toHaveLength(48);
     });
   });
 });

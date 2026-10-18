@@ -27,4 +27,10 @@ export type { Language, MessageParams, MessagePath, Messages, Translator } from 
 export { fetchLanguagePreference, saveLanguagePreference } from './language-client';
 export type { LanguagePreference, LanguagePersistence } from './language-client';
 export { localizeAuthError, oidcCallbackErrorKey } from './auth-errors';
-export { formatCurrency, formatDate, formatNumber } from './format';
+export {
+  formatBasisAmount,
+  formatCurrency,
+  formatDate,
+  formatDateDmy,
+  formatNumber,
+} from './format';

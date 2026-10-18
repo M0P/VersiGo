@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -24,7 +25,7 @@ import type { UploadedFile as UploadedFileType } from './documents.types';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
 import { Roles } from '../identity/roles.decorator';
-import { UploadDocumentDto, UpdateDocumentMetadataDto, CreatePaperlessLinkDto } from './dto/documents.dto';
+import { UploadDocumentDto, UpdateDocumentMetadataDto, CreatePaperlessLinkDto, BulkClassifyDocumentsDto, ListDocumentsQueryDto } from './dto/documents.dto';
 import type { AuthenticatedUser } from '../identity/auth.service';
 
 @Controller('households/:householdId/policies/:policyId/documents')
@@ -72,14 +73,31 @@ export class DocumentsController {
     );
   }
 
+  /**
+   * AP-24 (§2.3): reclassifies several documents of the policy in one step.
+   * Same permission model as a single metadata update (USER/ADMIN only).
+   */
+  @Post('classify')
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
+  async classifyDocuments(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: BulkClassifyDocumentsDto,
+  ) {
+    return this.service.classifyDocuments(householdId, user.id, policyId, dto);
+  }
+
   @Get()
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findAll(
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
+    // AP-24 (§2.3): optional filter by document class (e.g. BILLING).
+    @Query() query: ListDocumentsQueryDto,
   ) {
-    return this.service.findAll(householdId, user, policyId);
+    return this.service.findAll(householdId, user, policyId, query.documentClass);
   }
 
   @Get(':docId')

@@ -439,6 +439,7 @@ if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
   grep -qF '"key":"AI_ENABLED"' /tmp/versigo-smoke-sysconfig.json || { echo "FAILED: system-config response missing AI_ENABLED"; exit 1; }
   # AP-22: the tag-sync interval is exposed in the settings catalogue.
   grep -qF '"key":"PAPERLESS_TAG_SYNC_INTERVAL_MS"' /tmp/versigo-smoke-sysconfig.json || { echo "FAILED: system-config response missing PAPERLESS_TAG_SYNC_INTERVAL_MS"; exit 1; }
+  grep -qF '"key":"PAPERLESS_TAG_SYNC_ENABLED"' /tmp/versigo-smoke-sysconfig.json || { echo "FAILED: system-config response missing PAPERLESS_TAG_SYNC_ENABLED"; exit 1; }
   grep -qF '"source"' /tmp/versigo-smoke-sysconfig.json || { echo "FAILED: system-config response missing source metadata"; exit 1; }
   # Secrets duerfen niemals im Klartext in der Antwort auftauchen.
   if [ -n "${AI_OPENAI_COMPAT_API_KEY:-}" ] && grep -qF "$AI_OPENAI_COMPAT_API_KEY" /tmp/versigo-smoke-sysconfig.json; then

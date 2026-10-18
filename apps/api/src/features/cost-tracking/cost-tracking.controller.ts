@@ -65,6 +65,21 @@ export class CostTrackingController {
     return this.service.getSchedule(householdId, user, policyId);
   }
 
+  /**
+   * AP-24 (§4.1): the BILLING documents of the policy for the cost sidebar.
+   *
+   * Also BEFORE the :entryId route, for the same reason as 'schedule'.
+   */
+  @Get('billing-documents')
+  @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
+  async listBillingDocuments(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.listBillingDocuments(householdId, user, policyId);
+  }
+
   @Get(':entryId')
   @Roles(GlobalRole.READ_ONLY, GlobalRole.USER, GlobalRole.ADMIN)
   async findOne(

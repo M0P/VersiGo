@@ -6,10 +6,15 @@ import { Button } from '@/components/ui/button';
 import { InlineSpinner } from '@/components/ui/loading';
 import { Alert } from '@/components/ui/alert';
 import { Input, Select, FormField } from '@/components/ui/form-field';
-import { useI18n, formatCurrency, formatDate } from '@/i18n';
+import { useI18n, formatBasisAmount, formatCurrency, formatDateDmy } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 import { parseCostAmounts } from '@/lib/cost-amounts';
+import type {
+  CostEntryPrefill,
+  CostPrefillNotice,
+  CostSuggestionField,
+} from '@/lib/cost-suggestion';
 
 const API_BASE = getApiBaseUrl();
 
@@ -18,13 +23,21 @@ const API_BASE = getApiBaseUrl();
 const NEW_FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'ANNUAL'];
 const ALL_FREQUENCIES = ['MONTHLY', 'QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL'];
 
+// BugFix-22: every amount is computed and displayed PER BASIS (gross/net).
+// A missing basis stays null and renders as a dash – it is never replaced
+// by the other basis.
+type BasisAmounts = {
+  gross: number | null;
+  net: number | null;
+};
+
 // BugFix-08 (Q4): period table (incurred/expected) from GET .../costs/schedule.
 type SchedulePeriod = {
   periodIndex: number;
   periodLabel: string;
   periodStart: string;
   periodEnd: string;
-  amount: number;
+  amount: BasisAmounts;
   status: 'incurred' | 'expected';
   entryId: string | null;
 };
@@ -32,18 +45,21 @@ type SchedulePeriod = {
 type Schedule = {
   policyId: string;
   asOf: string;
-  paidToDate: number;
+  anchor: string | null;
+  frequency: string;
+  paidToDate: BasisAmounts;
   current: {
-    annualGross: number;
-    annualNet: number | null;
-    perFrequency: { MONTHLY: number; QUARTERLY: number; ANNUAL: number };
     entryId: string;
     frequency: string;
-    grossAmount: number;
     validFrom: string;
     validTo: string | null;
+    amount: BasisAmounts;
+    annual: BasisAmounts;
+    perFrequency: { MONTHLY: BasisAmounts; QUARTERLY: BasisAmounts; ANNUAL: BasisAmounts };
   } | null;
   periods: SchedulePeriod[];
+  perYear: { year: number; amount: BasisAmounts }[];
+  entryCount: number;
 };
 
 type CostEntry = {
@@ -57,6 +73,8 @@ type CostEntry = {
   frequency: string;
   bookingSource: string | null;
   note: string | null;
+  /** AP-24 (§4.2): billing document this entry was derived from. */
+  sourceDocumentId?: string | null;
   createdAt: string;
 };
 
@@ -67,6 +85,24 @@ type EditForm = {
   netAmount: string;
   frequency: string;
   note: string;
+};
+
+type CreateForm = {
+  validFrom: string;
+  grossAmount: string;
+  netAmount: string;
+  frequency: string;
+  bookingSource: string;
+  note: string;
+};
+
+const EMPTY_CREATE_FORM: CreateForm = {
+  validFrom: '',
+  grossAmount: '',
+  netAmount: '',
+  frequency: 'MONTHLY',
+  bookingSource: '',
+  note: '',
 };
 
 function toEditForm(entry: CostEntry): EditForm {
@@ -96,14 +132,33 @@ function amountErrorKey(reason: 'missing' | 'invalid' | 'negative'): string {
  * creating a cost increase from a date as well as editing/deleting – also
  * historical entries). The former separate page
  * /policies/[id]/costs no longer exists.
+ *
+ * AP-24 (§4.2): an AI proposal for a billing document arrives as `prefill`
+ * and only fills the create form – it is never saved automatically. The entry
+ * is created through the regular endpoint, which also stores the document
+ * reference. `onEntriesChanged` lets the sidebar refresh its "used" marking.
  */
-export default function CostsOverviewCard({ policyId }: { policyId: string }): ReactElement {
+export default function CostsOverviewCard({
+  policyId,
+  prefill = null,
+  onEntriesChanged,
+}: {
+  policyId: string;
+  prefill?: CostEntryPrefill | null;
+  onEntriesChanged?: () => void;
+}): ReactElement {
   const { t, language } = useI18n();
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [entries, setEntries] = useState<CostEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // AP-24 (§4.2): the last AI proposal. `prefillApplied` remembers its token
+  // so one proposal is applied exactly once.
+  const [prefillApplied, setPrefillApplied] = useState<string | null>(null);
+  const [prefillSourceDocumentId, setPrefillSourceDocumentId] = useState<string | null>(null);
+  const [prefillUnclearFields, setPrefillUnclearFields] = useState<CostSuggestionField[]>([]);
+  const [prefillNotices, setPrefillNotices] = useState<CostPrefillNotice[]>([]);
   // Original entry during editing – used to compare which fields were
   // really changed (only those are sent), so that
   // exact timestamps (e.g. validTo 23:59:59.999) are preserved.
@@ -111,9 +166,7 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
   const [editForm, setEditForm] = useState<EditForm>({
     validFrom: '', validTo: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '',
   });
-  const [newEntry, setNewEntry] = useState({
-    validFrom: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '',
-  });
+  const [newEntry, setNewEntry] = useState<CreateForm>(EMPTY_CREATE_FORM);
   // BugFix-22: "gross OR net is enough" – the field error of the amount inputs.
   const [newAmountError, setNewAmountError] = useState<string | null>(null);
   const [editAmountError, setEditAmountError] = useState<string | null>(null);
@@ -165,6 +218,41 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
     reload();
   }, [policyId]);
 
+  /**
+   * AP-24 (§4.2): applies an AI proposal to the create form.
+   *
+   * The proposal is identified by `prefill.token`, so it is applied exactly
+   * once even though the effect re-runs on every render with the same
+   * proposal. Nothing is sent to the server here – saving stays a deliberate
+   * user action.
+   */
+  useEffect(() => {
+    if (!prefill || prefill.token === prefillApplied) return;
+
+    setPrefillApplied(prefill.token);
+    setPrefillSourceDocumentId(prefill.sourceDocumentId);
+    setPrefillUnclearFields(prefill.unclearFields);
+    setPrefillNotices(prefill.notices);
+    setNewAmountError(null);
+    setActionError(null);
+    setNewEntry((current) => ({
+      ...current,
+      validFrom: prefill.validFrom || current.validFrom,
+      grossAmount: prefill.grossAmount,
+      netAmount: prefill.netAmount,
+      frequency: prefill.frequency ?? current.frequency,
+      bookingSource: prefill.bookingSource,
+      note: prefill.note,
+    }));
+  }, [prefill, prefillApplied]);
+
+  /** Drops the proposal state (after a save or when the user dismisses it). */
+  function clearPrefill(): void {
+    setPrefillSourceDocumentId(null);
+    setPrefillUnclearFields([]);
+    setPrefillNotices([]);
+  }
+
   function handleCreate(e: FormEvent) {
     e.preventDefault();
     // BugFix-22: the gross amount is no longer mandatory – one of gross/net
@@ -186,6 +274,10 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
     if (amounts.grossAmount !== undefined) body.grossAmount = amounts.grossAmount;
     if (amounts.netAmount !== undefined) body.netAmount = amounts.netAmount;
     if (newEntry.note) body.note = newEntry.note;
+    if (newEntry.bookingSource) body.bookingSource = newEntry.bookingSource;
+    // AP-24 (§4.2): the reference to the billing document the values came
+    // from. Only sent when the entry was actually created from a proposal.
+    if (prefillSourceDocumentId) body.sourceDocumentId = prefillSourceDocumentId;
 
     fetch(`${API_BASE}/households/default/policies/${policyId}/costs`, {
       method: 'POST',
@@ -200,13 +292,16 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
       })
       .then(() => {
         if (seq !== requestSeq.current) return;
-        setNewEntry({ validFrom: '', grossAmount: '', netAmount: '', frequency: 'MONTHLY', note: '' });
+        setNewEntry(EMPTY_CREATE_FORM);
         // Successful save also clears any previous amount-validation error.
         setNewAmountError(null);
+        // The proposal has been used – drop its state.
+        clearPrefill();
         // reload() increments requestSeq itself – the .finally below must
         // therefore NOT gate setSubmitting(false) on the captured seq
         // (BugFix-22: after a successful save the button stayed blocked).
         reload();
+        onEntriesChanged?.();
       })
       .catch(() => {
         if (seq !== requestSeq.current) return;
@@ -285,6 +380,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
         if (seq !== requestSeq.current) return;
         setEditingId(null);
         setEditingOriginal(null);
+        // AP-24 (§4.2): the sidebar marks documents referenced by a cost
+        // entry and refreshes after every successful write.
+        onEntriesChanged?.();
         // reload() increments requestSeq – see handleCreate: the .finally
         // below must not depend on the captured seq (BugFix-22).
         reload();
@@ -313,6 +411,7 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
       if (!res.ok) throw new Error(t('costs.delete'));
       if (seq === requestSeq.current) {
         if (editingId === id) { setEditingId(null); setEditingOriginal(null); }
+        onEntriesChanged?.();
         reload();
       }
     } catch {
@@ -348,31 +447,34 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
         <Card style={{ marginBottom: 'var(--versigo-space-6)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 'var(--versigo-space-2)' }}>
             <h2>{t('costs.paidToDate')}</h2>
-            <span className="text-xs text-muted">{t('costs.asOf', { date: formatDate(schedule.asOf, language) })}</span>
+            <span className="text-xs text-muted">{t('costs.asOf', { date: formatDateDmy(schedule.asOf) })}</span>
           </div>
+          {/* BugFix-22: every sum names its basis (brutto/netto); a missing
+              basis is shown as a dash, never borrowed from the other basis. */}
           <p style={{ fontSize: 'var(--versigo-font-size-3xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
-            {formatCurrency(schedule.paidToDate, language)}
+            {t('costs.basisGross')}: {formatBasisAmount(schedule.paidToDate.gross, language)}
+            {' · '}
+            {t('costs.basisNet')}: {formatBasisAmount(schedule.paidToDate.net, language)}
           </p>
 
           {current && (
             <dl className="detail-list" style={{ marginTop: 'var(--versigo-space-4)' }}>
               <dt>{t('costs.currentEntry')}</dt>
               <dd>
-                {t(`costs.frequencies.${current.frequency}`) ?? current.frequency}: {formatCurrency(current.grossAmount, language)}
+                {t(`costs.frequencies.${current.frequency}`) ?? current.frequency}:{' '}
+                {t('costs.basisGross')}: {formatBasisAmount(current.amount.gross, language)}
+                {' / '}
+                {t('costs.basisNet')}: {formatBasisAmount(current.amount.net, language)}
                 {' '}
                 <span className="text-xs text-muted">
-                  ({t('costs.since', { date: formatDate(current.validFrom, language) })}
-                  {current.validTo ? `, ${t('costs.until', { date: formatDate(current.validTo, language) })}` : ''})
+                  ({t('costs.since', { date: formatDateDmy(current.validFrom) })}
+                  {current.validTo ? `, ${t('costs.until', { date: formatDateDmy(current.validTo) })}` : ''})
                 </span>
               </dd>
               <dt>{t('costs.annualGross')}</dt>
-              <dd>{formatCurrency(current.annualGross, language)}</dd>
-              {current.annualNet != null && (
-                <>
-                  <dt>{t('costs.annualNet')}</dt>
-                  <dd>{formatCurrency(current.annualNet, language)}</dd>
-                </>
-              )}
+              <dd>{formatBasisAmount(current.annual.gross, language)}</dd>
+              <dt>{t('costs.annualNet')}</dt>
+              <dd>{formatBasisAmount(current.annual.net, language)}</dd>
             </dl>
           )}
         </Card>
@@ -393,7 +495,9 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
                     <th>{t('costs.period')}</th>
                     <th>{t('costs.periodStart')}</th>
                     <th>{t('costs.periodEnd')}</th>
-                    <th>{t('costs.amount')}</th>
+                    {/* BugFix-22: one column per basis – no combined value. */}
+                    <th>{t('costs.amountGross')}</th>
+                    <th>{t('costs.amountNet')}</th>
                     <th>{t('costs.status')}</th>
                   </tr>
                 </thead>
@@ -401,9 +505,10 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
                   {schedule.periods.map((period) => (
                     <tr key={period.periodIndex}>
                       <td data-label={t('costs.period')}>{period.periodLabel}</td>
-                      <td data-label={t('costs.periodStart')}>{formatDate(period.periodStart, language)}</td>
-                      <td data-label={t('costs.periodEnd')}>{formatDate(period.periodEnd, language)}</td>
-                      <td data-label={t('costs.amount')}>{formatCurrency(period.amount, language)}</td>
+                      <td data-label={t('costs.periodStart')}>{formatDateDmy(period.periodStart)}</td>
+                      <td data-label={t('costs.periodEnd')}>{formatDateDmy(period.periodEnd)}</td>
+                      <td data-label={t('costs.amountGross')}>{formatBasisAmount(period.amount.gross, language)}</td>
+                      <td data-label={t('costs.amountNet')}>{formatBasisAmount(period.amount.net, language)}</td>
                       <td data-label={t('costs.status')}>
                         <span className={`badge ${period.status === 'incurred' ? 'badge-success' : 'badge-neutral'}`}>
                           {t(`costs.periodStatus.${period.status}`)}
@@ -478,12 +583,22 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
                     </tr>
                   ) : (
                     <tr key={e.id}>
-                      <td data-label={t('costs.validFrom')}>{formatDate(e.validFrom, language)}</td>
-                      <td data-label={t('costs.validTo')}>{e.validTo ? formatDate(e.validTo, language) : '-'}</td>
-                      <td data-label={t('costs.gross')}>{e.grossAmount != null ? formatCurrency(Number(e.grossAmount), language) : '-'}</td>
-                      <td data-label={t('costs.net')}>{e.netAmount != null ? formatCurrency(Number(e.netAmount), language) : '-'}</td>
+                      <td data-label={t('costs.validFrom')}>{formatDateDmy(e.validFrom)}</td>
+                      <td data-label={t('costs.validTo')}>{e.validTo ? formatDateDmy(e.validTo) : '—'}</td>
+                      <td data-label={t('costs.gross')}>{e.grossAmount != null ? formatCurrency(Number(e.grossAmount), language) : '—'}</td>
+                      <td data-label={t('costs.net')}>{e.netAmount != null ? formatCurrency(Number(e.netAmount), language) : '—'}</td>
                       <td data-label={t('costs.frequency')}>{t(`costs.frequencies.${e.frequency}`) ?? e.frequency}</td>
-                      <td data-label={t('costs.note')}>{e.note ?? '-'}</td>
+                      <td data-label={t('costs.note')}>
+                        {/* AP-24 (§4.2): the entry names its source document. */}
+                        {e.sourceDocumentId && (
+                          <>
+                            <span className="badge badge-neutral" title={t('costs.sourceDocumentHint')}>
+                              {t('costs.sourceDocumentBadge')}
+                            </span>{' '}
+                          </>
+                        )}
+                        {e.note ?? '—'}
+                      </td>
                       <td>
                         <Button size="sm" variant="secondary" onClick={() => handleEdit(e)}>
                           {t('costs.edit')}
@@ -515,13 +630,33 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
         <p className="form-hint">{t('costs.increaseHint')}</p>
         {/* BugFix-22: gross and net are both optional – one of them is enough. */}
         <p className="form-hint">{t('costs.amountHint')}</p>
+        {/* AP-24 (§4.2): the values below come from an AI proposal, not from
+            an automatic save. The user reviews and confirms them. */}
+        {prefillSourceDocumentId && (
+          <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
+            <Alert variant="info">
+              {t('costs.aiPrefillNotice')}
+              {prefillNotices.length > 0 && (
+                <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem' }}>
+                  {prefillNotices.map((notice, index) => (
+                    <li key={`${notice.key}-${index}`}>{t(notice.key, notice.params)}</li>
+                  ))}
+                </ul>
+              )}
+            </Alert>
+          </div>
+        )}
         {newAmountError && (
           <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
             <Alert variant="danger">{newAmountError}</Alert>
           </div>
         )}
         <form onSubmit={handleCreate}>
-          <FormField label={t('costs.validFrom')} required>
+          <FormField
+            label={t('costs.validFrom')}
+            required
+            hint={prefillUnclearFields.includes('validFrom') ? t('costs.fieldUnclear') : undefined}
+          >
             <Input
               type="date"
               value={newEntry.validFrom}
@@ -529,7 +664,10 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
               required
             />
           </FormField>
-          <FormField label={`${t('costs.grossAmount')} (${t('common.optional')})`}>
+          <FormField
+            label={`${t('costs.grossAmount')} (${t('common.optional')})`}
+            hint={prefillUnclearFields.includes('amount') ? t('costs.fieldUnclear') : undefined}
+          >
             <Input
               type="number"
               step="0.01"
@@ -547,7 +685,10 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
               onChange={(e) => { setNewAmountError(null); setNewEntry({ ...newEntry, netAmount: e.target.value }); }}
             />
           </FormField>
-          <FormField label={t('costs.frequency')}>
+          <FormField
+            label={t('costs.frequency')}
+            hint={prefillUnclearFields.includes('frequency') ? t('costs.fieldUnclear') : undefined}
+          >
             <Select
               value={newEntry.frequency}
               onChange={(e) => setNewEntry({ ...newEntry, frequency: e.target.value })}
@@ -559,7 +700,20 @@ export default function CostsOverviewCard({ policyId }: { policyId: string }): R
               ))}
             </Select>
           </FormField>
-          <FormField label={t('costs.note')}>
+          <FormField
+            label={`${t('costs.bookingSource')} (${t('common.optional')})`}
+            hint={prefillUnclearFields.includes('bookingSource') ? t('costs.fieldUnclear') : undefined}
+          >
+            <Input
+              type="text"
+              value={newEntry.bookingSource}
+              onChange={(e) => setNewEntry({ ...newEntry, bookingSource: e.target.value })}
+            />
+          </FormField>
+          <FormField
+            label={t('costs.note')}
+            hint={prefillUnclearFields.includes('description') ? t('costs.fieldUnclear') : undefined}
+          >
             <Input
               type="text"
               value={newEntry.note}
