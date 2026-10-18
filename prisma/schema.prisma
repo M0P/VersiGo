@@ -390,11 +390,17 @@ model PolicyCostEntry {
   frequency     PaymentFrequency
   bookingSource String?
   note          String?
+  // AP-24 (§4.2): the document this entry was derived from. Set when the
+  // entry was created from the billing-document sidebar (with or without AI
+  // support) so duplicates can be spotted; null for manually typed entries.
+  sourceDocumentId String?
   createdAt     DateTime         @default(now())
 
   policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  sourceDocument PolicyDocument? @relation("CostEntrySourceDocument", fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@index([policyId])
+  @@index([sourceDocumentId])
   @@map("policy_cost_entries")
 }
 
@@ -429,8 +435,17 @@ model PolicyDocument {
   taggingStatus    PaperlessTaggingStatus?
   taggingErrorCode String?
 
+  // AP-24 (§2): Dokumentklasse je Versicherungs-Zuordnung. Bestehende
+  // Dokumente erhalten bei der Migration UNCLASSIFIED; es erfolgt keine
+  // automatische inhaltliche Klassifikation. Die Tag-Synchronisation
+  // schreibt dieses Feld nie an (die Klassifikation ueberlebt den Abgleich).
+  documentClass    DocumentClass @default(UNCLASSIFIED)
+
   policy      InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
   createdBy   User?           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  // AP-24 (§4.2): Kosteneintraege, die aus diesem Dokument abgeleitet wurden.
+  costEntrySources PolicyCostEntry[] @relation("CostEntrySourceDocument")
 
   @@index([policyId])
   @@index([policyId, checksum])
@@ -486,6 +501,18 @@ model PaperlessTagJob {
   updatedAt     DateTime @updatedAt
   completedAt   DateTime?
 
+  // AP-24 (§1.1): Fortschritt eines SYNC_POLICY-Laufs für die Oberfläche.
+  // `totalCount` bleibt NULL, solange die Gesamtzahl nicht feststeht (der
+  // Remote-Liste entnommen) – die Oberfläche zeigt dann einen unbestimmten
+  // Balken mit dem bereits verarbeiteten Zwischenstand statt eines
+  // vorgetäuschten Prozentwerts. Die Zähler sind NICHT sensitiv: sie
+  // enthalten keine Dokumentinhalte oder Zugangsdaten.
+  processedCount Int      @default(0)
+  totalCount     Int?
+  addedCount     Int      @default(0)
+  removedCount   Int      @default(0)
+  unchangedCount Int      @default(0)
+
   policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
 
   @@index([policyId, status])
@@ -518,6 +545,23 @@ enum PaperlessTaggingStatus {
 enum DocumentStorageType {
   INTERNAL
   PAPERLESS_LINK
+}
+
+// AP-24 (§2): feste Dokumentklassen. CONTRACT und BILLING sind verbindlich
+// (sie traegen die waehlbaren Vertragsdokumente der KI-Zusammenfassung
+// beziehungsweise die Abrechnungsliste der Kostenansicht); die uebrigen
+// Klassen sind Vorschlaege. Die Klassifikation gilt JE Versicherungs-
+// Zuordnung (PolicyDocument), nicht externes Dokument: dieselbe Paperless-
+// Quelle kann bei einer Versicherung eine Rechnung und bei einer anderen
+// eine Korrespondenz sein. Sie wird nie von der Tag-Synchronisation
+// ueberschrieben.
+enum DocumentClass {
+  CONTRACT
+  BILLING
+  CORRESPONDENCE
+  CLAIM
+  OTHER
+  UNCLASSIFIED
 }
 
 // AP-18: Portal-Connectoren. Der Kernumfang umfasst Deeplinks und
@@ -593,6 +637,11 @@ model AiCoverageSummary {
   providerKey          String
   model                String?
   summaryMarkdown      String
+  // AP-24 (§3.2): structured summary (Variante A). New summaries store the
+  // validated JSON document here and keep `summaryMarkdown` as a plain-text
+  // rendering for consumers that only know the old shape. Rows written before
+  // AP-24 keep `summaryJson = null` and are rendered as legacy Markdown.
+  summaryJson          Json?
   sourceDocumentRefsJson Json?
   createdAt            DateTime @default(now())
 

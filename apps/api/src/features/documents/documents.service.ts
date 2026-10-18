@@ -7,11 +7,11 @@ import {
   Inject,
 } from '@nestjs/common';
 import { DatabaseService, AppConfigService } from '@versigo/foundation';
-import type { PolicyDocument, Prisma } from '@prisma/client';
+import type { DocumentClass, PolicyDocument, Prisma } from '@prisma/client';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { UploadDocumentDto, UpdateDocumentMetadataDto } from './dto/documents.dto';
+import { UploadDocumentDto, UpdateDocumentMetadataDto, BulkClassifyDocumentsDto } from './dto/documents.dto';
 import { UploadedFile } from './documents.types';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import {
@@ -51,6 +51,13 @@ const MAGIC_BYTES: Record<string, Buffer[]> = {
 };
 
 export const MAX_FILE_SIZE = 20 * 1024 * 1024;
+
+/**
+ * AP-24 (§2.3): upper bound for one bulk classification request. Bounds the
+ * write load of a single call without getting in the way of normal use (the
+ * list itself is capped at 200 documents).
+ */
+export const MAX_BULK_CLASSIFY = 200;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -238,6 +245,9 @@ export class DocumentsService {
           checksum,
           category: dto.category,
           documentDate: dto.documentDate ? new Date(dto.documentDate) : undefined,
+          // AP-24 (§2): Klasse beim Upload; ohne Angabe bleibt der
+          // Spalten-Default UNCLASSIFIED.
+          documentClass: dto.documentClass ?? undefined,
           createdByUserId: userId,
         },
       });
@@ -275,6 +285,7 @@ export class DocumentsService {
             checksum,
             category: dto.category ?? null,
             documentDate: dto.documentDate ?? null,
+            documentClass: dto.documentClass ?? 'UNCLASSIFIED',
           },
         },
       });
@@ -287,12 +298,26 @@ export class DocumentsService {
     });
   }
 
-  async findAll(householdId: string, user: AuthenticatedUser, policyId: string) {
+  /**
+   * AP-24 (§2.3): the document list can be narrowed to a single class
+   * (e.g. `BILLING` for the cost sidebar). Omitting the parameter keeps the
+   * previous, unfiltered behaviour.
+   */
+  async findAll(
+    householdId: string,
+    user: AuthenticatedUser,
+    policyId: string,
+    documentClass?: DocumentClass,
+  ) {
     // Throws 403/404 depending on role and share (READ_ONLY only with share)
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
     const documents = await this.db.policyDocument.findMany({
-      where: { policyId, archivedAt: null },
+      where: {
+        policyId,
+        archivedAt: null,
+        ...(documentClass ? { documentClass } : {}),
+      },
       orderBy: { uploadedAt: 'desc' },
       take: 200,
     });
@@ -552,6 +577,9 @@ export class DocumentsService {
           documentDate: dto.documentDate !== undefined
             ? (dto.documentDate ? new Date(dto.documentDate) : null)
             : undefined,
+          // AP-24 (§2): nachträgliche Klassifikation; `undefined` lässt den
+          // bisherigen Wert unangetastet.
+          documentClass: dto.documentClass,
         },
       });
 
@@ -577,6 +605,75 @@ export class DocumentsService {
       if (err instanceof NotFoundException) throw err;
       this.logger.error(`update document ${docId} failed: ${err.message}`, err.stack);
       throw err;
+    });
+  }
+
+  /**
+   * AP-24 (§2.3): changes the class of several documents of one policy in a
+   * single step (bulk selection in the list).
+   *
+   * Scope and safety:
+   * - Every ID is verified against `policyId` and the archive flag, so a
+   *   request can never touch documents of another household/policy
+   *   (mis-scoped IDs are reported as `notFound`, not silently applied).
+   * - The update runs in one transaction: either all valid documents are
+   *   reclassified or none.
+   * - The change is audited with the affected IDs and both class values.
+   */
+  async classifyDocuments(
+    householdId: string,
+    userId: string,
+    policyId: string,
+    dto: BulkClassifyDocumentsDto,
+  ) {
+    await this.assertPolicyAccess(householdId, userId, policyId);
+
+    if (dto.documentIds.length > MAX_BULK_CLASSIFY) {
+      throw new BadRequestException(
+        `A maximum of ${MAX_BULK_CLASSIFY} documents can be classified at once`,
+      );
+    }
+
+    // De-duplicate: the same ID twice must not produce two audit entries.
+    const documentIds = [...new Set(dto.documentIds)];
+
+    return this.db.$transaction(async (tx) => {
+      const existing = await tx.policyDocument.findMany({
+        where: { id: { in: documentIds }, policyId, archivedAt: null },
+        select: { id: true, documentClass: true },
+      });
+
+      const changedIds = existing
+        .filter((doc) => doc.documentClass !== dto.documentClass)
+        .map((doc) => doc.id);
+
+      if (changedIds.length > 0) {
+        await tx.policyDocument.updateMany({
+          where: { id: { in: changedIds } },
+          data: { documentClass: dto.documentClass },
+        });
+
+        await tx.auditEvent.create({
+          data: {
+            actorUserId: userId,
+            entityType: 'PolicyDocument',
+            entityId: policyId,
+            action: 'BULK_CLASSIFY',
+            diffJson: {
+              documentClass: dto.documentClass,
+              documentIds: changedIds,
+              changed: changedIds.length,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+
+      return {
+        requested: documentIds.length,
+        updated: changedIds.length,
+        unchanged: existing.length - changedIds.length,
+        notFound: documentIds.length - existing.length,
+      };
     });
   }
 

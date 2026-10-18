@@ -34,14 +34,25 @@ describe('master data must not render an insurer portal URL field (BugFix-22)', 
   });
 });
 
-describe('covered persons: relation is optional (BugFix-22)', () => {
+describe('covered persons: relation is optional (BugFix-22, AP-24 §5.2)', () => {
   const source = read('../app/policies/[id]/covered-persons-tab.tsx');
 
   it('renders the relation field without a required marker', () => {
-    const start = source.indexOf("t('policies.relationType')");
+    // AP-24 (§5.2): the label is kind-dependent now ("Beziehung" for a
+    // person, "Rolle des Objekts" for an object) and no longer carries an
+    // "(Optional)" suffix – the field stays technically optional.
+    const start = source.indexOf('coveredSubjectRelationLabelKey(');
     expect(start).toBeGreaterThan(-1);
     const block = source.slice(start, start + 400);
     expect(block).not.toContain('required');
+    expect(block).not.toContain('common.optional');
+  });
+
+  it('derives the name field label from the subject kind instead of a static text', () => {
+    // AP-24 (§5.1): "Personenname" must not be shown for an object.
+    expect(source).not.toContain("t('policies.personName')");
+    expect(source).toContain('coveredSubjectNameLabelKey(');
+    expect(source).toContain('coveredSubjectNamePlaceholderKey(');
   });
 
   it('offers the subject kind (person/object) and hides the birth date for objects', () => {
@@ -57,9 +68,10 @@ describe('cost increase: gross or net is enough (BugFix-22)', () => {
   it('validates through the tested helper instead of a required gross field', () => {
     expect(source).toContain('parseCostAmounts(');
     expect(source).toContain("t('costs.amountHint')");
-    // Both amount fields are marked as optional now.
-    expect(source).toContain("FormField label={`${t('costs.grossAmount')} (${t('common.optional')})`}");
-    expect(source).toContain("FormField label={`${t('costs.netAmount')} (${t('common.optional')})`}");
+    // Both amount fields are marked as optional now (label is on its own
+    // line because the field also carries a `hint` for the AI prefill).
+    expect(source).toContain("label={`${t('costs.grossAmount')} (${t('common.optional')})`}");
+    expect(source).toContain("label={`${t('costs.netAmount')} (${t('common.optional')})`}");
   });
 
   it('renders a missing gross amount as "-" and can clear it while editing', () => {
@@ -83,7 +95,7 @@ describe('documents tab: sorting + icon-only origin (BugFix-22)', () => {
   const source = read('../app/policies/[id]/documents-tab.tsx');
 
   it('sorts the list through the tested helper', () => {
-    expect(source).toContain('sortDocuments(documents, sortKey)');
+    expect(source).toContain('sortDocuments(visibleDocuments, sortKey)');
     expect(source).toContain('DOCUMENT_SORT_KEYS');
     // The sort order is a real control, not a silently fixed default.
     expect(source).toContain("t('policies.documentsSort')");

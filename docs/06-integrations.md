@@ -3,8 +3,15 @@
 ## AI Provider Abstraktion
 Ein einheitliches Provider-Interface:
 - `extractContractFacts(documentRefs, schema)`
-- `summarizeCoverage(policyId, documentRefs, promptProfile)`
-- `healthCheck()`
+- `summarizeCoverage(policyId, documentRefs, promptProfile)` –
+  AP-24 §3.2: liefert das strukturierte JSON-Dokument (siehe unten)
+- `extractCostFromDocument(documentContent, policyId, options?)` –
+  AP-24 §4.2, **optional**; `healthStatus()` ist ebenso optional. Ein Adapter,
+  der die Methode nicht bereitstellt, kann weiterhin zusammenfassen und
+  Fakten extrahieren – `AiAssistService` lehnt `POST …/cost-suggestion`
+  in diesem Fall mit `AI_COST_EXTRACTION_UNSUPPORTED` ab, statt einen
+  Adapterwechsel zu erzwingen.
+- `healthCheck()` bzw. `healthStatus()`
 
 ### Provider
 - Ollama Adapter, lokal oder remote
@@ -15,6 +22,110 @@ Ein einheitliches Provider-Interface:
 - Prompts und Antworten protokollierbar, aber sensible Inhalte konfigurierbar maskiert.
 - Provider sind global deaktivierbar.
 - Pro Haushalt optional abschaltbar.
+
+### Capability-Freigabe (AP-24)
+`GET /households/:id/ai/status` liefert `{ connected, provider, reason, capable }`.
+`capable` ist die Freigabe, auf der die Oberfläche ihre KI-Aktionen aufhängt
+(Kosten-Seitenleiste, optionale Vertragsdokumente): `true` nur, wenn
+`AI_ENABLED` gesetzt **und** der Provider antwortet. Bei deaktivierter KI
+liefert der Endpunkt `{ connected: false, provider: 'none', reason: 'disabled',
+capable: false }`. Die Prüfung ist damit serverseitig; das Frontend
+übernimmt den Wert nur zur Anzeige.
+
+### Ausgabeformat der KI (AP-24 §3.2, §4.2)
+
+**Entscheidung: Variante A** – beide KI-Antworten sind versionierte
+JSON-Objekte nach festem Schema, keine Markdown-Texte.
+
+Begründung (längst in `packages/foundation/src/ai/coverage-summary-format.ts`
+dokumentiert): VersiGo speichert Zusammenfassungen und zeigt sie später erneut
+an. Ein strukturiertes Dokument lässt sich ohne Rateroutine neu rendern;
+Markdown-als-HTML ist die klassische XSS-Falle, und fehlende bzw. unsichere
+Angaben sind als Daten (`hints`, `unclearFields`) ausdrückbar, statt von der
+Formatierungsdisziplin des Modells abzuhängen. Beide Formate teilen die
+gleichen Regeln: versionierter Prompt, strikte serverseitige Validierung und
+**ein** begrenzter Wiederholungsversuch mit präzisem Repair-Hint, danach ein
+sauberer Fehlerfall – niemals stilles „Ausbessern" einer Off-Schema-Antwort.
+
+**Zusammenfassung (`COVERAGE_SUMMARY_SCHEMA_VERSION = 1`)**
+
+```json
+{ "version": 1,
+  "sections": [{ "title": "Deckung", "items": ["…"], "note": null }],
+  "hints": ["…"] }
+```
+
+Grenzen: max. 8 Abschnitte, 12 Punkte je Abschnitt, 6 Hinweise, Titel ≤ 80,
+Punkt ≤ 300 Zeichen. Verstöße (oder Antworten außerhalb des Schemas) kosten
+einen Retry, dann `AI_SUMMARY_INVALID_FORMAT`.
+Speicherung: `AiCoverageSummary.summaryJson`; `summaryMarkdown` bleibt die
+reine Textdarstellung für Altverbraucher. Zeilen vor AP-24 haben
+`summaryJson = null` und werden aus `summaryMarkdown` gerendert (keine
+Datenmigration).
+
+**Rendering:** eigener React-Renderer für das JSON, für Alt-Texte ein
+eingeschränkter Blockparser (`# `, `## `, `- `, Absatz). Es gibt
+**keine** `react-markdown`-Abhängigkeit, kein `dangerouslySetInnerHTML` und
+keine HTML-Ausführung – Modell-Ausgabe kann damit keinen Skriptcode
+ausführen.
+
+**Kostenextraktion (`COST_EXTRACTION_SCHEMA_VERSION = 1`)**
+
+```json
+{ "version": 1, "amount": 123.45, "currency": "EUR", "isCredit": false,
+  "invoiceDate": "2026-01-15", "validFrom": "2026-01-01", "validTo": null,
+  "frequency": "ANNUAL", "bookingSource": "…", "description": "…",
+  "confidence": "medium", "unclearFields": ["validTo"], "notes": null }
+```
+
+- `amount` ist numerisch, immer `>= 0`; Gutschrüfte/Erstattungen werden über
+  `isCredit: true` abgebildet (der Kosteneintrag speichert positive Beträge).
+- `unclearFields` darf nur die in `COST_EXTRACTION_FIELDS` definierten
+  Namen enthalten; jedes genannte Feld wird im Vorschlag auf `null` gesetzt –
+  nicht erkannte Felder bleiben also leer, statt geraten zu werden.
+- Ein Dokument mit mehreren Positionen liefert **einen** Vorschlag, weitere
+  erkannte Positionen stehen in `notes`.
+- Fassadengrenze: max. 200 Zeichen Freitext. Zwei Off-Schema-Antworten
+  hintereinander → `AI_COST_EXTRACTION_INVALID_FORMAT`.
+- Beide System-Prompts erklären Dokumentinhalt ausdrücklich als **Daten,
+  nie als Anweisung** (Prompt-Injection-Containment) und verlangen reines
+  JSON ohne Markdown und ohne Code-Block.
+
+**Bekannte Einschränkung:** Die in der Abschlusslieferung geforderte manuelle
+Qualitätsbewertung des Kostenextraktions-Prompts an einer anonymisierten
+Stichprobe von Abrechnungsdokumenten wurde **nicht** durchgeführt (kein
+zugewiesener Prüfumfang, keine Stichprobe). Die Prompt-Texte selbst sind
+dagegen in `coverage-summary-format.ts` / `cost-extraction-format.ts`
+versioniert und kommentiert.
+
+### Datenübermittlungshinweis (AP-24)
+Vor dem ersten KI-Aufruf je Aktion bestätigt die Oberfläche den
+Datenübermittlungshinweis (`ai.dataTransferNotice`/`…Confirm`/`…Required`).
+Dieselben Schlüssel bedienen sowohl die Leistungszusammenfassung als auch der
+Kosten-Vorschlag – es gibt genau einen Hinweistext.
+
+### Neue Endpunkte (AP-24)
+
+| Endpunkt | Zweck |
+|---|---|
+| `GET /households/:id/ai/status` | Capability (`capable`) für KI-Aktionen |
+| `POST …/policies/:pid/summarize` | Leistungszusammenfassung; Body mit optionalem `documentIds[]` (max. 8, nur `CONTRACT`, geprüfter Lesezugriff), `acceptPartial`; Antwort `{ format: 'json', summary, summaryMarkdown, model, sourceDocuments, skippedDocuments }` |
+| `GET …/policies/:pid/summary` | gespeicherte Zusammenfassung inkl. `format` |
+| `POST …/policies/:pid/documents/:docId/cost-suggestion` | Kosten-**Vorschlag** für ein `BILLING`-Dokument; antwortet nie mit einem gespeicherten Eintrag |
+| `GET …/policies/:pid/costs/billing-documents` | `BILLING`-Dokumente der Versicherung inkl. `usedByCostEntries` zur Markierung bereits verwendeter Dokumente (`cost-tracking`) |
+| `POST …/policies/:pid/documents/classify` | Dokumentklassifikation (siehe Paperless/Abschnitt §2) |
+
+Grenzen und Fehler der Zusammenfassung: max. 8 Dokumente
+(`AI_SUMMARY_MAX_DOCUMENTS`) und max. 20 000 Zeichen Gesamt-Payload
+(`AI_SUMMARY_MAX_CHARS`). Wird die Dokumentgrenze überschritten, ist das ein
+sichtbarer Fehler (`TOO_MANY_DOCUMENTS`), keine stille Kürzung; zu große
+Payloads → `DOCUMENT_PAYLOAD_TOO_LARGE`. Unlesbare Dokumente werden namentlich
+genannt und nur über `acceptPartial: true` übersprungen (`EXCLUDED_FROM_AI`,
+`EMPTY_FILE_NAME`, `UNSUPPORTED_TYPE`, sonst `UNUSABLE_DOCUMENTS`).
+`sourceDocumentRefs` setzt der Server selbst, nie das Frontend.
+Ein `POST …/costs` mit `sourceDocumentId` prüft serverseitig, dass das
+Dokument existiert, nicht archiviert ist, zur Versicherung gehört und die
+Klasse `BILLING` hat – andernfalls `400`.
 
 ## Paperless-ngx
 Mögliche Modi:
@@ -97,6 +208,18 @@ Mögliche Modi:
   in Paperless gelöscht. Der Abgleich erfolgt pollend
   (`PAPERLESS_TAG_SYNC_INTERVAL_MS`, Default 5 Minuten), es gibt keine
   Paperless-Webhooks.
+- **Abgleich konfigurierbar (AP-24 §1.2):** `PAPERLESS_TAG_SYNC_ENABLED`
+  (Default `true`) schaltet den automatischen Hintergrundabgleich ab; laufende
+  Jobs laufen zu Ende, manuelle Abgleiche bleiben möglich. Beide Einstellungen
+  sind in `/admin/settings` änderbar und wirken ohne Neustart – der
+  Abgleich-Tick liest sie bei jedem Tick neu. Bereits nach dem letzten
+  erfolgreichen Abgleich ermittelte Startzeiten werden neu berechnet, damit
+  sich eine Intervalländerung sofort auswirkt.
+- **Staffelung:** Werden mehrere Versicherungen im selben Zeitfenster fällig,
+  erhält jede Policy einen festen, aus ihrer ID berechneten Versatz (max.
+  zwei Abgleich-Ticks), damit die Läufe nicht alle gleichzeitig starten. In
+  der Policendetailansicht werden letzter erfolgreicher und nächster geplanter
+  Abgleich angezeigt.
 - **Benötigte Paperless-Rechte:** Der verwendete API-Token muss
   (a) Tags **lesen** (`GET /api/tags/`), (b) Tags **anlegen** (`POST /api/tags/`)
   – nur nötig, wenn der Nutzer einen neuen Tag erzeugt, (c) Dokumente **lesen**
@@ -155,6 +278,72 @@ Mögliche Modi:
   API (`PATCH …/documents/:id`, z. B. Umbenennen) geändert, überschreibt der
   nächste Abgleich diese Änderung wieder. Eine manuelle Verknüpfung
   (`linkOriginManual`) ist davon nicht betroffen.
+
+### Umsetzungsstand (AP-24 – Fortschritt, Intervall, Dokumentklassen)
+
+**§1.1 Fortschritt des manuellen Abgleichs**
+
+`POST .../paperless-tag/sync` startet den Abgleich im Worker und liefert
+sofort die Job-ID zurück (kein blockinger Langabruf).
+`GET .../paperless-tag/status` ergänzt die bestehende Statusabfrage um:
+
+- `jobStatus`: `QUEUED | RUNNING | SUCCEEDED | FAILED` des letzten
+  `SYNC_POLICY`-Laufs (separate `kind`-Filterung, damit die
+  Tag-Zuweisungs-Jobs manueller Dokumente die Anzeige nicht verfälschen)
+- `progress`: `{ jobId, status, processed, total, added, removed,
+  unchanged, errorCode, createdAt, completedAt }`. `total` ist `null`, solange
+  die Gesamtzahl unbekannt ist – die UI zeigt dann einen **unbestimmten**
+  Balken mit dem Zwischenstand und erfindet keinen Prozentwert.
+- `errorCode` wird serverseitig auf `[A-Za-z0-9_]`, max. 48 Zeichen,
+  begrenzt (`sanitizeErrorCode`) – ein unerwarteter Wert kann so nie eine
+  URL, einen Hostnamen oder ein Credential an alle Haushaltsmitglieder
+  zurückspiegeln.
+
+Das Frontend pollt während eines Laufs (1 s) und bricht bei Abschluss, Fehler
+oder Navigation ab; bei Erfolg werden nur die betroffenen Daten neu geladen
+(kein Browser-Reload). Ein zweiter Start pro Versicherung wird unterdrückt
+(`alreadyRunning`), der laufende Job wird stattdessen angezeigt; der
+Fortschritt ist nach einem Seiten-Reload wieder aufnehmbar. Statuswechsel
+stehen in einer `aria-live`-Region.
+
+**§1.2 Konfigurierbares Abgleichintervall**
+
+Zwei Einstellungen im bestehenden Settings-Mechanismus (Details und gültige
+Werte in `docs/13-settings-catalog.md`): `PAPERLESS_TAG_SYNC_ENABLED`
+(Default `true`) und `PAPERLESS_TAG_SYNC_INTERVAL_MS` (Default `300000`).
+Die UI bietet Presets von 5 Minuten bis 24 Stunden an; ein freier Wert wird
+zwischen 60 s und 24 h validiert. Beides wirkt ohne Neustart.
+
+- Deaktiviert: **keine neuen** automatischen Abgleiche. Bereits in der
+  durable Outbox stehende `PENDING`-Zeilen werden weiter abgearbeitet und
+  laufende Läufe laufen zu Ende – nur nichts Neues startet. Manuelle
+  Abgleiche bleiben möglich.
+- Staffelung: Deterministischer FNV-1a-Offset je `policyId`, gedeckelt auf
+  `min(interval, 120 s)`, wird zum Intervall **addiert** (nie subtrahiert),
+  damit bei vielen Versicherungen nicht alles auf den Sekundentakt
+  zusammenfällt. API und Worker teilen sich die Helfer in
+  `packages/foundation/src/config/paperless-sync-schedule.ts`, damit
+  `nextSyncAt` (API) und die Fälligkeitsprüfung (Worker) nicht auseinander-
+  laufen. Noch nie synchronisierte Versicherungen gelten als sofort fällig.
+
+**§2 Dokumentklassifikation**
+
+`PolicyDocument.documentClass` (enum `DocumentClass`, siehe
+`docs/04-data-model.md`) ist eine **manuelle** Zuordnung je Versicherungs-
+Zuordnung. Die Migration setzt bestehende Dokumente auf `UNCLASSIFIED`;
+eine inhaltliche, automatische Klassifikation ist ausdrücklich nicht Teil
+dieses Pakets. **Die Tag-Synchronisation schreibt das Feld nie an** – die
+Klassifikation überlebt jeden Abgleich (eigener Test).
+
+- `POST /households/:id/policies/:pid/documents/classify`
+  mit `{ documentIds: string[], documentClass }`, max. 200 Ids je Aufruf
+  (`MAX_BULK_CLASSIFY`), serverseitig validiert; fremde oder archivierte
+  Dokumente werden abgelehnt.
+- `GET .../documents?documentClass=BILLING` filtert die Liste (ein
+  `documentClass`-Filter zusätzlich zu den bestehenden Filtern).
+- Relevanz für andere Funktionen: `CONTRACT` speist die optionale
+  Dokumentauswahl der KI-Leistungszusammenfassung (§3.1),
+  `BILLING` die Kosten-Seitenleiste (§4.1).
 
 ## Versicherungsportale
 Technisch realistisch in Stufen:

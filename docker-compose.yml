@@ -125,6 +125,8 @@ services:
       PAPERLESS_ENABLED: "${PAPERLESS_ENABLED:-false}"
       PAPERLESS_URL: ${PAPERLESS_URL:-}
       PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-}
+      # AP-24 (§1.2): automatic background sync on/off and its interval.
+      PAPERLESS_TAG_SYNC_ENABLED: "${PAPERLESS_TAG_SYNC_ENABLED:-true}"
       PAPERLESS_TAG_SYNC_INTERVAL_MS: "${PAPERLESS_TAG_SYNC_INTERVAL_MS:-300000}"
       # BugFix-06 (Teil 2): SSRF/TLS relaxation for the connectivity test,
       # OIDC discovery, AI providers and Paperless-ngx. Opt-in, off by default
@@ -188,6 +190,8 @@ services:
       PAPERLESS_ENABLED: "${PAPERLESS_ENABLED:-false}"
       PAPERLESS_URL: ${PAPERLESS_URL:-}
       PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-}
+      # AP-24 (§1.2): automatic background sync on/off and its interval.
+      PAPERLESS_TAG_SYNC_ENABLED: "${PAPERLESS_TAG_SYNC_ENABLED:-true}"
       PAPERLESS_TAG_SYNC_INTERVAL_MS: "${PAPERLESS_TAG_SYNC_INTERVAL_MS:-300000}"
       # BugFix-06 (Teil 2): Same connectivity relaxation flags as the API
       # (AI providers run in the worker too); opt-in, off by default.

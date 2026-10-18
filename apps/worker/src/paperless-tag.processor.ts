@@ -1,7 +1,12 @@
 import { Processor, WorkerHost, InjectQueue } from '@nestjs/bullmq';
 import { Logger, type OnModuleInit } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
-import { DatabaseService, SettingsResolverService } from '@versigo/foundation';
+import {
+  DatabaseService,
+  SettingsResolverService,
+  isPaperlessTagSyncDue,
+  paperlessTagSyncIntervalMs,
+} from '@versigo/foundation';
 import { PaperlessTagClient, type TagDocumentRef } from './paperless-tag.client';
 import {
   PAPERLESS_TAG_DEFAULT_INTERVAL_MS,
@@ -16,6 +21,64 @@ import {
 interface TagJobData {
   jobId: string;
   policyId: string;
+}
+
+/**
+ * AP-24 (§1.1): how one reconciliation run changed the local document list.
+ * `added`/`removed` are the counts the UI shows as "neu"/"entfernt";
+ * `updated` covers metadata refreshes of existing links and is folded into
+ * "unverändert" for the user because the link itself did not change.
+ */
+export interface ReconcileCounts {
+  added: number;
+  updated: number;
+  unchanged: number;
+  removed: number;
+}
+
+/** AP-24 (§1.1): reconciliation result plus the abort flag. */
+export interface ReconcileOutcome extends ReconcileCounts {
+  aborted: boolean;
+}
+
+/**
+ * AP-24 (§1.1): throttles the per-document progress writes. A tag with
+ * thousands of documents must not turn into thousands of UPDATE statements,
+ * so only every Nth document is flushed; the final counts are written by the
+ * caller when the job finishes.
+ */
+const PROGRESS_WRITE_STRIDE = 10;
+
+async function maybeReportProgress(
+  onProgress: ((processed: number) => Promise<void>) | undefined,
+  processed: number,
+): Promise<void> {
+  if (!onProgress) return;
+  if (processed % PROGRESS_WRITE_STRIDE !== 0) return;
+  await onProgress(processed);
+}
+
+/** AP-24 (§1.1): the job columns derived from one reconciliation run
+ * (`totalCount` is written separately as soon as the remote list is known). */
+export interface SyncProgressFields {
+  processedCount: number;
+  addedCount: number;
+  removedCount: number;
+  unchangedCount: number;
+}
+
+/**
+ * AP-24 (§1.1): maps the reconciliation tally onto the job columns.
+ * Metadata refreshes (`updated`) do not change the set of linked documents,
+ * so they are reported to the user as "unverändert".
+ */
+export function toProgressFields(outcome: ReconcileOutcome): SyncProgressFields {
+  return {
+    addedCount: outcome.added,
+    removedCount: outcome.removed,
+    unchangedCount: outcome.unchanged + outcome.updated,
+    processedCount: outcome.added + outcome.unchanged + outcome.updated,
+  };
 }
 
 /**
@@ -244,6 +307,22 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
 
   // --- SYNC_POLICY ---------------------------------------------------------
 
+  /**
+   * AP-24 (§1.1): flushes the intermediate "documents processed" counter so
+   * the UI can advance the progress bar while the worker is still walking the
+   * remote list. Failures here must never fail the sync itself.
+   */
+  private async reportProgress(jobId: string, processed: number): Promise<void> {
+    try {
+      await this.db.paperlessTagJob.update({
+        where: { id: jobId },
+        data: { processedCount: processed },
+      });
+    } catch (err) {
+      this.logger.warn(`Could not write sync progress for ${jobId}: ${String(err)}`);
+    }
+  }
+
   private async handleSyncPolicy(
     jobId: string,
     policyId: string,
@@ -277,7 +356,16 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
 
     await this.db.paperlessTagJob.update({
       where: { id: jobId },
-      data: { status: 'RUNNING' },
+      data: {
+        status: 'RUNNING',
+        // AP-24 (§1.1): a fresh run starts from a clean slate so the UI never
+        // shows the previous run's counters as if they belonged to this one.
+        processedCount: 0,
+        totalCount: null,
+        addedCount: 0,
+        removedCount: 0,
+        unchangedCount: 0,
+      },
     });
 
     const lookup = await this.client.getTag(config.paperlessTagId);
@@ -308,9 +396,21 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
       return this.retryOrFail(jobId, job.retryCount, job.maxRetries, 'SYNC_FAILED');
     }
 
-    const aborted = await this.reconcileAssignments(policyId, job.configVersion, remote);
+    // AP-24 (§1.1): the total is known as soon as the remote list is in, so
+    // the UI can switch from the indeterminate bar to a determinate one.
+    await this.db.paperlessTagJob.update({
+      where: { id: jobId },
+      data: { totalCount: remote.length },
+    });
 
-    if (aborted) {
+    const outcome = await this.reconcileAssignments(
+      policyId,
+      job.configVersion,
+      remote,
+      (processed) => this.reportProgress(jobId, processed),
+    );
+
+    if (outcome.aborted) {
       // The configuration changed while this run was walking the remote
       // documents. Reporting success or writing ACTIVE/backfill state here
       // would overwrite the newer configuration's progress (round-3 review).
@@ -320,6 +420,7 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
           status: 'SKIPPED',
           errorCode: 'STALE_CONFIG',
           completedAt: new Date(),
+          ...toProgressFields(outcome),
         },
       });
       return { success: true };
@@ -338,7 +439,12 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
 
     await this.db.paperlessTagJob.update({
       where: { id: jobId },
-      data: { status: 'COMPLETED', errorCode: null, completedAt: new Date() },
+      data: {
+        status: 'COMPLETED',
+        errorCode: null,
+        completedAt: new Date(),
+        ...toProgressFields(outcome),
+      },
     });
 
     // Backfill: manually linked documents also receive the new tag.
@@ -352,17 +458,29 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
    * documents with the tag become visible (origin TAG), documents that lost
    * the tag lose only the automatic origin (a manual link is preserved).
    *
-   * Returns `true` when the run was aborted because the configuration
-   * changed underneath it (round-3 review: the caller must not report such a
-   * run as completed nor backfill with a stale config version).
+   * Returns `{ aborted: true }` when the run was aborted because the
+   * configuration changed underneath it (round-3 review: the caller must not
+   * report such a run as completed nor backfill with a stale config version).
+   *
+   * `onProgress` is called with the number of remote documents processed so
+   * far; it is deliberately throttled inside so a big tag does not turn into
+   * one database write per document.
    */
   private async reconcileAssignments(
     policyId: string,
     configVersion: number,
     remote: TagDocumentRef[],
-  ): Promise<boolean> {
+    onProgress?: (processed: number) => Promise<void>,
+  ): Promise<ReconcileOutcome> {
     const remoteById = new Map<string, TagDocumentRef>();
     for (const doc of remote) remoteById.set(String(doc.paperlessId), doc);
+
+    // AP-24 (§1.1): running tally of what this run actually changed. It is
+    // written to the job row so the UI can show "neu / entfernt / unverändert"
+    // without re-reading the whole document list.
+    const counts: ReconcileCounts = { added: 0, updated: 0, unchanged: 0, removed: 0 };
+    // AP-24 (§1.1): how many remote documents have been walked so far.
+    let processed = 0;
 
     const localLinks = await this.db.policyDocument.findMany({
       where: { policyId, storageType: 'PAPERLESS_LINK', archivedAt: null },
@@ -390,7 +508,10 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
         where: { policyId },
         select: { configVersion: true },
       });
-      if (!fresh || fresh.configVersion !== configVersion) return true;
+      if (!fresh || fresh.configVersion !== configVersion) return { aborted: true, ...counts };
+
+      processed += 1;
+      await maybeReportProgress(onProgress, processed);
 
       const existing = localByRef.get(ref);
       if (existing) {
@@ -407,6 +528,9 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
             where: { id: existing.id },
             data,
           });
+          counts.updated += 1;
+        } else {
+          counts.unchanged += 1;
         }
         continue;
       }
@@ -425,6 +549,7 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
             ...(metadata.mimeType ? { mimeType: metadata.mimeType } : {}),
           },
         });
+        counts.added += 1;
       } catch (err) {
         // Parallel sync created the same row (partial unique index).
         if ((err as { code?: string }).code === 'P2002') {
@@ -437,6 +562,7 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
             },
             data: { linkOriginTag: true },
           });
+          counts.unchanged += 1;
         } else {
           throw err;
         }
@@ -451,7 +577,7 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
         where: { policyId },
         select: { configVersion: true },
       });
-      if (!fresh || fresh.configVersion !== configVersion) return true;
+      if (!fresh || fresh.configVersion !== configVersion) return { aborted: true, ...counts };
 
       if (link.linkOriginManual) {
         // Manual links survive a lost tag – only the automatic origin goes.
@@ -466,9 +592,10 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
           data: { linkOriginTag: false, archivedAt: new Date() },
         });
       }
+      counts.removed += 1;
     }
 
-    return false;
+    return { aborted: false, ...counts };
   }
 
   /**
@@ -639,9 +766,23 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
       await this.enqueueRow(row);
     }
 
-    const intervalMs =
+    // AP-24 (§1.2): read on every tick, so switching the automatic sync off
+    // takes effect without a restart. Only *new* background runs are
+    // prevented above: durable rows (manual or previously scheduled syncs)
+    // are still re-dispatched and jobs already running are never aborted.
+    const autoSyncEnabled =
+      (await this.settings.getEffectiveBoolean('PAPERLESS_TAG_SYNC_ENABLED')) ?? true;
+    if (!autoSyncEnabled) {
+      this.logger.debug(
+        'Paperless tag background sync is disabled – no new automatic syncs are scheduled',
+      );
+      return { success: true };
+    }
+
+    const intervalMs = paperlessTagSyncIntervalMs(
       (await this.settings.getEffectiveNumber('PAPERLESS_TAG_SYNC_INTERVAL_MS')) ??
-      PAPERLESS_TAG_DEFAULT_INTERVAL_MS;
+        PAPERLESS_TAG_DEFAULT_INTERVAL_MS,
+    );
     const dueBefore = new Date(Date.now() - Math.max(1_000, intervalMs));
 
     const dueConfigs = await this.db.policyPaperlessTag.findMany({
@@ -650,11 +791,26 @@ export class PaperlessTagProcessor extends WorkerHost implements OnModuleInit {
         policy: { archivedAt: null },
         OR: [{ lastSyncedAt: null }, { lastSyncedAt: { lt: dueBefore } }],
       },
-      select: { policyId: true, configVersion: true },
+      select: { policyId: true, configVersion: true, lastSyncedAt: true },
       take: 500,
     });
 
+    const now = new Date();
     for (const config of dueConfigs) {
+      // AP-24 (§1.2): the DB query above is the cheap pre-filter; the
+      // deterministic per-policy offset makes sure insurances that became
+      // due in the same tick do not all start at the same instant.
+      if (
+        !isPaperlessTagSyncDue({
+          policyId: config.policyId,
+          lastSyncedAt: config.lastSyncedAt,
+          now,
+          intervalMs,
+        })
+      ) {
+        continue;
+      }
+
       const active = await this.db.paperlessTagJob.findFirst({
         where: {
           policyId: config.policyId,

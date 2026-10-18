@@ -19,10 +19,43 @@ export interface AiExtractResult {
 }
 
 export interface AiSummarizeResult {
-  /** Summary in Markdown format */
+  /**
+   * Raw answer of the model.
+   *
+   * AP-24 (§3.2): the contract for new answers is the JSON document of
+   * `coverage-summary-format` (Variante A). The API validates it before
+   * anything is stored or displayed, so consumers must not assume the value
+   * is Markdown any more – that is only true for summaries created before
+   * AP-24.
+   */
   summaryMarkdown: string;
   /** List of document references included in the summary */
   sourceDocumentRefs: string[];
+  /** Name of the model used */
+  model: string;
+}
+
+/**
+ * AP-24 (§3.1/§3.2/§4.2): additional instructions for a request.
+ *
+ * `repairHint` is set for the single bounded retry after an off-schema
+ * answer. It contains the validator's complaint only – never document text,
+ * so a retry never sends more confidential data than the first attempt.
+ */
+export interface AiSummarizeOptions {
+  repairHint?: string;
+}
+
+/**
+ * AP-24 (§4.2): raw answer of a cost extraction.
+ *
+ * The API validates the returned JSON document before anything is shown to
+ * the user, so a provider that ignores the format is reported instead of
+ * producing a half-filled form.
+ */
+export interface AiCostExtractionResult {
+  /** Raw answer of the model (the JSON document of `cost-extraction-format`). */
+  costJson: string;
   /** Name of the model used */
   model: string;
 }
@@ -68,11 +101,34 @@ export interface IAIAdapter {
   /**
    * Creates a summary of the insurance coverage.
    * Returns null on error or when the configuration is missing.
+   *
+   * AP-24 (§3.2): the answer must be the JSON document of
+   * `coverage-summary-format`; `options.repairHint` carries the validator's
+   * complaint for the single bounded retry.
    */
   summarizeCoverage(
     documentContents: string[],
     policyId: string,
-   ): Promise<AiSummarizeResult | null>;
+    options?: AiSummarizeOptions,
+  ): Promise<AiSummarizeResult | null>;
+
+  /**
+   * AP-24 (§4.2): proposes cost data for a single billing document.
+   * Returns null on error or when the configuration is missing.
+   *
+   * The answer is a proposal for the user to confirm – adapters never touch
+   * stored cost entries.
+   *
+   * Optional, like `healthStatus()`: the worker implements the same
+   * interface for background extraction and must not have to carry a
+   * feature it never uses. `AiAssistService` refuses the request with a
+   * clear error when the resolved adapter does not provide it.
+   */
+  extractCostFromDocument?(
+    documentContent: string,
+    policyId: string,
+    options?: AiSummarizeOptions,
+  ): Promise<AiCostExtractionResult | null>;
 
   /**
    * Checks the connection to the AI provider.

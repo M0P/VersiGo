@@ -162,6 +162,10 @@ export const appConfigSchema = z
     PAPERLESS_ENABLED: booleanFromEnv.default(false),
     PAPERLESS_URL: z.string().optional(),
     PAPERLESS_API_TOKEN: z.string().optional(),
+    // AP-24 (§1.2): background sync toggle. Empty strings are treated as
+    // unset (Compose can pass ""), the effective default lives in the
+    // settings catalog (`defaultValue: true`, i.e. existing behaviour).
+    PAPERLESS_TAG_SYNC_ENABLED: optionalBooleanFromEnv.optional(),
     PAPERLESS_TAG_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(300_000),
 
     // BugFix-05: family sharing (household sharing) is enabled by default

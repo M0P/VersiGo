@@ -8,98 +8,167 @@ import { Button } from '../../../components/ui/button';
 import { Loading } from '../../../components/ui/loading';
 import { Alert } from '../../../components/ui/alert';
 import { NAV_SECTIONS } from '../../../components/ui/nav-config';
-import { formatCurrency, formatDate, useI18n, type Language } from '../../../i18n';
+import {
+  formatBasisAmount,
+  formatCurrency,
+  formatDateDmy,
+  useI18n,
+  type Language,
+  type Translator,
+} from '../../../i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 
 const API_BASE = getApiBaseUrl();
 
-// BugFix-08 (Q5): new household costs overview from GET .../costs/summary.
+// BugFix-22: every amount is computed and displayed PER BASIS (gross/net).
+// A missing basis stays null and renders as a dash – it is never replaced
+// by the other basis.
+type BasisAmounts = {
+  gross: number | null;
+  net: number | null;
+};
+
+// BugFix-08 (Q5): household costs overview from GET .../costs/summary.
 type SummaryPolicy = {
   id: string;
   name: string;
   type: string;
   frequency: 'MONTHLY' | 'QUARTERLY' | 'SEMI_ANNUAL' | 'ANNUAL' | null;
-  paidToDate: number;
-  perMonth: number;
-  perYear: number;
+  paidToDate: BasisAmounts;
+  perMonth: BasisAmounts;
+  perYear: BasisAmounts;
   entryCount: number;
 };
 
 type Summary = {
   asOf: string;
-  totals: { paidToDate: number; perMonth: number; perYear: number };
-  perYear: { year: number; amount: number }[];
+  totals: { paidToDate: BasisAmounts; perMonth: BasisAmounts; perYear: BasisAmounts };
+  perYear: { year: number; amount: BasisAmounts }[];
   policyCount: number;
   policies: SummaryPolicy[];
 };
 
+/** Short label of one basis for chart legends and cell lines. */
+function basisLabel(basis: 'gross' | 'net', t: Translator): string {
+  return basis === 'gross' ? t('costs.basisGross') : t('costs.basisNet');
+}
+
 /**
- * BugFix-08 (Q5): historical chart – costs per calendar year as simple
- * SVG bars (deliberately dependency-light, no chart framework needed).
- * Basis: sum of the full period amounts of all started periods per year.
+ * BugFix-08 (Q5) + BugFix-22: historical chart – costs per calendar year as
+ * simple SVG bars (deliberately dependency-light, no chart framework
+ * needed). Basis: sum of the full period amounts of all started periods per
+ * year. Every recorded basis gets its own labelled bar (gross/net) – a
+ * missing basis is simply not drawn, never substituted.
  */
-function PerYearChart({ data, language }: { data: { year: number; amount: number }[]; language: Language }): ReactElement {
+function PerYearChart({
+  data,
+  language,
+}: {
+  data: { year: number; amount: BasisAmounts }[];
+  language: Language;
+}): ReactElement {
   const { t } = useI18n();
-  if (data.length === 0) {
+  const hasAnyValue = data.some((d) => d.amount.gross != null || d.amount.net != null);
+  if (data.length === 0 || !hasAnyValue) {
     return <p className="text-muted">{t('costs.noHistory')}</p>;
   }
 
-  const max = Math.max(...data.map((d) => d.amount), 0);
+  const max = Math.max(
+    ...data.flatMap((d) => [d.amount.gross ?? 0, d.amount.net ?? 0]),
+    0,
+  );
   const chartHeight = 180;
   const paddingTop = 18; // space for the amount value above the bar
   const labelHeight = 22; // space for the year label below the bar
   const usableHeight = chartHeight - paddingTop - labelHeight;
-  const slotWidth = 56;
-  const barWidth = 28;
+  const slotWidth = 84;
+  const barWidth = 30;
   const width = data.length * slotWidth;
 
   return (
-    <svg
-      viewBox={`0 0 ${width} ${chartHeight}`}
-      role="img"
-      aria-label={t('costs.historicTitle')}
-      style={{ width: '100%', height: 'auto', maxWidth: width, display: 'block' }}
-    >
-      {data.map((d, i) => {
-        const barHeight = max > 0 ? Math.max(2, (d.amount / max) * usableHeight) : 2;
-        const x = i * slotWidth + (slotWidth - barWidth) / 2;
-        const y = paddingTop + usableHeight - barHeight;
-        return (
-          <g key={d.year}>
-            <rect
-              x={x}
-              y={y}
-              width={barWidth}
-              height={barHeight}
-              rx="2"
-              fill="var(--versigo-accent)"
-            >
-              <title>{`${d.year}: ${formatCurrency(d.amount, language)}`}</title>
-            </rect>
-            <text
-              x={x + barWidth / 2}
-              y={y - 6}
-              fontSize="10"
-              textAnchor="middle"
-              fill="var(--versigo-text)"
-            >
-              {formatCurrency(d.amount, language)}
-            </text>
-            <text
-              x={x + barWidth / 2}
-              y={chartHeight - 6}
-              fontSize="11"
-              fontWeight={600}
-              textAnchor="middle"
-              fill="var(--versigo-text)"
-            >
-              {d.year}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <div>
+      <svg
+        viewBox={`0 0 ${width} ${chartHeight}`}
+        role="img"
+        aria-label={t('costs.historicTitle')}
+        style={{ width: '100%', height: 'auto', maxWidth: width, display: 'block' }}
+      >
+        {data.map((d, i) => {
+          const slotX = i * slotWidth + (slotWidth - barWidth * 2 - 4) / 2;
+          const bars = (
+            [
+              { basis: 'gross' as const, value: d.amount.gross },
+              { basis: 'net' as const, value: d.amount.net },
+            ] as const
+          ).filter((bar) => bar.value != null);
+          return (
+            <g key={d.year}>
+              {bars.map((bar, barIndex) => {
+                const value = bar.value as number;
+                const barHeight = max > 0 ? Math.max(2, (value / max) * usableHeight) : 2;
+                const x = slotX + barIndex * (barWidth + 4);
+                const y = paddingTop + usableHeight - barHeight;
+                return (
+                  <g key={bar.basis}>
+                    <rect
+                      x={x}
+                      y={y}
+                      width={barWidth}
+                      height={barHeight}
+                      rx="2"
+                      fill={
+                        bar.basis === 'gross'
+                          ? 'var(--versigo-accent)'
+                          : 'var(--versigo-accent-light, #9db8d4)'
+                      }
+                    >
+                      <title>{`${d.year} ${basisLabel(bar.basis, t)}: ${formatCurrency(value, language)}`}</title>
+                    </rect>
+                    <text
+                      x={x + barWidth / 2}
+                      y={y - 6}
+                      fontSize="9"
+                      textAnchor="middle"
+                      fill="var(--versigo-text)"
+                    >
+                      {formatCurrency(value, language)}
+                    </text>
+                  </g>
+                );
+              })}
+              <text
+                x={i * slotWidth + slotWidth / 2}
+                y={chartHeight - 6}
+                fontSize="11"
+                fontWeight={600}
+                textAnchor="middle"
+                fill="var(--versigo-text)"
+              >
+                {d.year}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {/* Legend: every bar names its basis. */}
+      <p className="text-xs text-muted" style={{ display: 'flex', gap: 'var(--versigo-space-3)', flexWrap: 'wrap' }}>
+        <span>
+          <span
+            aria-hidden="true"
+            style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--versigo-accent)', marginRight: 4 }}
+          />
+          {t('costs.basisGross')}
+        </span>
+        <span>
+          <span
+            aria-hidden="true"
+            style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--versigo-accent-light, #9db8d4)', marginRight: 4 }}
+          />
+          {t('costs.basisNet')}
+        </span>
+      </p>
+    </div>
   );
 }
 
@@ -152,28 +221,38 @@ export default function HouseholdCostsPage(): ReactElement {
         }
       />
 
-      {/* BugFix-08 (Q5): total amounts – what was spent (paidToDate),
-          per month and per year across all policies. */}
+      {/* BugFix-08 (Q5) + BugFix-22: total amounts – what was spent
+          (paidToDate), per month and per year across all policies, every
+          sum labelled per basis (brutto/netto). */}
       <div className="split-layout" style={{ marginBottom: 'var(--versigo-space-6)' }}>
         <Card>
           <h3>{t('costs.paidToDate')}</h3>
-          <p style={{ fontSize: 'var(--versigo-font-size-3xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
-            {formatCurrency(summary.totals.paidToDate, language)}
+          <p style={{ fontSize: 'var(--versigo-font-size-2xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
+            {t('costs.basisGross')}: {formatBasisAmount(summary.totals.paidToDate.gross, language)}
+          </p>
+          <p style={{ fontSize: 'var(--versigo-font-size-2xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
+            {t('costs.basisNet')}: {formatBasisAmount(summary.totals.paidToDate.net, language)}
           </p>
           <p className="text-xs text-muted" style={{ margin: 'var(--versigo-space-1) 0 0' }}>
-            {t('costs.asOf', { date: formatDate(summary.asOf, language) })}
+            {t('costs.asOf', { date: formatDateDmy(summary.asOf) })}
           </p>
         </Card>
         <Card>
           <h3>{t('costs.perMonth')}</h3>
-          <p style={{ fontSize: 'var(--versigo-font-size-3xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
-            {formatCurrency(summary.totals.perMonth, language)}
+          <p style={{ fontSize: 'var(--versigo-font-size-2xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
+            {t('costs.basisGross')}: {formatBasisAmount(summary.totals.perMonth.gross, language)}
+          </p>
+          <p style={{ fontSize: 'var(--versigo-font-size-2xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
+            {t('costs.basisNet')}: {formatBasisAmount(summary.totals.perMonth.net, language)}
           </p>
         </Card>
         <Card>
           <h3>{t('costs.perYear')}</h3>
-          <p style={{ fontSize: 'var(--versigo-font-size-3xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
-            {formatCurrency(summary.totals.perYear, language)}
+          <p style={{ fontSize: 'var(--versigo-font-size-2xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
+            {t('costs.basisGross')}: {formatBasisAmount(summary.totals.perYear.gross, language)}
+          </p>
+          <p style={{ fontSize: 'var(--versigo-font-size-2xl)', fontWeight: 'var(--versigo-font-weight-bold)', color: 'var(--versigo-accent)', margin: 0 }}>
+            {t('costs.basisNet')}: {formatBasisAmount(summary.totals.perYear.net, language)}
           </p>
         </Card>
         <Card>
@@ -221,14 +300,19 @@ export default function HouseholdCostsPage(): ReactElement {
                     <td data-label={t('costs.frequency')}>
                       {policy.frequency ? t(`costs.frequencies.${policy.frequency}`) ?? policy.frequency : '—'}
                     </td>
+                    {/* BugFix-22: every cell names its basis; a missing
+                        basis is shown as a dash, never substituted. */}
                     <td data-label={t('costs.perMonth')}>
-                      {policy.entryCount > 0 ? formatCurrency(policy.perMonth, language) : '—'}
+                      <div>{t('costs.basisGross')}: {formatBasisAmount(policy.perMonth.gross, language)}</div>
+                      <div>{t('costs.basisNet')}: {formatBasisAmount(policy.perMonth.net, language)}</div>
                     </td>
                     <td data-label={t('costs.perYear')}>
-                      {policy.entryCount > 0 ? formatCurrency(policy.perYear, language) : '—'}
+                      <div>{t('costs.basisGross')}: {formatBasisAmount(policy.perYear.gross, language)}</div>
+                      <div>{t('costs.basisNet')}: {formatBasisAmount(policy.perYear.net, language)}</div>
                     </td>
                     <td data-label={t('costs.paidToDate')}>
-                      {policy.paidToDate > 0 ? formatCurrency(policy.paidToDate, language) : '—'}
+                      <div>{t('costs.basisGross')}: {formatBasisAmount(policy.paidToDate.gross, language)}</div>
+                      <div>{t('costs.basisNet')}: {formatBasisAmount(policy.paidToDate.net, language)}</div>
                     </td>
                   </tr>
                 ))}

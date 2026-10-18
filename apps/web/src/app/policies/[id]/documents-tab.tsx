@@ -13,6 +13,21 @@ import { useI18n } from '@/i18n';
 import { getApiBaseUrl } from '@/lib/runtime-config';
 import { documentTypeIcon, documentTypeKind, documentTypeLabelKey } from '@/lib/document-type';
 import {
+  ALL_DOCUMENT_CLASSES,
+  DEFAULT_DOCUMENT_CLASS,
+  DOCUMENT_CLASS_FILTERS,
+  DOCUMENT_CLASSES,
+  documentClassBadgeClass,
+  documentClassFilterLabelKey,
+  documentClassFilterValue,
+  documentClassLabelKey,
+  normalizeDocumentClass,
+  pruneSelection,
+  toggleSelected,
+  type DocumentClass,
+  type DocumentClassFilter,
+} from '@/lib/document-class';
+import {
   DEFAULT_DOCUMENT_SORT,
   DOCUMENT_SORT_KEYS,
   documentOriginIcon,
@@ -42,6 +57,8 @@ type Document = {
   linkOriginTag?: boolean;
   taggingStatus?: 'PENDING' | 'APPLIED' | 'FAILED' | null;
   taggingErrorCode?: string | null;
+  // AP-24 (§2): class of this policy assignment (UNCLASSIFIED by default).
+  documentClass?: string;
 };
 
 // BugFix-07 (Q3): result of the Paperless search (GET /paperless/documents)
@@ -115,6 +132,25 @@ function DocumentOriginBadge({ doc }: { doc: Document }): ReactElement | null {
   );
 }
 
+/**
+ * AP-24 (§2.3): class of the document assignment as a badge.
+ *
+ * The class is text rather than an icon because it carries an expressive
+ * name ("Abrechnung", "Vertragsdokument") that is read at a glance. An
+ * unknown value from an older API is shown as "Nicht klassifiziert" instead
+ * of leaking the raw key.
+ */
+function DocumentClassBadge({ doc }: { doc: Document }): ReactElement {
+  const { t } = useI18n();
+  const value = normalizeDocumentClass(doc.documentClass);
+
+  return (
+    <span className={documentClassBadgeClass(value)}>
+      {t(documentClassLabelKey(value))}
+    </span>
+  );
+}
+
 export default function DocumentsTab({
   policyId,
   insurerName,
@@ -132,11 +168,20 @@ export default function DocumentsTab({
   const [form, setForm] = useState({
     category: '',
     documentDate: '',
+    // AP-24 (§2): documents start out unclassified unless the user picks a
+    // class here.
+    documentClass: DEFAULT_DOCUMENT_CLASS as string,
   });
   const [file, setFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   // BugFix-22: sort order of the list (newest first by default).
   const [sortKey, setSortKey] = useState<DocumentSortKey>(DEFAULT_DOCUMENT_SORT);
+  // AP-24 (§2): class filter, bulk selection and the bulk-classify request.
+  const [classFilter, setClassFilter] = useState<DocumentClassFilter>(ALL_DOCUMENT_CLASSES);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkClass, setBulkClass] = useState<DocumentClass>(DEFAULT_DOCUMENT_CLASS);
+  const [classifying, setClassifying] = useState(false);
+  const [classNotice, setClassNotice] = useState<string | null>(null);
 
   // BugFix-07 (Q3): Paperless linking
   const [showPaperless, setShowPaperless] = useState(false);
@@ -182,6 +227,30 @@ export default function DocumentsTab({
     }
   };
 
+  // AP-24 (§1.1): silent in-place refresh after a finished Paperless
+  // reconciliation. Unlike `reloadDocuments` it never clears the list or
+  // shows a spinner: the previous state stays visible, so scroll position,
+  // filters and open sections are not disturbed while the new data arrives.
+  const refreshDocumentsQuiet = async () => {
+    const seq = ++requestSeq.current;
+    try {
+      const res = await fetch(
+        `${API_BASE}/households/default/policies/${policyId}/documents`,
+        { credentials: 'include' },
+      );
+      if (seq !== requestSeq.current) return;
+      if (res.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+      if (!res.ok) return; // keep the last known list
+      const data = await res.json();
+      if (seq === requestSeq.current) setDocuments(data);
+    } catch {
+      // Non-fatal: the last known list remains visible (AP-24 §1.1).
+    }
+  };
+
   // AP-22: shows the user which tag a manual link will additionally receive
   // in Paperless. Failure is non-fatal – the hint is simply omitted, and a
   // failed lookup must never keep claiming a tag that may be gone. `tagSeq`
@@ -218,13 +287,18 @@ export default function DocumentsTab({
   useEffect(() => {
     setShowForm(false);
     setFile(null);
-    setForm({ category: '', documentDate: '' });
+    setForm({ category: '', documentDate: '', documentClass: DEFAULT_DOCUMENT_CLASS });
     setFormError(null);
     setShowPaperless(false);
     setSearchTerm('');
     setPaperlessResults(null);
     setPaperlessError(null);
     setAssignedTagName(null);
+    // AP-24 (§2): filter, bulk selection and notices belong to one policy.
+    setClassFilter(ALL_DOCUMENT_CLASSES);
+    setSelectedIds([]);
+    setBulkClass(DEFAULT_DOCUMENT_CLASS);
+    setClassNotice(null);
     void reloadDocuments();
     void loadAssignedTag();
     // policyId controls the data source; `t` is deliberately not in the
@@ -294,6 +368,9 @@ export default function DocumentsTab({
       formData.append('file', file);
       if (form.category) formData.append('category', form.category);
       if (form.documentDate) formData.append('documentDate', form.documentDate);
+      // AP-24 (§2): always sent – the API default would be the same, but an
+      // explicit value keeps the request self-describing.
+      formData.append('documentClass', form.documentClass);
 
       const res = await fetch(`${API_BASE}/households/default/policies/${policyId}/documents`, {
         method: 'POST',
@@ -309,7 +386,7 @@ export default function DocumentsTab({
       // close/clear B's open form after a policyId change.
       if (seq === requestSeq.current) {
         setFile(null);
-        setForm({ category: '', documentDate: '' });
+        setForm({ category: '', documentDate: '', documentClass: DEFAULT_DOCUMENT_CLASS });
         setShowForm(false);
         // Success reload only if no policyId change happened in the meantime
         // – otherwise the stale closure would load policy A's documents
@@ -413,6 +490,66 @@ export default function DocumentsTab({
       if (seq === requestSeq.current) reloadDocuments();
     } catch {
       if (seq === requestSeq.current) setError(t('common.unknownError'));
+    }
+  };
+
+  // AP-24 (§2.3): the list is loaded completely (max. 200 rows), so the class
+  // filter is applied client-side – no extra request per filter change and the
+  // scroll position/selection stay untouched.
+  const filterValue = documentClassFilterValue(classFilter);
+  const visibleDocuments = filterValue
+    ? documents.filter((doc) => normalizeDocumentClass(doc.documentClass) === filterValue)
+    : documents;
+
+  // AP-24 (§2.3): a reload or a filter change must not keep IDs that are no
+  // longer visible – otherwise the bulk action would reclassify documents the
+  // user cannot see any more. Returning the previous array (no change) keeps
+  // this from looping.
+  useEffect(() => {
+    setSelectedIds((prev) =>
+      prev.length === 0 ? prev : pruneSelection(prev, visibleDocuments),
+    );
+  }, [documents, filterValue]);
+
+  /**
+   * AP-24 (§2.3): bulk reclassification. Only the selected document IDs are
+   * sent; the server re-checks them against the policy, so a stale selection
+   * can never touch a foreign document.
+   */
+  const handleBulkClassify = async () => {
+    if (selectedIds.length === 0) {
+      setClassNotice(t('policies.documentBulkNoneSelected'));
+      return;
+    }
+    const seq = requestSeq.current;
+    setClassifying(true);
+    setClassNotice(null);
+    try {
+      const res = await fetch(
+        `${API_BASE}/households/default/policies/${policyId}/documents/classify`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ documentIds: selectedIds, documentClass: bulkClass }),
+        },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message ?? t('common.unknownError'));
+      }
+      const data = await res.json().catch(() => null);
+      if (seq === requestSeq.current) {
+        setSelectedIds([]);
+        setClassNotice(t('policies.documentBulkUpdated', { count: data?.updated ?? 0 }));
+        reloadDocuments();
+      }
+    } catch (err) {
+      if (seq === requestSeq.current) {
+        setClassNotice(err instanceof Error ? err.message : t('common.unknownError'));
+      }
+    } finally {
+      setClassifying(false);
     }
   };
 
@@ -531,6 +668,20 @@ export default function DocumentsTab({
                   onChange={(e) => setForm({ ...form, documentDate: e.target.value })}
                 />
               </FormField>
+              {/* AP-24 (§2): optional class right at upload; without a choice
+                  the document stays "Nicht klassifiziert". */}
+              <FormField label={t('policies.documentClassFilter')}>
+                <Select
+                  value={form.documentClass}
+                  onChange={(e) => setForm({ ...form, documentClass: e.target.value })}
+                >
+                  {DOCUMENT_CLASSES.map((value) => (
+                    <option key={value} value={value}>
+                      {t(documentClassLabelKey(value))}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
             </div>
             {formError && (
               <div style={{ marginTop: 'var(--versigo-space-3)' }}>
@@ -550,17 +701,34 @@ export default function DocumentsTab({
 
         {error && <Alert variant="danger">{error}</Alert>}
 
-        {/* BugFix-22: sort by date or by name. */}
+        {/* BugFix-22: sort by date or by name. AP-24 (§2.3): filter by class.
+            `flexWrap` keeps both controls usable on a smartphone. */}
         {!loading && documents.length > 0 && (
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'flex-end',
+              flexWrap: 'wrap',
               gap: 'var(--versigo-space-2)',
               marginBottom: 'var(--versigo-space-3)',
             }}
           >
+            <label htmlFor="documents-class" className="text-sm text-muted" style={{ whiteSpace: 'nowrap' }}>
+              {t('policies.documentClassFilter')}
+            </label>
+            <Select
+              id="documents-class"
+              value={classFilter}
+              onChange={(e) => setClassFilter(e.target.value as DocumentClassFilter)}
+              style={{ maxWidth: 240 }}
+            >
+              {DOCUMENT_CLASS_FILTERS.map((value) => (
+                <option key={value} value={value}>
+                  {t(documentClassFilterLabelKey(value))}
+                </option>
+              ))}
+            </Select>
             <label htmlFor="documents-sort" className="text-sm text-muted" style={{ whiteSpace: 'nowrap' }}>
               {t('policies.documentsSort')}
             </label>
@@ -579,23 +747,93 @@ export default function DocumentsTab({
           </div>
         )}
 
+        {/* AP-24 (§2.3): Mehrfachauswahl zum Ändern der Klasse. Der Button ist
+            während eines laufenden Requests deaktiviert; eine Auswahl ist
+            erforderlich, damit kein versehentliches Weiterklassifizieren
+            stattfindet. */}
+        {!loading && visibleDocuments.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 'var(--versigo-space-2)',
+              marginBottom: 'var(--versigo-space-3)',
+              padding: 'var(--versigo-space-3)',
+              background: 'var(--versigo-surface)',
+              borderRadius: 'var(--versigo-radius)',
+            }}
+          >
+            <label htmlFor="documents-bulk-class" className="text-sm text-muted" style={{ whiteSpace: 'nowrap' }}>
+              {t('policies.documentBulkClassify')}
+            </label>
+            <Select
+              id="documents-bulk-class"
+              value={bulkClass}
+              onChange={(e) => setBulkClass(e.target.value as DocumentClass)}
+              style={{ maxWidth: 240 }}
+            >
+              {DOCUMENT_CLASSES.map((value) => (
+                <option key={value} value={value}>
+                  {t(documentClassLabelKey(value))}
+                </option>
+              ))}
+            </Select>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleBulkClassify()}
+              disabled={classifying || selectedIds.length === 0}
+            >
+              {classifying ? <><InlineSpinner /> {t('common.saving')}</> : t('common.save')}
+            </Button>
+            {/* aria-live: the outcome of the bulk action is announced without
+                moving the focus. */}
+            <span className="text-sm text-muted" aria-live="polite">
+              {selectedIds.length > 0
+                ? t('policies.documentBulkSelected', { count: selectedIds.length })
+                : null}
+            </span>
+          </div>
+        )}
+
+        {classNotice && (
+          <div aria-live="polite">
+            <Alert variant="info">{classNotice}</Alert>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: 'var(--versigo-space-8)' }}>
             <InlineSpinner />
           </div>
-        ) : documents.length === 0 ? (
+        ) : visibleDocuments.length === 0 ? (
+          // AP-24 (§2.3): with an active class filter an empty result means
+          // "no document of this class" – not "no documents at all".
           <EmptyState icon="📄" title={t('policies.noDocumentsTitle')}>
-            <p>{t('policies.noDocumentsBody')}</p>
+            <p>{filterValue ? t('policies.classAllEmpty') : t('policies.noDocumentsBody')}</p>
           </EmptyState>
         ) : (
           <div style={{ display: 'grid', gap: 'var(--versigo-space-3)' }}>
-            {sortDocuments(documents, sortKey).map((doc) => (
+            {sortDocuments(visibleDocuments, sortKey).map((doc) => (
               <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--versigo-space-3)', padding: 'var(--versigo-space-3)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--versigo-space-3)', minWidth: 0, flex: 1 }}>
+                  {/* AP-24 (§2.3): selection for the bulk classification. The
+                      visible label is the file name, so the checkbox is
+                      usable with a screen reader. */}
+                  <input
+                    type="checkbox"
+                    aria-label={doc.fileName}
+                    checked={selectedIds.includes(doc.id)}
+                    onChange={() => setSelectedIds((prev) => toggleSelected(prev, doc.id))}
+                    style={{ marginTop: 'var(--versigo-space-1)' }}
+                  />
                   <DocumentTypeIcon mimeType={doc.mimeType} fileName={doc.fileName} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--versigo-space-2)', flexWrap: 'wrap' }}>
                       <strong style={{ wordBreak: 'break-word' }}>{doc.fileName}</strong>
+                      {/* AP-24 (§2.3): class of this assignment. */}
+                      <DocumentClassBadge doc={doc} />
                       {/* BugFix-22: the origin is an icon now – the former text
                           badges ("Automatisch über Tag", …) took too much space.
                           The Paperless tagging status stays a text badge because
@@ -696,6 +934,7 @@ export default function DocumentsTab({
         policyId={policyId}
         insurerName={insurerName}
         onConfigChange={loadAssignedTag}
+        onDocumentsChanged={refreshDocumentsQuiet}
       />
     </>
   );

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DocumentsService, MAX_FILE_SIZE } from '../documents.service';
+import { DocumentsService, MAX_FILE_SIZE, MAX_BULK_CLASSIFY } from '../documents.service';
 import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import type { UploadedFile } from '../documents.types';
 import { GlobalRole, UserStatus } from '@prisma/client';
@@ -15,7 +15,7 @@ function createMockDb() {
   const db: Record<string, unknown> & {
     householdMembership: { findUnique: ReturnType<typeof vi.fn> };
     insurancePolicy: { findFirst: ReturnType<typeof vi.fn> };
-    policyDocument: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+    policyDocument: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
     auditEvent: { create: ReturnType<typeof vi.fn> };
     // AP-22: tag configuration + durable outbox
     policyPaperlessTag: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
@@ -33,6 +33,8 @@ function createMockDb() {
         Promise.resolve({ id: args.where.id, ...args.data }),
       ),
       delete: vi.fn(),
+      // AP-24 (§2): bulk classification writes with a single `updateMany`.
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     auditEvent: { create: vi.fn() },
     policyPaperlessTag: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -212,24 +214,32 @@ describe('DocumentsService', () => {
 
     it('cleans up when storeFile fails', async () => {
       const { writeFile } = await import('fs/promises');
-      (writeFile as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Disk full'));
+      const writeFileMock = writeFile as ReturnType<typeof vi.fn>;
+      writeFileMock.mockRejectedValue(new Error('Disk full'));
 
-      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
-      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
-      mockDb.policyDocument.findFirst.mockResolvedValue(null);
-      mockDb.policyDocument.create.mockResolvedValue({
-        id: docId, policyId, fileName: 'test.pdf',
-        mimeType: 'application/pdf', fileSize: 12,
-        checksum: 'abc', storageType: 'INTERNAL',
-        createdByUserId: userId,
-      });
-      mockDb.policyDocument.delete.mockResolvedValue(undefined);
+      try {
+        mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+        mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+        mockDb.policyDocument.findFirst.mockResolvedValue(null);
+        mockDb.policyDocument.create.mockResolvedValue({
+          id: docId, policyId, fileName: 'test.pdf',
+          mimeType: 'application/pdf', fileSize: 12,
+          checksum: 'abc', storageType: 'INTERNAL',
+          createdByUserId: userId,
+        });
+        mockDb.policyDocument.delete.mockResolvedValue(undefined);
 
-      await expect(
-        service.upload(householdId, userId, policyId, mockFile, {}),
-      ).rejects.toThrow('Disk full');
+        await expect(
+          service.upload(householdId, userId, policyId, mockFile, {}),
+        ).rejects.toThrow('Disk full');
 
-      expect(mockDb.policyDocument.delete).toHaveBeenCalledWith({ where: { id: docId } });
+        expect(mockDb.policyDocument.delete).toHaveBeenCalledWith({ where: { id: docId } });
+      } finally {
+        // The `fs/promises` module mock is shared by this whole file and is
+        // not reset between tests – without restoring it every later upload
+        // would fail with "Disk full" too.
+        writeFileMock.mockResolvedValue(undefined);
+      }
     });
   });
 
@@ -607,6 +617,33 @@ describe('DocumentsService', () => {
         service.remove(householdId, userId, policyId, docId),
       ).rejects.toThrow(ForbiddenException);
     });
+
+    // Review round 2 (M2): these mocks answer whatever they are handed, so a
+    // query that silently lost its scoping filter would still return rows and
+    // the behavioural assertions above would keep passing. Pinning the actual
+    // argument closes that hole.
+    it('scopes the policy lookup used by access checks to id AND household', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+
+      await service.getFilePath(householdId, userId, policyId, docId);
+
+      expect(mockDb.insurancePolicy.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: policyId, householdId } }),
+      );
+    });
+
+    it('scopes the document lookup in findOne to id, policy and the non-archived set', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'VIEWER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findFirst.mockResolvedValue({ id: docId, policyId, fileName: 'test.pdf' });
+
+      await service.findOne(householdId, user, policyId, docId);
+
+      expect(mockDb.policyDocument.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: docId, policyId, archivedAt: null } }),
+      );
+    });
   });
 
   // AP-22: manual links additionally receive the configured Paperless tag.
@@ -880,6 +917,215 @@ describe('DocumentsService', () => {
       );
       expect(mockDb.paperlessTagJob.create).toHaveBeenCalled();
       expect(tags.enqueue).toHaveBeenCalledWith('tag-document', 'job-1', policyId);
+    });
+  });
+
+  // --- AP-24 (§2): Dokumentklassifikation ----------------------------------
+
+  describe('classifyDocuments (AP-24 §2.3)', () => {
+    const docA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const docB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+    function allowPolicyAccess() {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+    }
+
+    it('reclassifies the given documents of the policy and audits the change', async () => {
+      allowPolicyAccess();
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: docA, documentClass: 'UNCLASSIFIED' },
+        { id: docB, documentClass: 'CONTRACT' },
+      ]);
+      mockDb.policyDocument.updateMany.mockResolvedValue({ count: 2 });
+
+      const result = await service.classifyDocuments(householdId, userId, policyId, {
+        documentIds: [docA, docB],
+        documentClass: 'BILLING',
+      });
+
+      expect(result).toEqual({ requested: 2, updated: 2, unchanged: 0, notFound: 0 });
+      expect(mockDb.policyDocument.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: [docA, docB] } },
+        data: { documentClass: 'BILLING' },
+      });
+      expect(mockDb.auditEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          entityType: 'PolicyDocument',
+          entityId: policyId,
+          action: 'BULK_CLASSIFY',
+          diffJson: expect.objectContaining({
+            documentClass: 'BILLING',
+            documentIds: [docA, docB],
+            changed: 2,
+          }),
+        }),
+      });
+    });
+
+    it('never touches documents of another household or unknown IDs', async () => {
+      allowPolicyAccess();
+      // The service scopes the lookup by policyId; only docA comes back.
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: docA, documentClass: 'UNCLASSIFIED' },
+      ]);
+      mockDb.policyDocument.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.classifyDocuments(householdId, userId, policyId, {
+        documentIds: [docA, '99999999-9999-4999-8999-999999999999'],
+        documentClass: 'CLAIM',
+      });
+
+      expect(mockDb.policyDocument.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ policyId, archivedAt: null }),
+        }),
+      );
+      expect(result.notFound).toBe(1);
+      expect(result.updated).toBe(1);
+      // The update is restricted to the verified document.
+      expect(mockDb.policyDocument.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: [docA] } },
+        data: { documentClass: 'CLAIM' },
+      });
+    });
+
+    it('does not write or audit anything when every document already has the class', async () => {
+      allowPolicyAccess();
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: docA, documentClass: 'BILLING' },
+      ]);
+
+      const result = await service.classifyDocuments(householdId, userId, policyId, {
+        documentIds: [docA],
+        documentClass: 'BILLING',
+      });
+
+      expect(result).toEqual({ requested: 1, updated: 0, unchanged: 1, notFound: 0 });
+      expect(mockDb.policyDocument.updateMany).not.toHaveBeenCalled();
+      expect(mockDb.auditEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a request above the bulk limit', async () => {
+      allowPolicyAccess();
+      const documentIds = Array.from(
+        { length: MAX_BULK_CLASSIFY + 1 },
+        (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      );
+
+      await expect(
+        service.classifyDocuments(householdId, userId, policyId, {
+          documentIds,
+          documentClass: 'OTHER',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockDb.policyDocument.findMany).not.toHaveBeenCalled();
+    });
+
+    it('applies duplicated IDs only once', async () => {
+      allowPolicyAccess();
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: docA, documentClass: 'UNCLASSIFIED' },
+      ]);
+      mockDb.policyDocument.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.classifyDocuments(householdId, userId, policyId, {
+        documentIds: [docA, docA],
+        documentClass: 'OTHER',
+      });
+
+      expect(result.requested).toBe(1);
+      expect(mockDb.policyDocument.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: [docA] } },
+        data: { documentClass: 'OTHER' },
+      });
+    });
+  });
+
+  describe('document class filter and assignment (AP-24 §2)', () => {
+    function allowReadAccess() {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'OWNER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+    }
+
+    it('narrows the document list to the requested class', async () => {
+      allowReadAccess();
+      mockDb.policyDocument.findMany.mockResolvedValue([]);
+
+      await service.findAll(householdId, user, policyId, 'BILLING');
+
+      expect(mockDb.policyDocument.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            policyId,
+            archivedAt: null,
+            documentClass: 'BILLING',
+          }),
+        }),
+      );
+    });
+
+    it('keeps the previous unfiltered query when no class is given', async () => {
+      allowReadAccess();
+      mockDb.policyDocument.findMany.mockResolvedValue([]);
+
+      await service.findAll(householdId, user, policyId);
+
+      expect(mockDb.policyDocument.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { policyId, archivedAt: null } }),
+      );
+    });
+
+    it('stores a class provided at upload time', async () => {
+      allowReadAccess();
+      mockDb.policyDocument.findFirst.mockResolvedValue(null);
+      mockDb.policyDocument.create.mockResolvedValue({ id: docId, policyId });
+      mockDb.policyDocument.update.mockResolvedValue({ id: docId, policyId });
+
+      await service.upload(householdId, userId, policyId, mockFile, {
+        documentClass: 'CONTRACT',
+      });
+
+      expect(mockDb.policyDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ documentClass: 'CONTRACT' }),
+        }),
+      );
+    });
+
+    it('leaves the class at the database default when the upload picks none', async () => {
+      allowReadAccess();
+      mockDb.policyDocument.findFirst.mockResolvedValue(null);
+      mockDb.policyDocument.create.mockResolvedValue({ id: docId, policyId });
+      mockDb.policyDocument.update.mockResolvedValue({ id: docId, policyId });
+
+      await service.upload(householdId, userId, policyId, mockFile, {});
+
+      // `undefined` is what tells Prisma to use the column default; sending
+      // an explicit value here would silently overwrite it.
+      const created = mockDb.policyDocument.create.mock.calls[0][0] as { data: Record<string, unknown> };
+      expect(created.data.documentClass).toBeUndefined();
+    });
+
+    it('updates the class in the document details and audits it', async () => {
+      allowReadAccess();
+      mockDb.policyDocument.findFirst.mockResolvedValue({ id: docId, policyId });
+      mockDb.policyDocument.update.mockResolvedValue({ id: docId, documentClass: 'CLAIM' });
+
+      await service.updateMetadata(householdId, userId, policyId, docId, {
+        documentClass: 'CLAIM',
+      });
+
+      expect(mockDb.policyDocument.update).toHaveBeenCalledWith({
+        where: { id: docId },
+        data: expect.objectContaining({ documentClass: 'CLAIM' }),
+      });
+      expect(mockDb.auditEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'UPDATE',
+          diffJson: expect.objectContaining({ documentClass: 'CLAIM' }),
+        }),
+      });
     });
   });
 });

@@ -258,11 +258,17 @@ describe('AiAssistService', () => {
     });
 
     it('creates a summary successfully and prunes old entries via a transaction', async () => {
-      // Use a mocked adapter that returns data
+      // AP-24 (§3.2): the adapter answers with the versioned JSON document,
+      // `summaryMarkdown` is only the transport field of that result.
+      const summaryDocument = {
+        version: 1,
+        sections: [{ title: 'Test', items: ['Punkt eins'], note: null }],
+        hints: ['Hinweis eins'],
+      };
       const mockAdapter = {
         providerKey: 'test-provider',
         summarizeCoverage: vi.fn().mockResolvedValue({
-          summaryMarkdown: '# Test Zusammenfassung',
+          summaryMarkdown: JSON.stringify(summaryDocument),
           sourceDocumentRefs: ['doc-1', 'doc-2'],
           model: 'test-model',
         }),
@@ -297,10 +303,61 @@ describe('AiAssistService', () => {
       const result = await svc.summarize(householdId, userId, policyId);
 
       expect(result).not.toBeNull();
-      expect(result?.summaryMarkdown).toBe('# Test Zusammenfassung');
-      expect(txMock.aiCoverageSummary.create).toHaveBeenCalled();
+      expect(result?.format).toBe('json');
+      expect(result?.summary).toEqual(summaryDocument);
+      // The plain-text rendering stays available for consumers that only know
+      // the pre-AP-24 shape.
+      expect(result?.summaryMarkdown).toBe('Test\n- Punkt eins\n\nHinweise\n- Hinweis eins');
+      expect(result?.model).toBe('test-model');
+      expect(result?.sourceDocuments).toEqual([{ id: 'doc-1', fileName: 'test.pdf' }]);
+      expect(txMock.aiCoverageSummary.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ summaryJson: summaryDocument }),
+        }),
+      );
       // Verify that old entries were pruned
       expect(txMock.aiCoverageSummary.deleteMany).toHaveBeenCalled();
+    });
+
+    it('retries exactly once on an off-schema answer, then reports a clean error', async () => {
+      const mockAdapter = {
+        providerKey: 'test-provider',
+        summarizeCoverage: vi
+          .fn()
+          .mockResolvedValue({ summaryMarkdown: '# kein JSON', sourceDocumentRefs: [], model: 'm' })
+          .mockResolvedValue({ summaryMarkdown: 'immer noch kein JSON', sourceDocumentRefs: [], model: 'm' }),
+        extractContractFacts: vi.fn(),
+        healthCheck: vi.fn(),
+      };
+      const mockRegistry = { getAdapter: vi.fn().mockResolvedValue(mockAdapter) };
+
+      const svc = new AiAssistService(
+        mockDb as never,
+        mockRegistry as never,
+        createMockSettings(true) as never,
+        createMockAuthService() as never,
+        createMockQueue() as never,
+      );
+
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        { id: 'doc-1', fileName: 'test.pdf', mimeType: 'application/pdf' },
+      ]);
+
+      await expect(svc.summarize(householdId, userId, policyId)).rejects.toThrow(
+        'AI_SUMMARY_INVALID_FORMAT',
+      );
+
+      // Bounded: one original call plus exactly one repair attempt …
+      expect(mockAdapter.summarizeCoverage).toHaveBeenCalledTimes(2);
+      // … the second one carrying the validator's precise complaint, without
+      // any document content in it.
+      expect(mockAdapter.summarizeCoverage.mock.calls[1][2]).toEqual({
+        repairHint: expect.stringContaining('Format'),
+      });
+      // Nothing unusable is ever written.
+      expect(mockDb.$transaction).not.toHaveBeenCalled();
     });
   });
 
@@ -421,7 +478,13 @@ describe('AiAssistService', () => {
 
       const result = await disabledService.healthCheck();
 
-      expect(result).toEqual({ connected: false, provider: 'none', reason: 'disabled' });
+      expect(result).toEqual({
+        connected: false,
+        provider: 'none',
+        reason: 'disabled',
+        // AP-24 (§4.2): `capable` is the flag the UI hangs its AI actions on.
+        capable: false,
+      });
       expect(mockRegistry.getAdapter).not.toHaveBeenCalled();
     });
 
@@ -437,6 +500,7 @@ describe('AiAssistService', () => {
         connected: false,
         provider: 'none',
         reason: 'not-configured',
+        capable: false,
       });
     });
 
@@ -465,6 +529,7 @@ describe('AiAssistService', () => {
         connected: false,
         provider: 'openai-compat',
         reason: 'unauthorized',
+        capable: false,
       });
     });
 
@@ -489,6 +554,7 @@ describe('AiAssistService', () => {
         connected: true,
         provider: 'openai-compat',
         reason: null,
+        capable: true,
       });
     });
   });

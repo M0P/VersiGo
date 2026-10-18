@@ -11,7 +11,12 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { DatabaseService, SettingsResolverService } from '@versigo/foundation';
+import {
+  DatabaseService,
+  SettingsResolverService,
+  nextPaperlessTagSyncAt,
+  paperlessTagSyncIntervalMs,
+} from '@versigo/foundation';
 import type { AiJobStatus, Prisma } from '@prisma/client';
 import type { PaperlessTagRequestError } from './paperless-ngx.interface';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
@@ -29,6 +34,90 @@ import {
   PAPERLESS_TAG_SYNC_POLICY_JOB,
   PAPERLESS_TAG_TAG_DOCUMENT_JOB,
 } from './paperless-tag.constants';
+
+/**
+ * AP-24 (§1.1): the four job states the status endpoint has to expose,
+ * independent of the internal `AiJobStatus` vocabulary.
+ */
+export type SyncJobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+
+const SYNC_JOB_STATUS: Record<AiJobStatus, SyncJobStatus> = {
+  PENDING: 'QUEUED',
+  RUNNING: 'RUNNING',
+  COMPLETED: 'SUCCEEDED',
+  FAILED: 'FAILED',
+  // A skipped run did not synchronise anything (superseded configuration,
+  // archived policy, removed tag). It is reported as FAILED together with its
+  // error code rather than silently pretending success.
+  SKIPPED: 'FAILED',
+};
+
+/** AP-24 (§1.1): maps the durable job state onto the public status vocabulary. */
+export function mapJobStatus(status: AiJobStatus): SyncJobStatus {
+  return SYNC_JOB_STATUS[status] ?? 'FAILED';
+}
+
+/**
+ * AP-24 (§1.1): narrows the stored error code to a safe, non-sensitive
+ * token (`A-Z0-9_`, max. 48 chars). Codes originate from our own constants,
+ * but the status endpoint must never turn an unexpected value – a URL, a
+ * host name or a message containing a credential – into a payload that is
+ * echoed back to every household member.
+ */
+export function sanitizeErrorCode(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const cleaned = code.replace(/[^A-Za-z0-9_]/g, '').slice(0, 48).toUpperCase();
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+/** AP-24 (§1.1): progress projection of one SYNC_POLICY job for the UI. */
+export interface SyncProgress {
+  jobId: string;
+  status: SyncJobStatus;
+  /** Documents processed so far. */
+  processed: number;
+  /** `null` while the total is unknown – the UI must not invent a percentage. */
+  total: number | null;
+  added: number;
+  removed: number;
+  unchanged: number;
+  errorCode: string | null;
+  createdAt: Date | null;
+  completedAt: Date | null;
+}
+
+type PaperlessTagJobProgressRow = {
+  id: string;
+  status: AiJobStatus;
+  errorCode: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+  processedCount: number;
+  totalCount: number | null;
+  addedCount: number;
+  removedCount: number;
+  unchangedCount: number;
+};
+
+/**
+ * AP-24 (§1.1): projects a job row onto the public progress shape. Field
+ * names are flattened and renamed so the API contract does not leak the
+ * Prisma column names and can evolve independently of them.
+ */
+export function toSyncProgress(job: PaperlessTagJobProgressRow): SyncProgress {
+  return {
+    jobId: job.id,
+    status: mapJobStatus(job.status),
+    processed: job.processedCount ?? 0,
+    total: job.totalCount ?? null,
+    added: job.addedCount ?? 0,
+    removed: job.removedCount ?? 0,
+    unchanged: job.unchangedCount ?? 0,
+    errorCode: sanitizeErrorCode(job.errorCode),
+    createdAt: job.createdAt ?? null,
+    completedAt: job.completedAt ?? null,
+  };
+}
 
 /**
  * AP-22: stable codes for a failed interactive tag request. Each code is
@@ -426,6 +515,22 @@ export class PaperlessTagService implements OnModuleInit {
       throw new NotFoundException('NO_PAPERLESS_TAG_CONFIGURED');
     }
 
+    // AP-24 (§1.1): a second click or a second browser tab must never start a
+    // second run for the same insurance – the already active job is returned
+    // so the caller can display it instead.
+    const active = await this.db.paperlessTagJob.findFirst({
+      where: { policyId, kind: 'SYNC_POLICY', status: { in: ['PENDING', 'RUNNING'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (active) {
+      return {
+        jobId: active.id,
+        status: mapJobStatus(active.status),
+        configVersion: active.configVersion,
+        alreadyRunning: true as const,
+      };
+    }
+
     const job = await this.db.paperlessTagJob.create({
       data: {
         policyId,
@@ -439,8 +544,9 @@ export class PaperlessTagService implements OnModuleInit {
 
     return {
       jobId: job.id,
-      status: 'PENDING' satisfies AiJobStatus,
+      status: mapJobStatus('PENDING'),
       configVersion: config.configVersion,
+      alreadyRunning: false as const,
     };
   }
 
@@ -448,7 +554,16 @@ export class PaperlessTagService implements OnModuleInit {
   async getStatus(householdId: string, user: AuthenticatedUser, policyId: string) {
     await this.authService.assertPolicyReadAccess(user, householdId, policyId);
 
-    const [config, failedDocuments, lastJob] = await Promise.all([
+    const [
+      config,
+      failedDocuments,
+      lastJob,
+      syncJob,
+      // AP-24 (§1.2): the background-schedule projection is resolved with the
+      // same settings the worker reads on every tick.
+      autoSyncSetting,
+      rawIntervalMs,
+    ] = await Promise.all([
       this.db.policyPaperlessTag.findUnique({ where: { policyId } }),
       this.db.policyDocument.findMany({
         where: {
@@ -468,11 +583,44 @@ export class PaperlessTagService implements OnModuleInit {
         where: { policyId },
         orderBy: { createdAt: 'desc' },
       }),
+      // AP-24 (§1.1): the manual reconciliation's own progress, separated from
+      // the per-document backfill jobs that share the same table.
+      this.db.paperlessTagJob.findFirst({
+        where: { policyId, kind: 'SYNC_POLICY' },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.settings.getEffectiveBoolean('PAPERLESS_TAG_SYNC_ENABLED'),
+      this.settings.getEffectiveNumber('PAPERLESS_TAG_SYNC_INTERVAL_MS'),
     ]);
 
+    const progress = syncJob ? toSyncProgress(syncJob) : null;
+
     if (!config) {
-      return { configured: false, taggingStates: failedDocuments, lastJob };
+      return {
+        configured: false,
+        taggingStates: failedDocuments,
+        lastJob,
+        /** AP-24 (§1.1): `QUEUED|RUNNING|SUCCEEDED|FAILED` of the last run. */
+        jobStatus: progress?.status ?? null,
+        progress,
+      };
     }
+
+    // AP-24 (§1.2): `nextSyncAt` is computed with the shared helpers, i.e.
+    // exactly the moment the worker's due-check will let this policy start.
+    const autoSyncEnabled = autoSyncSetting ?? true;
+    const intervalMs = paperlessTagSyncIntervalMs(rawIntervalMs);
+    const nextSyncAt = !autoSyncEnabled
+      ? null
+      : config.lastSyncedAt
+        ? nextPaperlessTagSyncAt({
+            policyId,
+            lastSyncedAt: config.lastSyncedAt,
+            now: new Date(),
+            intervalMs,
+          }).toISOString()
+        : // Never synced → already due, only waiting for the next tick.
+          new Date(Date.now() + PAPERLESS_TAG_RECONCILE_TICK_MS).toISOString();
 
     return {
       configured: true,
@@ -482,8 +630,17 @@ export class PaperlessTagService implements OnModuleInit {
       lastSyncedAt: config.lastSyncedAt,
       syncStatus: config.syncStatus,
       syncErrorCode: config.syncErrorCode,
+      /** AP-24 (§1.2): background sync on/off as currently effective. */
+      autoSyncEnabled,
+      /** AP-24 (§1.2): effective interval used for `nextSyncAt`. */
+      intervalMs,
+      /** AP-24 (§1.2): next scheduled background run, `null` when disabled. */
+      nextSyncAt,
       taggingStates: failedDocuments,
       lastJob,
+      /** AP-24 (§1.1): `QUEUED|RUNNING|SUCCEEDED|FAILED` of the last run. */
+      jobStatus: progress?.status ?? null,
+      progress,
     };
   }
 

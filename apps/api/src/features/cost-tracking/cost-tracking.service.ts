@@ -3,103 +3,29 @@ import { DatabaseService } from '@versigo/foundation';
 import { GlobalRole, PaymentFrequency } from '@prisma/client';
 import { AuthService, AuthenticatedUser } from '../identity/auth.service';
 import { CreateCostEntryDto, UpdateCostEntryDto } from './dto/cost-tracking.dto';
+import {
+  computePolicySchedule,
+  entryForPeriod,
+  selectActiveOrLatestEntry,
+  sumBasisAmounts,
+  summarizePolicyCosts,
+  type BasisAmounts,
+  type CostEntryLike,
+} from './cost-schedule';
 
 /**
- * BugFix-08 (Q4): cost overhaul.
+ * BugFix-08 (Q4) + BugFix-22: cost overview service.
  *
- * - Billing periods: MONTHLY / QUARTERLY / ANNUAL for new entries.
- *   SEMI_ANNUAL stays as a legacy value for existing data in the enum
- *   and is correctly supported in all calculations (6-month period).
- *   Documented loss-free decision: NO data migration needed.
- * - A cost increase from a date = a new entry with a later validFrom;
- *   the previously valid entry is automatically ended when a new one
- *   is created
- *   (validTo = last millisecond before the new validFrom). At any point in
- *   time exactly one entry applies: the one with the largest validFrom
- *   <= period start (and without an explicit end before that).
- * - "Paid to date" (paidToDate) = sum of the full amounts of all started
- *   billing periods (period start <= today, due at period start).
- *   NO day shares - BugFix-06 (part 3) semantics remain unchanged.
- * - Monetary amounts: sum internally in cents (integer); all returned
- *   amounts rounded to 2 decimals. Floating-point sums are never formed.
+ * All calculation rules live in the pure, unit-tested domain module
+ * `cost-schedule.ts` (single source of truth; the web app renders only the
+ * per-basis results computed there and never calculates its own variant).
+ * This service is responsible for persistence, authorization and audit only.
+ *
+ * BugFix-22 corrections: the period anchor is the EARLIEST of the policy
+ * start and the first cost entry's validFrom (earlier cost positions are no
+ * longer dropped), and gross/net are computed strictly per basis without any
+ * cross-basis fallback.
  */
-
-/** Period length per payment frequency in months (basis of all calculations). */
-const FREQUENCY_MONTHS: Record<PaymentFrequency, number> = {
-  MONTHLY: 1,
-  QUARTERLY: 3,
-  SEMI_ANNUAL: 6,
-  ANNUAL: 12,
-};
-
-/** Periods per year per frequency (e.g. MONTHLY = 12 -> annual amount). */
-const FREQUENCY_PER_YEAR: Record<PaymentFrequency, number> = {
-  MONTHLY: 12,
-  QUARTERLY: 4,
-  SEMI_ANNUAL: 2,
-  ANNUAL: 1,
-};
-
-/**
- * Calendar addition of months with day-value clamping. IMPORTANT: every call
- * always starts from the passed anchor date (never from an already
- * clamped intermediate result) - so periods realign automatically back at
- * the anchor: from anchor 31.01. + 1 month = 28./29.02., + 2 months again
- * 31.03., + 3 months 30.04. etc. (no drift).
- */
-function addMonthsClamped(date: Date, months: number): Date {
-  const result = new Date(date.getTime());
-  const day = result.getDate();
-  result.setDate(1);
-  result.setMonth(result.getMonth() + months);
-  const lastDayOfMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
-  result.setDate(Math.min(day, lastDayOfMonth));
-  return result;
-}
-
-/** Rounds to 2 decimals (display/single amounts). */
-function roundMoney(amount: number): number {
-  return Math.round(amount * 100) / 100;
-}
-
-/** Amount -> integer cents (basis for loss-free sums). */
-function toCents(amount: number): number {
-  return Math.round(amount * 100);
-}
-
-/** Integer cents -> amount with 2 decimals. */
-function fromCents(cents: number): number {
-  return Math.round(cents) / 100;
-}
-
-/** A cost entry as required by the calculation logic. */
-type CostEntryLike = {
-  id?: string;
-  createdAt?: Date | string | null;
-  grossAmount: unknown;
-  netAmount?: unknown;
-  frequency: PaymentFrequency;
-  validFrom: Date;
-  validTo: Date | null;
-};
-
-/** Billing data of a policy (anchor + billing frequency). */
-type BillingPlan = {
-  anchor: Date;
-  frequency: PaymentFrequency;
-  stepMonths: number;
-};
-
-/** One billing period in the cost table (incurred/expected). */
-type BillingPeriod = {
-  periodIndex: number;
-  periodLabel: string;
-  periodStart: string;
-  periodEnd: string;
-  amount: number;
-  status: 'incurred' | 'expected';
-  entryId: string | null;
-};
 
 @Injectable()
 export class CostTrackingService {
@@ -132,175 +58,6 @@ export class CostTrackingService {
   }
 
   /**
-   * Relevant cost entry for a period: the entry with the largest
-   * validFrom <= period start, unless it was explicitly ended before
-   * the period start (validTo < period start).
-   * Returns null if no entry exists before periodStart or the last entry
-   * has already ended (cost regression/gap). For an identical validFrom
-   * the newer entry wins (createdAt).
-   */
-  private entryForPeriod<T extends CostEntryLike>(entries: T[], periodStart: Date): T | null {
-    const startMs = periodStart.getTime();
-    return (
-      entries
-        .filter(
-          (e) =>
-            e.validFrom.getTime() <= startMs &&
-            (!e.validTo || e.validTo.getTime() >= startMs),
-        )
-        .sort((a, b) => {
-          const byFrom = b.validFrom.getTime() - a.validFrom.getTime();
-          if (byFrom !== 0) return byFrom;
-          const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return bCreated - aCreated;
-        })[0] ?? null
-    );
-  }
-
-  /** Determines the active (otherwise latest) cost entry – shared basis of the overviews. */
-  private selectActiveOrLatestEntry<T extends CostEntryLike>(entries: T[], now: Date): T | null {
-    if (entries.length === 0) return null;
-    return (
-      entries
-        .filter((e) => e.validFrom.getTime() <= now.getTime() && (!e.validTo || e.validTo.getTime() >= now.getTime()))
-        .sort((a, b) => {
-          const byFrom = b.validFrom.getTime() - a.validFrom.getTime();
-          if (byFrom !== 0) return byFrom;
-          const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return bCreated - aCreated;
-        })[0] ?? entries[entries.length - 1]
-    );
-  }
-
-  /**
-   * Determines the anchor (policy start, fallback: earliest entry) and
-   * billing frequency (policy paymentFrequency, fallback: frequency of
-   * the active/latest entry, otherwise MONTHLY).
-   */
-  private resolveBilling<T extends CostEntryLike>(
-    policy: { startDate?: Date | null; paymentFrequency?: PaymentFrequency | null },
-    entries: T[],
-    now: Date,
-  ): BillingPlan {
-    const active = this.selectActiveOrLatestEntry(entries, now);
-    const anchor = policy.startDate ?? entries[0].validFrom;
-    const frequency = policy.paymentFrequency ?? active?.frequency ?? PaymentFrequency.MONTHLY;
-    return { anchor, frequency, stepMonths: FREQUENCY_MONTHS[frequency] };
-  }
-
-  /**
-   * BugFix-22: amount basis of all cost calculations – the gross amount if it
-   * is set, otherwise the net amount. At least one of both always exists
-   * (enforced on create/update), so this never silently calculates with a
-   * missing amount.
-   */
-  private effectiveAmount(entry: CostEntryLike): number {
-    const amount = entry.grossAmount ?? entry.netAmount;
-    return Number(amount ?? 0);
-  }
-
-  /**
-   * Due amount of a cost entry in a billing period of the step frequency
-   * `stepFrequency`. If the entry's own frequency differs from the step
-   * frequency (e.g. policy MONTHLY, entry QUARTERLY), the amount is prorated
-   * to the period so that the annual total stays consistent
-   * (300 QUARTERLY = 100/month).
-   */
-  private periodAmount(entry: CostEntryLike, stepFrequency: PaymentFrequency): number {
-    const stepMonths = FREQUENCY_MONTHS[stepFrequency];
-    const entryMonths = FREQUENCY_MONTHS[entry.frequency];
-    if (stepMonths === entryMonths) {
-      return roundMoney(this.effectiveAmount(entry));
-    }
-    return roundMoney(this.effectiveAmount(entry) * (stepMonths / entryMonths));
-  }
-
-  /**
-   * Generates all billing periods from the anchor to `horizonEnd` (inclusive).
-   * Past periods (period start <= now) are 'incurred' (contribution due at
-   * period start), future 'expected' (projected from the currently valid
-   * entry). Each period counts the relevant cost entry (active at period
-   * start, otherwise the last one before - see entryForPeriod).
-   */
-  private iteratePeriods<T extends CostEntryLike>(
-    policy: { startDate?: Date | null; paymentFrequency?: PaymentFrequency | null },
-    entries: T[],
-    now: Date,
-    horizonEnd: Date,
-  ): BillingPeriod[] {
-    if (entries.length === 0) return [];
-    const { anchor, frequency, stepMonths } = this.resolveBilling(policy, entries, now);
-    const horizonMs = horizonEnd.getTime();
-
-    const periods: BillingPeriod[] = [];
-    let index = 0;
-    for (;;) {
-      const periodStart = addMonthsClamped(anchor, index * stepMonths);
-      if (periodStart.getTime() > horizonMs) break;
-      const periodEndExclusive = addMonthsClamped(anchor, (index + 1) * stepMonths);
-      // Inclusive period end = last moment before the next period.
-      const periodEnd = new Date(periodEndExclusive.getTime() - 1);
-
-      const entry = this.entryForPeriod(entries, periodStart);
-      const amount = entry ? this.periodAmount(entry, frequency) : 0;
-
-      periods.push({
-        periodIndex: index,
-        periodLabel: `${String(periodStart.getMonth() + 1).padStart(2, '0')}/${periodStart.getFullYear()}`,
-        periodStart: periodStart.toISOString(),
-        periodEnd: periodEnd.toISOString(),
-        amount: roundMoney(amount),
-        status: periodStart.getTime() <= now.getTime() ? 'incurred' : 'expected',
-        entryId: entry?.id ?? null,
-      });
-      index++;
-    }
-    return periods;
-  }
-
-  /**
-   * "Paid to date": sum of the full period amounts of all started billing
-   * periods (period start <= now). Every started period counts in full -
-   * there are NO day shares (BugFix-06 part 3). Summation in cents
-   * (integer), result rounded to 2 decimals.
-   */
-  private calculatePaidToDate<T extends CostEntryLike>(
-    policy: { startDate?: Date | null; paymentFrequency?: PaymentFrequency | null },
-    entries: T[],
-    now: Date,
-  ): number {
-    if (entries.length === 0) return 0;
-    const { anchor, frequency, stepMonths } = this.resolveBilling(policy, entries, now);
-
-    let totalCents = 0;
-    let index = 0;
-    for (;;) {
-      const periodStart = addMonthsClamped(anchor, index * stepMonths);
-      if (periodStart.getTime() > now.getTime()) break;
-      const entry = this.entryForPeriod(entries, periodStart);
-      if (entry) totalCents += toCents(this.periodAmount(entry, frequency));
-      index++;
-    }
-    return fromCents(totalCents);
-  }
-
-  /** Annual amount of an entry (period amount * periods/year). */
-  private annualize(entry: CostEntryLike): number {
-    return roundMoney(this.effectiveAmount(entry) * FREQUENCY_PER_YEAR[entry.frequency]);
-  }
-
-  /** Monthly/quarterly/annual amount derived from the annual amount. */
-  private derivePerFrequency(annualGross: number) {
-    return {
-      MONTHLY: roundMoney(annualGross / 12),
-      QUARTERLY: roundMoney(annualGross / 4),
-      ANNUAL: roundMoney(annualGross),
-    };
-  }
-
-  /**
    * Automatically ends the PREDECESSOR entry that is valid at `validFrom`
    * (validTo = last millisecond before `validFrom`). Returns true when an
    * entry has been ended. `excludeEntryId` is set to the edited entry
@@ -321,7 +78,9 @@ export class CostTrackingService {
       where: { policyId },
       orderBy: { validFrom: 'asc' },
     })) ?? [];
-    const predecessor = this.entryForPeriod(
+    // Same "relevant entry at a point in time" rule as the schedule
+    // calculation (BugFix-22: shared domain function, no second variant).
+    const predecessor = entryForPeriod(
       existing.filter((e) => e.id !== excludeEntryId),
       validFrom,
     );
@@ -399,6 +158,23 @@ export class CostTrackingService {
       throw new BadRequestException('At least one of grossAmount or netAmount is required');
     }
 
+    // AP-24 (§4.2): a cost entry may name the billing document it was derived
+    // from. The reference is checked here, not merely accepted from the
+    // client: only an existing, non-archived BILLING document of this very
+    // policy can be the source (the sidebar only offers those).
+    if (dto.sourceDocumentId) {
+      const document = await this.db.policyDocument.findFirst({
+        where: { id: dto.sourceDocumentId, policyId, archivedAt: null },
+        select: { id: true, documentClass: true },
+      });
+      if (!document) {
+        throw new BadRequestException('The referenced document does not belong to this policy');
+      }
+      if (document.documentClass !== 'BILLING') {
+        throw new BadRequestException('Only documents classified as BILLING can be a cost source');
+      }
+    }
+
     const validFrom = new Date(dto.validFrom);
     const validTo = dto.validTo ? new Date(dto.validTo) : null;
     if (validTo && validTo.getTime() <= validFrom.getTime()) {
@@ -418,6 +194,7 @@ export class CostTrackingService {
           frequency: dto.frequency,
           bookingSource: dto.bookingSource,
           note: dto.note,
+          sourceDocumentId: dto.sourceDocumentId ?? null,
         },
       });
 
@@ -444,6 +221,7 @@ export class CostTrackingService {
             frequency: dto.frequency,
             bookingSource: dto.bookingSource ?? null,
             note: dto.note ?? null,
+            sourceDocumentId: dto.sourceDocumentId ?? null,
             predecessorEnded,
           },
         },
@@ -465,6 +243,68 @@ export class CostTrackingService {
       where: { policyId },
       orderBy: { validFrom: 'desc' },
     });
+  }
+
+  /**
+   * AP-24 (§4.1): the documents of a policy classified as BILLING.
+   *
+   * This is the data source of the costs sidebar. Each entry names the cost
+   * entries that already reference it, so the UI can mark used documents and
+   * warn about duplicates without a second request per row.
+   *
+   * Read access is checked like everywhere else in the feature (READ_ONLY
+   * only with an existing share).
+   */
+  async listBillingDocuments(householdId: string, user: AuthenticatedUser, policyId: string) {
+    await this.authService.assertPolicyReadAccess(user, householdId, policyId);
+
+    const documents = await this.db.policyDocument.findMany({
+      where: { policyId, archivedAt: null, documentClass: 'BILLING' },
+      orderBy: [{ documentDate: 'desc' }, { uploadedAt: 'desc' }],
+      select: {
+        id: true,
+        fileName: true,
+        mimeType: true,
+        fileSize: true,
+        documentDate: true,
+        storageType: true,
+        storageRef: true,
+        linkOriginManual: true,
+        linkOriginTag: true,
+        aiProcessingExcluded: true,
+      },
+    });
+
+    // One query for all references instead of one per document.
+    const references = await this.db.policyCostEntry.findMany({
+      where: { policyId, sourceDocumentId: { not: null } },
+      orderBy: { validFrom: 'desc' },
+      select: { id: true, sourceDocumentId: true, validFrom: true, grossAmount: true, netAmount: true, frequency: true },
+    });
+
+    const byDocument = new Map<string, typeof references>();
+    for (const reference of references) {
+      if (!reference.sourceDocumentId) continue;
+      const list = byDocument.get(reference.sourceDocumentId) ?? [];
+      list.push(reference);
+      byDocument.set(reference.sourceDocumentId, list);
+    }
+
+    return {
+      documents: documents.map((document) => {
+        const used = byDocument.get(document.id) ?? [];
+        return {
+          ...document,
+          usedByCostEntries: used.map((entry) => ({
+            id: entry.id,
+            validFrom: entry.validFrom,
+            grossAmount: entry.grossAmount,
+            netAmount: entry.netAmount,
+            frequency: entry.frequency,
+          })),
+        };
+      }),
+    };
   }
 
   async findOne(householdId: string, user: AuthenticatedUser, policyId: string, entryId: string) {
@@ -630,12 +470,15 @@ export class CostTrackingService {
   }
 
   /**
-   * BugFix-08: complete cost table of a policy.
-   * - `periods`: one row per billing period from policy start until the end
-   *   of the following year (past 'incurred', future 'expected', projected
-   *   from the currently valid entry).
-   * - `paidToDate`: sum of the full amounts of all started periods.
-   * - `current`: annual/monthly/quarterly amount from the active entry.
+   * BugFix-08 (Q4) + BugFix-22: complete cost table of a policy.
+   * - `periods`: one row per billing period from the EARLIEST of policy
+   *   start and first cost position until the end of the following year
+   *   (past 'incurred' once started, future 'expected', projected from the
+   *   currently valid entry). Amounts are strictly per basis (gross/net).
+   * - `paidToDate`: per-basis sum of the full amounts of all started periods
+   *   (due at period start, no day shares).
+   * - `current`: annual/monthly/quarterly amounts per basis from the active
+   *   entry. A basis that is not recorded anywhere stays null (UI: dash).
    */
   async getSchedule(
     householdId: string,
@@ -662,54 +505,32 @@ export class CostTrackingService {
       throw new NotFoundException('Policy not found');
     }
 
-    if (entries.length === 0) {
-      return {
-        policyId,
-        asOf: now.toISOString(),
-        paidToDate: 0,
-        current: null,
-        periods: [],
-      };
-    }
-
     // Horizon: end of the calendar year following the current year.
     const horizonEnd = new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999);
-    const periods = this.iteratePeriods(policy, entries, now, horizonEnd);
-    const paidToDate = this.calculatePaidToDate(policy, entries, now);
-
-    // Non-null because we already returned above for entries.length === 0.
-    const active = this.selectActiveOrLatestEntry(entries, now)!;
-    const annualGross = this.annualize(active);
-    const annualNet = active?.netAmount != null
-      ? roundMoney(Number(active.netAmount) * FREQUENCY_PER_YEAR[active.frequency])
-      : null;
+    const schedule = computePolicySchedule(policy, entries, now, horizonEnd);
 
     return {
       policyId,
       asOf: now.toISOString(),
-      paidToDate,
-      current: {
-        annualGross,
-        annualNet,
-        perFrequency: this.derivePerFrequency(annualGross),
-        entryId: active.id,
-        frequency: active.frequency,
-        grossAmount: roundMoney(this.effectiveAmount(active)),
-        validFrom: active.validFrom,
-        validTo: active.validTo,
-      },
-      periods,
+      anchor: schedule.anchor,
+      frequency: schedule.frequency,
+      paidToDate: schedule.paidToDate,
+      current: schedule.current,
+      periods: schedule.periods,
+      perYear: schedule.perYear,
+      entryCount: entries.length,
     };
   }
 
   /**
-   * BugFix-08 (Q5): household cost overview.
-   * - Lowest level: per policy the paid amount (paidToDate) and the
-   *   projected monthly/annual amounts (active entry).
-   * - Totals: paidToDate, month, year across all policies.
+   * BugFix-08 (Q5) + BugFix-22: household cost overview.
+   * - Lowest level: per policy the paid amount and the projected
+   *   monthly/annual amounts - strictly per basis (gross/net, no
+   *   cross-basis fallback; a missing basis stays null).
+   * - Totals: paidToDate, month, year across all policies, per basis.
    * - `perYear`: historical costs per calendar year (sum of the full period
-   *   amounts of all started periods per year - no day shares) - data
-   *   basis for the historical graph.
+   *   amounts of all started periods per year - no day shares) per basis -
+   *   data basis for the historical graph.
    */
   async getHouseholdSummary(
     householdId: string,
@@ -740,81 +561,59 @@ export class CostTrackingService {
       name: string;
       type: string;
       frequency: PaymentFrequency | null;
-      paidToDate: number;
-      perMonth: number;
-      perYear: number;
+      paidToDate: BasisAmounts;
+      perMonth: BasisAmounts;
+      perYear: BasisAmounts;
       entryCount: number;
     }> = [];
 
-    let totalPaidCents = 0;
-    let totalPerMonthCents = 0;
-    let totalPerYearCents = 0;
-    const perYearMap = new Map<number, number>();
+    const paidToDateValues: BasisAmounts[] = [];
+    const perMonthValues: BasisAmounts[] = [];
+    const perYearValues: BasisAmounts[] = [];
+    // Historical calendar-year buckets per basis: every started period
+    // contributes its full amount to the year of its period start.
+    const perYearBuckets = new Map<number, BasisAmounts[]>();
 
     for (const policy of policies) {
       const entries = policy.costEntries;
+      const summary = summarizePolicyCosts(policy, entries, now);
+      const active = selectActiveOrLatestEntry(entries, now);
 
-      if (entries.length === 0) {
-        policyRows.push({
-          id: policy.id,
-          name: policy.insurerName,
-          type: policy.type,
-          frequency: null,
-          paidToDate: 0,
-          perMonth: 0,
-          perYear: 0,
-          entryCount: 0,
-        });
-        continue;
-      }
+      paidToDateValues.push(summary.paidToDate);
+      perMonthValues.push(summary.perMonth);
+      perYearValues.push(summary.perYear);
 
-      const paidToDate = this.calculatePaidToDate(policy, entries, now);
-      // Non-null because we already continued above for entries.length === 0.
-      const active = this.selectActiveOrLatestEntry(entries, now)!;
-      const annual = this.annualize(active);
-
-      totalPaidCents += toCents(paidToDate);
-      totalPerYearCents += toCents(annual);
-      totalPerMonthCents += toCents(roundMoney(annual / 12));
-
-      // Historical calendar-year buckets: every started period contributes
-      // its full amount to the year of its period start.
-      const { anchor, frequency, stepMonths } = this.resolveBilling(policy, entries, now);
-      let index = 0;
-      for (;;) {
-        const periodStart = addMonthsClamped(anchor, index * stepMonths);
-        if (periodStart.getTime() > now.getTime()) break;
-        const entry = this.entryForPeriod(entries, periodStart);
-        if (entry) {
-          const year = periodStart.getFullYear();
-          const amountCents = toCents(this.periodAmount(entry, frequency));
-          perYearMap.set(year, (perYearMap.get(year) ?? 0) + amountCents);
+      if (entries.length > 0) {
+        const schedule = computePolicySchedule(policy, entries, now, now);
+        for (const bucket of schedule.perYear) {
+          const values = perYearBuckets.get(bucket.year) ?? [];
+          values.push(bucket.amount);
+          perYearBuckets.set(bucket.year, values);
         }
-        index++;
       }
 
       policyRows.push({
         id: policy.id,
         name: policy.insurerName,
         type: policy.type,
-        frequency: active.frequency,
-        paidToDate: roundMoney(paidToDate),
-        perMonth: roundMoney(annual / 12),
-        perYear: roundMoney(annual),
+        frequency: active?.frequency ?? null,
+        paidToDate: summary.paidToDate,
+        perMonth: summary.perMonth,
+        perYear: summary.perYear,
         entryCount: entries.length,
       });
     }
 
-    const perYear = Array.from(perYearMap.entries())
-      .map(([year, cents]) => ({ year, amount: fromCents(cents) }))
+    const perYear = Array.from(perYearBuckets.entries())
+      .map(([year, values]) => ({ year, amount: sumBasisAmounts(values) }))
       .sort((a, b) => a.year - b.year);
 
     return {
       asOf: now.toISOString(),
       totals: {
-        paidToDate: fromCents(totalPaidCents),
-        perMonth: fromCents(totalPerMonthCents),
-        perYear: fromCents(totalPerYearCents),
+        paidToDate: sumBasisAmounts(paidToDateValues),
+        perMonth: sumBasisAmounts(perMonthValues),
+        perYear: sumBasisAmounts(perYearValues),
       },
       perYear,
       policyCount: policies.length,

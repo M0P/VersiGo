@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { GlobalRole } from '@prisma/client';
 import { AiAssistService } from './ai-assist.service';
-import { StartExtractionDto, SetDocumentExclusionDto } from './ai-assist.dto';
+import { StartExtractionDto, SetDocumentExclusionDto, SummarizeCoverageDto } from './ai-assist.dto';
 import { CurrentUser } from '../identity/current-user.decorator';
 import { HouseholdMembershipGuard } from '../identity/household-membership.guard';
 import { Roles } from '../identity/roles.decorator';
@@ -79,6 +79,9 @@ export class AiAssistController {
 
   /**
    * Creates a summary of the insurance coverage.
+   *
+   * AP-24 (§3.1): the body may restrict the summary to selected CONTRACT
+   * documents and may confirm that unreadable documents are left out.
    */
   @Post(':policyId/summarize')
   @Roles(GlobalRole.USER, GlobalRole.ADMIN)
@@ -86,12 +89,33 @@ export class AiAssistController {
     @Param('householdId') householdId: string,
     @Param('policyId') policyId: string,
     @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SummarizeCoverageDto,
   ) {
-    const result = await this.aiAssistService.summarize(householdId, user.id, policyId);
+    const result = await this.aiAssistService.summarize(householdId, user.id, policyId, {
+      documentIds: dto?.documentIds,
+      acceptPartial: dto?.acceptPartial,
+    });
     if (result === null) {
       throw new NotFoundException('AI summarization failed or AI is disabled');
     }
     return result;
+  }
+
+  /**
+   * AP-24 (§4.2): proposes a cost entry for one billing document.
+   *
+   * Returns a proposal only – the cost entry is created by the user through
+   * the regular cost endpoint, which also stores the document reference.
+   */
+  @Post(':policyId/documents/:documentId/cost-suggestion')
+  @Roles(GlobalRole.USER, GlobalRole.ADMIN)
+  async extractCostFromDocument(
+    @Param('householdId') householdId: string,
+    @Param('policyId') policyId: string,
+    @Param('documentId') documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.aiAssistService.extractCostSuggestion(householdId, user, policyId, documentId);
   }
 
   /**

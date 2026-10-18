@@ -116,10 +116,26 @@ describe('DocumentsController', () => {
     const controller = new DocumentsController(service as never);
     service.findAll.mockResolvedValue([{ id: docId }]);
 
-    const result = await controller.findAll(householdId, policyId, mockUser);
+    const result = await controller.findAll(householdId, policyId, mockUser, {});
 
     expect(result).toHaveLength(1);
-    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser, policyId);
+    expect(service.findAll).toHaveBeenCalledWith(householdId, mockUser, policyId, undefined);
+  });
+
+  // AP-24 (§4.1): the cost view filters the list by billing documents.
+  it('findAll forwards the documentClass filter', async () => {
+    const service = createMockService();
+    const controller = new DocumentsController(service as never);
+    service.findAll.mockResolvedValue([]);
+
+    await controller.findAll(householdId, policyId, mockUser, { documentClass: 'BILLING' });
+
+    expect(service.findAll).toHaveBeenCalledWith(
+      householdId,
+      mockUser,
+      policyId,
+      'BILLING',
+    );
   });
 
   it('findOne delegates to the service', async () => {

@@ -263,6 +263,7 @@ export class SystemConfigService {
       description: definition.description,
       validationHint: definition.validationHint ?? null,
       allowedValues: definition.allowedValues ? [...definition.allowedValues] : null,
+      presets: definition.presets ? [...definition.presets] : null,
       min: definition.min ?? null,
       max: definition.max ?? null,
       connectivityTestable: definition.connectivityTestable,
