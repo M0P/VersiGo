@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactElement, type FormEvent } from '
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icons';
-import { Input, FormField } from '@/components/ui/form-field';
+import { Input, Select, FormField } from '@/components/ui/form-field';
 import { Alert } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlineSpinner } from '@/components/ui/loading';
@@ -12,6 +12,16 @@ import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
 import { documentTypeIcon, documentTypeKind, documentTypeLabelKey } from '@/lib/document-type';
+import {
+  DEFAULT_DOCUMENT_SORT,
+  DOCUMENT_SORT_KEYS,
+  documentOriginIcon,
+  documentOriginKind,
+  documentOriginLabelKey,
+  documentSortLabelKey,
+  sortDocuments,
+  type DocumentSortKey,
+} from '@/lib/documents-view';
 import PaperlessTagSection from './paperless-tag-section';
 
 const API_BASE = getApiBaseUrl();
@@ -75,6 +85,36 @@ function DocumentTypeIcon({
   );
 }
 
+/**
+ * BugFix-22: origin of a Paperless assignment as a compact icon.
+ *
+ * The former text badges ("Automatisch über Tag", "Manuell verlinkt", …) took
+ * too much space in the list. The icon keeps the information: the accessible
+ * name is the localized label and the tooltip additionally explains – for an
+ * automatic assignment – why the document cannot be deleted individually.
+ */
+function DocumentOriginBadge({ doc }: { doc: Document }): ReactElement | null {
+  const { t } = useI18n();
+  const kind = documentOriginKind(doc);
+  if (!kind) return null;
+  const label = t(documentOriginLabelKey(kind));
+
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={kind === 'auto' ? t('policies.paperlessAutoManagedHint') : label}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        color: 'var(--versigo-text-muted)',
+      }}
+    >
+      <Icon name={documentOriginIcon(kind)} size={16} />
+    </span>
+  );
+}
+
 export default function DocumentsTab({
   policyId,
   insurerName,
@@ -95,6 +135,8 @@ export default function DocumentsTab({
   });
   const [file, setFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  // BugFix-22: sort order of the list (newest first by default).
+  const [sortKey, setSortKey] = useState<DocumentSortKey>(DEFAULT_DOCUMENT_SORT);
 
   // BugFix-07 (Q3): Paperless linking
   const [showPaperless, setShowPaperless] = useState(false);
@@ -354,14 +396,6 @@ export default function DocumentsTab({
 
   const isLinked = (doc: Document): boolean => doc.storageType === 'PAPERLESS_LINK';
 
-  // AP-22: origin label for a document (automatic / manual / both).
-  const originLabel = (doc: Document): string | null => {
-    if (doc.linkOriginTag && doc.linkOriginManual) return t('policies.paperlessOriginBoth');
-    if (doc.linkOriginTag) return t('policies.paperlessOriginAuto');
-    if (doc.linkOriginManual) return t('policies.paperlessOriginManual');
-    return null;
-  };
-
   const handleRetryTagging = async (id: string) => {
     const seq = requestSeq.current;
     setError(null);
@@ -516,6 +550,35 @@ export default function DocumentsTab({
 
         {error && <Alert variant="danger">{error}</Alert>}
 
+        {/* BugFix-22: sort by date or by name. */}
+        {!loading && documents.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 'var(--versigo-space-2)',
+              marginBottom: 'var(--versigo-space-3)',
+            }}
+          >
+            <label htmlFor="documents-sort" className="text-sm text-muted" style={{ whiteSpace: 'nowrap' }}>
+              {t('policies.documentsSort')}
+            </label>
+            <Select
+              id="documents-sort"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as DocumentSortKey)}
+              style={{ maxWidth: 240 }}
+            >
+              {DOCUMENT_SORT_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {t(documentSortLabelKey(key))}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: 'var(--versigo-space-8)' }}>
             <InlineSpinner />
@@ -526,38 +589,44 @@ export default function DocumentsTab({
           </EmptyState>
         ) : (
           <div style={{ display: 'grid', gap: 'var(--versigo-space-3)' }}>
-            {documents.map((doc) => (
-              <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--versigo-space-3)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--versigo-space-3)' }}>
+            {sortDocuments(documents, sortKey).map((doc) => (
+              <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--versigo-space-3)', padding: 'var(--versigo-space-3)', background: 'var(--versigo-surface)', borderRadius: 'var(--versigo-radius)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--versigo-space-3)', minWidth: 0, flex: 1 }}>
                   <DocumentTypeIcon mimeType={doc.mimeType} fileName={doc.fileName} />
-                  <div>
-                    <strong>{doc.fileName}</strong>
-                    {/* AP-22: origin + external tagging status */}
-                    {originLabel(doc) && (
-                      <span
-                        className="badge badge-neutral"
-                        style={{ marginLeft: 'var(--versigo-space-2)' }}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--versigo-space-2)', flexWrap: 'wrap' }}>
+                      <strong style={{ wordBreak: 'break-word' }}>{doc.fileName}</strong>
+                      {/* BugFix-22: the origin is an icon now – the former text
+                          badges ("Automatisch über Tag", …) took too much space.
+                          The Paperless tagging status stays a text badge because
+                          it needs to be read at a glance. */}
+                      <DocumentOriginBadge doc={doc} />
+                      {doc.taggingStatus === 'PENDING' && (
+                        <span className="badge badge-neutral">
+                          {t('policies.paperlessTagPendingBadge')}
+                        </span>
+                      )}
+                      {doc.taggingStatus === 'FAILED' && (
+                        <span className="badge badge-danger">
+                          {t('policies.paperlessTagFailedBadge')}
+                        </span>
+                      )}
+                    </div>
+                    {/* BugFix-22: the document date is important – it gets its
+                        own line in the normal font size instead of being
+                        appended to the small metadata line. */}
+                    {doc.documentDate && (
+                      <div
+                        style={{ marginTop: 'var(--versigo-space-1)', fontSize: 'var(--versigo-font-size-base)' }}
                       >
-                        {originLabel(doc)}
-                      </span>
-                    )}
-                    {doc.taggingStatus === 'PENDING' && (
-                      <span
-                        className="badge badge-neutral"
-                        style={{ marginLeft: 'var(--versigo-space-2)' }}
-                      >
-                        {t('policies.paperlessTagPendingBadge')}
-                      </span>
-                    )}
-                    {doc.taggingStatus === 'FAILED' && (
-                      <span
-                        className="badge badge-danger"
-                        style={{ marginLeft: 'var(--versigo-space-2)' }}
-                      >
-                        {t('policies.paperlessTagFailedBadge')}
-                      </span>
+                        {t('policies.documentDate')}:{' '}
+                        <strong>{new Date(doc.documentDate).toLocaleDateString()}</strong>
+                      </div>
                     )}
                     <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
+                      {/* BugFix-22: the Paperless deep link appears only once per
+                          row – as the target of the "In Paperless öffnen" button
+                          below. The full URL as text was too noisy. */}
                       {isLinked(doc) ? (
                         <>
                           {t('policies.paperlessLinkedDocument')}
@@ -569,23 +638,6 @@ export default function DocumentsTab({
                           {doc.category && ` · ${t('policies.documentCategory')}: ${doc.category}`}
                         </>
                       )}
-                      {doc.documentDate && ` · ${t('policies.documentDate')}: ${new Date(doc.documentDate).toLocaleDateString()}`}
-                      {/* BugFix-21: the URL of the document in Paperless.
-                          The upload timestamp is intentionally not shown. */}
-                      {isLinked(doc) && doc.deepLink && (
-                        <>
-                          {' · '}
-                          <a
-                            href={doc.deepLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={t('policies.paperlessOpenInPaperless')}
-                            style={{ wordBreak: 'break-all' }}
-                          >
-                            {doc.deepLink}
-                          </a>
-                        </>
-                      )}
                     </div>
                     {doc.taggingStatus === 'FAILED' && (
                       <div className="text-xs text-muted" style={{ marginTop: 'var(--versigo-space-1)' }}>
@@ -594,7 +646,7 @@ export default function DocumentsTab({
                     )}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: 'var(--versigo-space-2)', flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
                   {/* BugFix-07 (Q3): PAPERLESS_LINK documents have no
                       local file content – instead of preview/download the
                       Paperless deep link is offered.
@@ -624,12 +676,11 @@ export default function DocumentsTab({
                   )}
                   {/* AP-22: an exclusively automatic assignment is controlled by
                       the Paperless tag; offering "delete" here would be
-                      misleading because the next sync would restore it. */}
-                  {doc.linkOriginTag && !doc.linkOriginManual ? (
-                    <span className="badge badge-neutral" style={{ alignSelf: 'center' }}>
-                      {t('policies.paperlessAutoManagedHint')}
-                    </span>
-                  ) : (
+                      misleading because the next sync would restore it.
+                      BugFix-22: the explanation is the tooltip of the origin
+                      icon now (see DocumentOriginBadge) instead of a wide text
+                      badge in the action row. */}
+                  {!(doc.linkOriginTag && !doc.linkOriginManual) && (
                     <Button variant="danger" size="sm" onClick={() => handleDelete(doc.id)}>{t('policies.deleteDocument')}</Button>
                   )}
                 </div>

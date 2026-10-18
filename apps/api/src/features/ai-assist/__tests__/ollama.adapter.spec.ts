@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpService } from '@nestjs/axios';
 import type { SettingsResolverService } from '@versigo/foundation';
+import { AxiosError } from 'axios';
 import { OllamaAdapter } from '../ollama.adapter';
 import { of } from 'rxjs';
 
@@ -117,5 +118,42 @@ describe('OllamaAdapter', () => {
 
     const result = await adapter.healthCheck();
     expect(result).toBe(false);
+  });
+
+  // --- BugFix-22: detailed reasons ---
+
+  it('healthStatus reports connected for HTTP 200', async () => {
+    const settings = createMockSettings();
+    const adapter = new OllamaAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockReturnValue(of({ status: 200 }) as never);
+
+    expect(await adapter.healthStatus()).toEqual({ connected: true, reason: null });
+  });
+
+  it('healthStatus reports "http-error" on HTTP 500', async () => {
+    const settings = createMockSettings();
+    const adapter = new OllamaAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockReturnValue(of({ status: 500 }) as never);
+
+    expect(await adapter.healthStatus()).toEqual({
+      connected: false,
+      reason: 'http-error',
+    });
+  });
+
+  it('healthStatus reports "unreachable" on a connection error', async () => {
+    const settings = createMockSettings();
+    const adapter = new OllamaAdapter(httpService, settings);
+
+    vi.mocked(httpService.get).mockImplementation(() => {
+      throw new AxiosError('connect ECONNREFUSED', 'ECONNREFUSED');
+    });
+
+    expect(await adapter.healthStatus()).toEqual({
+      connected: false,
+      reason: 'unreachable',
+    });
   });
 });

@@ -357,7 +357,10 @@ model CoveredPerson {
   id           String   @id @default(uuid())
   policyId     String
   personName   String
-  relationType String
+  // BugFix-22: insured subjects are persons or objects (car, house, ...).
+  subjectType  CoveredSubjectType @default(PERSON)
+  // BugFix-22: the relation is optional (an object has no relation).
+  relationType String?
   birthDate    DateTime?
 
   policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
@@ -366,12 +369,23 @@ model CoveredPerson {
   @@map("covered_persons")
 }
 
+/**
+ * BugFix-22: kind of an insured subject. `PERSON` is the default so that all
+ * pre-existing rows remain valid without data migration.
+ */
+enum CoveredSubjectType {
+  PERSON
+  OBJECT
+}
+
 model PolicyCostEntry {
   id            String           @id @default(uuid())
   policyId      String
   validFrom     DateTime
   validTo       DateTime?
-  grossAmount   Decimal
+  // BugFix-22: at least one of gross/net is required; the amount basis of all
+  // calculations is "gross if set, otherwise net".
+  grossAmount   Decimal?
   netAmount     Decimal?
   frequency     PaymentFrequency
   bookingSource String?

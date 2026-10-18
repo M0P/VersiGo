@@ -191,6 +191,17 @@ export class CostTrackingService {
   }
 
   /**
+   * BugFix-22: amount basis of all cost calculations – the gross amount if it
+   * is set, otherwise the net amount. At least one of both always exists
+   * (enforced on create/update), so this never silently calculates with a
+   * missing amount.
+   */
+  private effectiveAmount(entry: CostEntryLike): number {
+    const amount = entry.grossAmount ?? entry.netAmount;
+    return Number(amount ?? 0);
+  }
+
+  /**
    * Due amount of a cost entry in a billing period of the step frequency
    * `stepFrequency`. If the entry's own frequency differs from the step
    * frequency (e.g. policy MONTHLY, entry QUARTERLY), the amount is prorated
@@ -201,9 +212,9 @@ export class CostTrackingService {
     const stepMonths = FREQUENCY_MONTHS[stepFrequency];
     const entryMonths = FREQUENCY_MONTHS[entry.frequency];
     if (stepMonths === entryMonths) {
-      return roundMoney(Number(entry.grossAmount));
+      return roundMoney(this.effectiveAmount(entry));
     }
-    return roundMoney(Number(entry.grossAmount) * (stepMonths / entryMonths));
+    return roundMoney(this.effectiveAmount(entry) * (stepMonths / entryMonths));
   }
 
   /**
@@ -277,7 +288,7 @@ export class CostTrackingService {
 
   /** Annual amount of an entry (period amount * periods/year). */
   private annualize(entry: CostEntryLike): number {
-    return roundMoney(Number(entry.grossAmount) * FREQUENCY_PER_YEAR[entry.frequency]);
+    return roundMoney(this.effectiveAmount(entry) * FREQUENCY_PER_YEAR[entry.frequency]);
   }
 
   /** Monthly/quarterly/annual amount derived from the annual amount. */
@@ -383,6 +394,11 @@ export class CostTrackingService {
   async create(householdId: string, userId: string, policyId: string, dto: CreateCostEntryDto) {
     await this.assertPolicyAccess(householdId, userId, policyId);
 
+    // BugFix-22: "Kostenerhöhung" – at least one of gross/net is required.
+    if (dto.grossAmount == null && dto.netAmount == null) {
+      throw new BadRequestException('At least one of grossAmount or netAmount is required');
+    }
+
     const validFrom = new Date(dto.validFrom);
     const validTo = dto.validTo ? new Date(dto.validTo) : null;
     if (validTo && validTo.getTime() <= validFrom.getTime()) {
@@ -476,6 +492,13 @@ export class CostTrackingService {
 
       if (!existing) {
         throw new NotFoundException('Cost entry not found');
+      }
+
+      // BugFix-22: an update must never leave the entry without any amount.
+      const nextGross = dto.grossAmount !== undefined ? dto.grossAmount : existing.grossAmount;
+      const nextNet = dto.netAmount !== undefined ? dto.netAmount : existing.netAmount;
+      if (nextGross == null && nextNet == null) {
+        throw new BadRequestException('At least one of grossAmount or netAmount is required');
       }
 
       const finalValidFrom = dto.validFrom ? new Date(dto.validFrom) : existing.validFrom;
@@ -589,7 +612,10 @@ export class CostTrackingService {
           diffJson: {
             policyId,
             entryId,
-            grossAmount: Number(existing.grossAmount),
+            // BugFix-22: a net-only entry has no gross amount – keep `null`
+            // instead of `Number(null) === 0` in the audit record.
+            grossAmount: existing.grossAmount == null ? null : Number(existing.grossAmount),
+            netAmount: existing.netAmount == null ? null : Number(existing.netAmount),
             frequency: existing.frequency,
           },
         },
@@ -668,7 +694,7 @@ export class CostTrackingService {
         perFrequency: this.derivePerFrequency(annualGross),
         entryId: active.id,
         frequency: active.frequency,
-        grossAmount: roundMoney(Number(active.grossAmount)),
+        grossAmount: roundMoney(this.effectiveAmount(active)),
         validFrom: active.validFrom,
         validTo: active.validTo,
       },

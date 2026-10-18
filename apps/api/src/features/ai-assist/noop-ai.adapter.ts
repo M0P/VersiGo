@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/foundation';
+import type {
+  IAIAdapter,
+  AiExtractResult,
+  AiSummarizeResult,
+  AiHealthStatus,
+} from '@versigo/foundation';
 
 /**
  * NoOp-Implementierung des AI-Adapters.
@@ -31,5 +36,14 @@ export class NoOpAIAdapter implements IAIAdapter {
 
   async healthCheck(): Promise<boolean> {
     return false;
+  }
+
+  /**
+   * BugFix-22: the reason is `not-configured` – either AI is disabled or
+   * the configured provider key does not exist. `AiAssistService` maps the
+   * disabled case to `disabled` before it reaches the UI.
+   */
+  async healthStatus(): Promise<AiHealthStatus> {
+    return { connected: false, reason: 'not-configured' };
   }
 }

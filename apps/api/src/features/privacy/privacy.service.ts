@@ -49,11 +49,17 @@ export interface PrivacyExport {
     source: string;
     createdAt: string;
     updatedAt: string;
-    coveredPersons: { personName: string; relationType: string; birthDate: string | null }[];
+    coveredPersons: {
+      personName: string;
+      subjectType: string;
+      relationType: string | null;
+      birthDate: string | null;
+    }[];
     costEntries: {
       validFrom: string;
       validTo: string | null;
-      grossAmount: string;
+      // BugFix-22: at least one of gross/net is set; the missing one is null.
+      grossAmount: string | null;
       netAmount: string | null;
       frequency: string;
       bookingSource: string | null;
@@ -223,13 +229,15 @@ export class PrivacyService {
         updatedAt: policy.updatedAt.toISOString(),
         coveredPersons: policy.coveredPersons.map((cp) => ({
           personName: cp.personName,
+          subjectType: cp.subjectType,
           relationType: cp.relationType,
           birthDate: cp.birthDate?.toISOString() ?? null,
         })),
         costEntries: policy.costEntries.map((ce) => ({
           validFrom: ce.validFrom.toISOString(),
           validTo: ce.validTo?.toISOString() ?? null,
-          grossAmount: ce.grossAmount.toString(),
+          // BugFix-22: a net-only entry has no gross amount.
+          grossAmount: ce.grossAmount?.toString() ?? null,
           netAmount: ce.netAmount?.toString() ?? null,
           frequency: ce.frequency,
           bookingSource: ce.bookingSource,

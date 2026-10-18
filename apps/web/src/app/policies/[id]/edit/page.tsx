@@ -13,7 +13,6 @@ import { NAV_SECTIONS } from '@/components/ui/nav-config';
 import { useI18n } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
-import { normalizePortalUrl } from '@/lib/portal-url';
 
 const API_BASE = getApiBaseUrl();
 
@@ -34,7 +33,6 @@ export default function EditPolicyPage(): ReactElement {
   const [form, setForm] = useState({
     type: 'HAFTPFLICHT',
     insurerName: '',
-    insurerPortalUrl: '',
     contractNumber: '',
     tariffName: '',
     status: 'ACTIVE',
@@ -64,7 +62,6 @@ export default function EditPolicyPage(): ReactElement {
           setForm({
             type: data.type,
             insurerName: data.insurerName,
-            insurerPortalUrl: data.insurerPortalUrl ?? '',
             contractNumber: data.contractNumber,
             tariffName: data.tariffName ?? '',
             status: data.status,
@@ -105,7 +102,6 @@ export default function EditPolicyPage(): ReactElement {
       const payload = {
         type: form.type,
         insurerName: form.insurerName,
-        insurerPortalUrl: form.insurerPortalUrl ? normalizePortalUrl(form.insurerPortalUrl) : undefined,
         contractNumber: form.contractNumber,
         tariffName: form.tariffName || undefined,
         status: form.status,
@@ -198,15 +194,6 @@ export default function EditPolicyPage(): ReactElement {
                 onChange={(e) => setForm({ ...form, insurerName: e.target.value })}
                 required
                 placeholder={t('policies.insurerPlaceholder')}
-              />
-            </FormField>
-
-            <FormField label={t('policies.insurerPortalUrl')}>
-              <Input
-                type="url"
-                value={form.insurerPortalUrl}
-                onChange={(e) => setForm({ ...form, insurerPortalUrl: e.target.value })}
-                placeholder={t('policies.insurerPortalUrlPlaceholder')}
               />
             </FormField>
 

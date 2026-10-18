@@ -5,6 +5,15 @@ Zuständig für OIDC-Login, Session, Rollen, Household-Mitgliedschaften und Frei
 
 ## 2. Policy Registry
 Kernfeature zur Verwaltung von Versicherungsverträgen, Versicherern, versicherten Personen und Portal-Links.
+- **BugFix-22:** Versicherte Einträge sind nicht mehr auf Personen beschränkt:
+  je Eintrag wird die Art `PERSON` oder `OBJECT` gewählt (z. B. Kfz, Haus), die
+  Beziehung ist optional (leerer Wert löscht sie), und das Geburtsdatum wird
+  nur für Personen geführt (beim Wechsel auf Objekt auf `null` gesetzt).
+- **BugFix-22:** Das Portal-URL-Feld ist aus den Stammdatenformularen
+  (Anlegen/Bearbeiten) und der Detailansicht entfernt. Die Portal-Link-Maske
+  ist der einzige Ort für Portal-URLs; ein bestehender Altwert
+  (`insurerPortalUrl`) wird dort als Vorbelegung eines neuen Portal-Links
+  angeboten und bleibt unverändert erhalten.
 
 ## 3. Documents
 Interne Dokumentenablage, Metadaten, Versionierung und Vorschau. Optionaler Adapter zu Paperless-ngx.
@@ -33,14 +42,43 @@ Interne Dokumentenablage, Metadaten, Versionierung und Vorschau. Optionaler Adap
   manuell über „Jetzt aktualisieren“) bleibt bestehen und speichert jetzt
   zusätzlich Titel, Dokumentdatum und MIME-Typ; manuell verknüpfte Dokumente
   werden dabei nur lückenhaft ergänzt, nicht überschrieben. Die Dokumentliste
+  werden bei Änderung/Entfernung des Tags verworfen (Stale-Schutz); ein
+  Teilfehler entfernt nie bestehende Zuordnungen. Weder Tag noch Dokumente
+  werden in Paperless gelöscht oder verändert, außer dem additiven Hinzufügen
+  des Tags zu manuell verknüpften Dokumenten.
+  Die interaktive Tag-Verwaltung liegt im Reiter **Dokumente** der Versicherung
+  (`/policies/[id]`). Tag-Suche und Neuanlage melden ihre Fehlerursache
+  explizit (`PAPERLESS_NOT_CONFIGURED`, `PAPERLESS_AUTH_FAILED`,
+  `PAPERLESS_UNREACHABLE`, `PAPERLESS_TAG_SEARCH_FAILED`,
+  `PAPERLESS_TAG_CREATE_FAILED`) statt eine leere Trefferliste oder einen
+  generischen Fehler ohne Ursache zu zeigen.
+- **BugFix-21:** Die Dokumentliste lädt Paperless-Dokumente nicht mehr live –
+  der Deep-Link wird lokal aus der konfigurierten `PAPERLESS_URL` berechnet.
+  Der gesteuerte Abgleich (periodisch über `PAPERLESS_TAG_SYNC_INTERVAL_MS`,
+  manuell über „Jetzt aktualisieren“) bleibt bestehen und speichert jetzt
+  zusätzlich Titel, Dokumentdatum und MIME-Typ; manuell verknüpfte Dokumente
+  werden dabei nur lückenhaft ergänzt, nicht überschrieben. Die Dokumentliste
   zeigt Dokumenttyp (Symbol), Dokumentdatum und die Paperless-URL, nicht mehr
   den Upload-Zeitstempel, und benennt „Paperless-Dokument“ nur noch einmal je
   Zeile.
+- **BugFix-22:** Kompaktere, sortierbare Dokumentliste. Die Herkunft
+  (`auto`/`manuell`/`beides`) wird als Symbol mit zugänglichem Namen und
+  Tooltip gezeigt (die „automatische Zuordnung“-Breite ist damit weg, der
+  Hinweis bleibt als Tooltip erhalten), das Dokumentdatum steht in eigener
+  Zeile in Grundschriftgröße, und die Paperless-URL erscheint nur noch als
+  Ziel des Schaltflächen-Links, nicht mehr als sichtbarer Text. Die Liste ist
+  per Auswahl umsortierbar: Datum absteigend (Standard), Datum aufsteigend,
+  Name A–Z, Name Z–A; Dokumente ohne Datum stehen dabei immer am Ende und
+  behalten untereinander die Ursprungsreihenfolge.
 
 ## 4. Cost Tracking
 Pflege von Beiträgen, Zahlintervallen, Historien und Jahresauswertungen.
-
-## 5. AI Assist
+- **BugFix-22:** Brutto und Netto sind beide optional – es genügt **einer** der
+  beiden Beträge (Anlegen und Bearbeiten). Basis aller Kostenkennzahlen ist
+  Brutto, ersatzweise Netto („effektiver Betrag“); ein fehlender Betrag wird in
+  der Liste als „-“ dargestellt, die Betragsfelder sind als optional
+  beschriftet. Ein nicht-numerischer oder negativer Wert wird mit eigener
+  Meldung abgewiesen; ein vollständig leerer Kosteneintrag ebenso.
 Optionales Feature für Extraktion und Zusammenfassungen über Provider-Adapter.
 
 ## 6. Portal Connectors

@@ -15,8 +15,9 @@ import {
   getUiConfigurableKeys,
   validateSettingValue,
 } from '@versigo/foundation';
-import type { SettingDefinition } from '@versigo/foundation';
+import type { SettingDefinition, AiHealthReason } from '@versigo/foundation';
 import { SettingsStoreService } from '../admin-settings/settings-store.service';
+import { AiAssistService } from '../ai-assist/ai-assist.service';
 import type { AuthenticatedUser } from '../identity/auth.service';
 import {
   SystemConfigEntryDto,
@@ -27,6 +28,32 @@ import {
   UnsafeEndpointError,
 } from '../../common/connectivity/connectivity-guard';
 import { testEndpoint } from '../../common/connectivity/connectivity-test';
+
+/**
+ * Testable AI keys whose HTTP result is cross-checked against the runtime
+ * adapter (BugFix-22).
+ */
+const AI_TESTABLE_KEYS = new Set([
+  'AI_OLLAMA_BASE_URL',
+  'AI_OPENAI_COMPAT_BASE_URL',
+  'AI_OPENAI_COMPAT_API_KEY',
+]);
+
+/**
+ * Secret-free, transliterated hints for the runtime verdict (BugFix-22).
+ * These strings go straight into the admin UI.
+ */
+const AI_HEALTH_REASON_MESSAGES: Record<AiHealthReason, string> = {
+  disabled: 'AI ist deaktiviert (AI_ENABLED=false).',
+  'not-configured':
+    'kein KI-Provider konfiguriert – AI_PROVIDER und die Endpunkt-Einstellungen pruefen.',
+  unauthorized:
+    'der Provider hat den Zugriff abgelehnt (HTTP 401/403) – API-Schluessel pruefen.',
+  timeout: 'der Provider hat nicht rechtzeitig geantwortet.',
+  unreachable:
+    'der Provider ist nicht erreichbar – AI_PROVIDER zeigt ggf. noch auf einen anderen Anbieter.',
+  'http-error': 'der Provider hat mit einem Fehlerstatus geantwortet.',
+};
 
 /**
  * Central system configuration (AP-17).
@@ -40,7 +67,10 @@ import { testEndpoint } from '../../common/connectivity/connectivity-test';
  *   logged or stored in audits.
  * - Every change/reset is audited revision-safe (without values).
  * - Connectivity tests run only for keys marked as testable, with a
- *   timeout and without disclosing secret values.
+ *   timeout and without disclosing secret values. AI keys are additionally
+ *   cross-checked against the runtime adapter, so a reachable endpoint is
+ *   never reported as "OK" while the AI features stay unavailable
+ *   (BugFix-22).
  */
 @Injectable()
 export class SystemConfigService {
@@ -50,6 +80,7 @@ export class SystemConfigService {
     private readonly db: DatabaseService,
     private readonly resolver: SettingsResolverService,
     private readonly settingsStore: SettingsStoreService,
+    private readonly aiAssist: AiAssistService,
   ) {}
 
   /** Complete catalog view, groupable by category, for the admin UI. */
@@ -175,6 +206,18 @@ export class SystemConfigService {
       // runs without the response content being checked.
       result.success = tested.success;
       result.message = tested.message;
+
+      // BugFix-22: a green HTTP test alone is misleading for AI keys –
+      // the endpoint can answer 200 while the runtime adapter still fails
+      // (AI disabled, another AI_PROVIDER active, missing base URL, wrong
+      // credentials). The verdict of the real runtime adapter is therefore
+      // appended and downgrades the result to failed when AI would not
+      // work right now.
+      const verdict = await this.aiRuntimeVerdict(definition.key);
+      if (verdict) {
+        result.message = `${result.message} | ${verdict.message}`;
+        if (!verdict.ok) result.success = false;
+      }
     } catch (error: unknown) {
       if (error instanceof UnsafeEndpointError) {
         // M5: instead of a confusing rejection, give a clear reason +
@@ -341,6 +384,44 @@ export class SystemConfigService {
       }
       default:
         return { url: '' };
+    }
+  }
+
+  /**
+   * BugFix-22: cross-checks an AI connectivity test against the runtime
+   * adapter. A reachable endpoint does not prove that the AI features work
+   * (AI may be disabled, another AI_PROVIDER may be effective, credentials
+   * may be wrong), so the admin must see the runtime verdict next to the
+   * HTTP result.
+   *
+   * Returns `null` for non-AI keys – nothing to cross-check there. The
+   * reason codes are translated here so that no URL, hostname, credential
+   * or response body leaves the API.
+   */
+  private async aiRuntimeVerdict(
+    key: string,
+  ): Promise<{ ok: boolean; message: string } | null> {
+    if (!AI_TESTABLE_KEYS.has(key)) return null;
+
+    try {
+      const status = await this.aiAssist.healthCheck();
+      if (status.connected) {
+        return { ok: true, message: `Lauftest: Provider '${status.provider}' erreichbar.` };
+      }
+
+      const detail = AI_HEALTH_REASON_MESSAGES[status.reason ?? 'unreachable'];
+      return {
+        ok: false,
+        message: `Lauftest: KI-Funktionen stehen derzeit nicht bereit (Provider '${status.provider}') – ${detail}`,
+      };
+    } catch (error) {
+      this.logger.warn(`AI runtime verdict failed: ${(error as Error).message}`);
+      return {
+        ok: false,
+        message:
+          'Lauftest: Der KI-Status konnte nicht ermittelt werden ' +
+          '(interner Fehler).',
+      };
     }
   }
 
