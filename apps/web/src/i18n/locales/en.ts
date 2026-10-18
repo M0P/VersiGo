@@ -371,6 +371,9 @@ export const en = {
       UNFALL: 'Accident',
       LEBEN: 'Life',
       BERUFSUNFAEHIGKEIT: 'Disability',
+      RENTENVERSICHERUNG: 'Pension',
+      KRANKENVERSICHERUNG: 'Health',
+      KRANKENVERSICHERUNG_AUSLAND: 'Health (abroad)',
       SONSTIGE: 'Other',
     },
     statuses: {

@@ -368,6 +368,9 @@ export const de = {
       UNFALL: 'Unfall',
       LEBEN: 'Leben',
       BERUFSUNFAEHIGKEIT: 'Berufsunfähigkeit',
+      RENTENVERSICHERUNG: 'Rentenversicherung',
+      KRANKENVERSICHERUNG: 'Krankenversicherung',
+      KRANKENVERSICHERUNG_AUSLAND: 'Krankenversicherung (Ausland)',
       SONSTIGE: 'Sonstige',
     },
     statuses: {
