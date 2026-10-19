@@ -65,6 +65,15 @@ function createMockQueue() {
   };
 }
 
+/**
+ * AP-25: the service reads the OCR text of `PAPERLESS_LINK` documents from
+ * Paperless. A null answer keeps the metadata-only behaviour for documents
+ * without retrievable text.
+ */
+function createMockPaperless() {
+  return { getDocumentContent: vi.fn().mockResolvedValue(null) };
+}
+
 function createMockAuthService() {
   return {
     assertPolicyReadAccess: vi.fn().mockResolvedValue(undefined),
@@ -100,6 +109,7 @@ describe('AiAssistService', () => {
       mockSettings as never,
       mockAuthService as never,
       mockQueue as never,
+      createMockPaperless() as never,
     );
   });
 
@@ -163,6 +173,7 @@ describe('AiAssistService', () => {
         mockSettings as never,
         createMockAuthService() as never,
         mockQueue as never,
+        createMockPaperless() as never,
       );
 
       await expect(
@@ -230,6 +241,52 @@ describe('AiAssistService', () => {
       expect(result).toBeNull(); // NoOp adapter returns null
     });
 
+    /**
+     * AP-25: the summary must be able to describe what is insured. Before
+     * this the adapter only ever received `Datei: <name> (<mime>)` – the model
+     * had no content to summarize.
+     */
+    it('passes the Paperless OCR text of linked documents to the adapter', async () => {
+      const summarizeCoverage = vi.fn().mockResolvedValue(null);
+      const mockAdapter = {
+        providerKey: 'test-provider',
+        summarizeCoverage,
+        extractContractFacts: vi.fn(),
+        healthCheck: vi.fn(),
+      };
+      const paperless = {
+        getDocumentContent: vi.fn().mockResolvedValue('Deckungssumme 10.000.000 EUR'),
+      };
+      const svc = new AiAssistService(
+        mockDb as never,
+        { getAdapter: vi.fn().mockResolvedValue(mockAdapter) } as never,
+        createMockSettings(true) as never,
+        createMockAuthService() as never,
+        createMockQueue() as never,
+        paperless as never,
+      );
+
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findMany.mockResolvedValue([
+        {
+          id: 'doc-1',
+          fileName: 'Police.pdf',
+          mimeType: 'application/pdf',
+          aiProcessingExcluded: false,
+          storageType: 'PAPERLESS_LINK',
+          storageRef: '42',
+        },
+      ]);
+
+      await svc.summarize(householdId, userId, policyId);
+
+      expect(paperless.getDocumentContent).toHaveBeenCalledWith(42);
+      const contents = summarizeCoverage.mock.calls[0][0] as string[];
+      expect(contents[0]).toContain('Deckungssumme 10.000.000 EUR');
+      expect(contents[0]).toContain('Police.pdf');
+    });
+
     it('throws ForbiddenException when AI is disabled', async () => {
       const mockSettings = createMockSettings(false);
       const mockRegistry = createMockProviderRegistry();
@@ -241,6 +298,7 @@ describe('AiAssistService', () => {
         mockSettings as never,
         createMockAuthService() as never,
         mockQueue as never,
+        createMockPaperless() as never,
       );
 
       await expect(
@@ -285,6 +343,7 @@ describe('AiAssistService', () => {
         mockSettings as never,
         createMockAuthService() as never,
         mockQueue as never,
+        createMockPaperless() as never,
       );
 
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
@@ -337,6 +396,7 @@ describe('AiAssistService', () => {
         createMockSettings(true) as never,
         createMockAuthService() as never,
         createMockQueue() as never,
+        createMockPaperless() as never,
       );
 
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
@@ -474,6 +534,7 @@ describe('AiAssistService', () => {
         mockSettings as never,
         createMockAuthService() as never,
         mockQueue as never,
+        createMockPaperless() as never,
       );
 
       const result = await disabledService.healthCheck();
@@ -521,6 +582,7 @@ describe('AiAssistService', () => {
         createMockSettings(true) as never,
         createMockAuthService() as never,
         createMockQueue() as never,
+        createMockPaperless() as never,
       );
 
       const result = await enabledService.healthCheck();
@@ -546,6 +608,7 @@ describe('AiAssistService', () => {
         createMockSettings(true) as never,
         createMockAuthService() as never,
         createMockQueue() as never,
+        createMockPaperless() as never,
       );
 
       const result = await enabledService.healthCheck();

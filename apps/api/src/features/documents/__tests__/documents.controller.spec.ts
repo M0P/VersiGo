@@ -253,4 +253,61 @@ describe('DocumentsController', () => {
       controller.download(householdId, policyId, docId, mockUser, res),
     ).rejects.toThrow('ENOENT');
   });
+
+  // --- Missing file on disk (database row exists, storage entry gone) ---
+
+  it('streamFile reports a missing file as a clean 404 instead of a 500', async () => {
+    const service = createMockService();
+    const controller = new DocumentsController(service as never);
+    const fsMock = await import('fs');
+    const enoent = Object.assign(new Error("ENOENT: no such file or directory, stat '/data/uploads/h/doc/doc'"), {
+      code: 'ENOENT',
+      errno: -2,
+      syscall: 'stat',
+      path: '/data/uploads/h/doc/doc',
+    });
+    (fsMock.promises.stat as ReturnType<typeof vi.fn>).mockRejectedValueOnce(enoent);
+
+    service.getDocumentAndPath.mockResolvedValue({
+      document: { id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' },
+      filePath: '/data/uploads/h/doc/doc',
+    });
+    const res = createMockRes();
+
+    const error = await controller
+      .preview(householdId, policyId, docId, mockUser, res)
+      .then(() => null)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundException);
+    const body = (error as NotFoundException).getResponse() as Record<string, unknown>;
+    expect(body).toMatchObject({ code: 'DOCUMENT_FILE_MISSING' });
+  });
+
+  it('streamFile never leaks the storage path of a missing file', async () => {
+    const service = createMockService();
+    const controller = new DocumentsController(service as never);
+    const fsMock = await import('fs');
+    const enoent = Object.assign(new Error("ENOENT: no such file or directory, stat '/data/uploads/h/doc/doc'"), {
+      code: 'ENOENT',
+      path: '/data/uploads/h/doc/doc',
+    });
+    (fsMock.promises.stat as ReturnType<typeof vi.fn>).mockRejectedValueOnce(enoent);
+
+    service.getDocumentAndPath.mockResolvedValue({
+      document: { id: docId, fileName: 'test.pdf', mimeType: 'application/pdf' },
+      filePath: '/data/uploads/h/doc/doc',
+    });
+    const res = createMockRes();
+
+    const error = await controller
+      .download(householdId, policyId, docId, mockUser, res)
+      .then(() => null)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundException);
+    // The raw ENOENT message carries the absolute server path – it must not
+    // reach the client.
+    expect(JSON.stringify((error as NotFoundException).getResponse())).not.toContain('/data/uploads');
+  });
 });

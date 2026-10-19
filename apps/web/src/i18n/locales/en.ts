@@ -525,6 +525,8 @@ export const en = {
     showPreview: 'Preview',
     hidePreview: 'Close preview',
     documentPreviewTitle: 'Document preview',
+    previewInPaperlessOnly:
+      'This document is stored in Paperless-ngx and has no local file. The preview is linked in the "Documents" tab.',
     sidebarShow: 'Show documents',
     sidebarHide: 'Hide documents',
     originLocal: 'uploaded locally',
@@ -715,6 +717,11 @@ export const en = {
     oidcUnlinkSuccess: 'The OIDC link has been removed.',
     // BugFix-16: password change (POST /auth/change-password)
     pwTitle: 'Change password',
+    aiConsentTitle: 'AI data transfer',
+    aiConsentBody:
+      'Running an AI action sends the contents of the selected documents to the configured AI provider. The consent given here applies centrally to all of your AI actions; without it the warning is shown at every place.',
+    aiConsentLabel:
+      'I agree that document contents are transmitted to the AI provider for the respective AI task.',
     pwBody:
       'Set a new password for your account. You need your current password to confirm the change. The password must be at least 12 characters long.',
     pwCurrent: 'Current password',

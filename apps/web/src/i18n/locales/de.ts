@@ -520,6 +520,8 @@ export const de = {
     showPreview: 'Vorschau',
     hidePreview: 'Vorschau schliessen',
     documentPreviewTitle: 'Dokumentvorschau',
+    previewInPaperlessOnly:
+      'Dieses Dokument liegt in Paperless-ngx und hat keine lokale Datei. Es kann im Reiter «Dokumente» geöffnet werden.',
     sidebarShow: 'Dokumente anzeigen',
     sidebarHide: 'Dokumente ausblenden',
     originLocal: 'lokal hochgeladen',
@@ -717,6 +719,11 @@ export const de = {
     oidcUnlinkSuccess: 'Die OIDC-Verknüpfung wurde entfernt.',
     // BugFix-16: Passwort ändern (POST /auth/change-password)
     pwTitle: 'Passwort ändern',
+    aiConsentTitle: 'KI-Datenübermittlung',
+    aiConsentBody:
+      'Beim Auslösen einer KI-Funktion werden die Inhalte der ausgewählten Dokumente an den konfigurierten KI-Anbieter übermittelt. Die hier erteilte Zustimmung gilt zentral für alle Ihre KI-Aktionen; ohne sie wird die Warnung an jeder Stelle angezeigt.',
+    aiConsentLabel:
+      'Ich stimme zu, dass Dokumentinhalte zur Beantwortung der jeweiligen KI-Aufgabe an den KI-Anbieter übermittelt werden.',
     pwBody:
       'Legen Sie ein neues Passwort für Ihr Konto fest. Zur Bestätigung benötigen Sie Ihr aktuelles Passwort. Das Passwort muss mindestens 12 Zeichen lang sein.',
     pwCurrent: 'Aktuelles Passwort',

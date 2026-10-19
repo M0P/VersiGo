@@ -1161,6 +1161,15 @@
     margin-top: var(--versigo-space-2);
   }
 
+  /* AP-25: replaces the preview button for a document that only exists in
+     Paperless-ngx and therefore has nothing local to preview. The hint takes
+     a full row of the wrapping action flexbox so the buttons stay reachable. */
+  .costs-document-hint {
+    flex: 1 1 100%;
+    font-size: var(--versigo-font-size-xs);
+    color: var(--versigo-text-muted);
+  }
+
   .costs-preview-frame {
     display: block;
     width: 100%;

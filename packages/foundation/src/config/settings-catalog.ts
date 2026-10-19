@@ -68,7 +68,7 @@ export interface SettingDefinition {
   permission: SettingsPermission;
 }
 
-export const SETTINGS_CATALOG_VERSION = 2;
+export const SETTINGS_CATALOG_VERSION = 3;
 
 /**
  * Complete configuration catalog. Sorted by group, then key.
@@ -184,6 +184,23 @@ export const SETTINGS_CATALOG: readonly SettingDefinition[] = [
     min: 0,
     max: 10,
     validationHint: 'Zwischen 0 und 10.',
+    connectivityTestable: false,
+    permission: 'ADMIN',
+  },
+  {
+    key: 'AI_MAX_INPUT_TOKENS',
+    envVar: 'AI_MAX_INPUT_TOKENS',
+    category: 'runtime',
+    type: 'number',
+    group: 'KI-Assistent',
+    description:
+      'Obergrenze der Eingabe-Laenge pro KI-Aufruf. Naeherung: ca. 4 Zeichen je ' +
+      'Token fuer lateinische Schrift; andere Schriftsysteme brauchen mehr Token ' +
+      'je Zeichen. 0 = unbegrenzt.',
+    defaultValue: 4096,
+    min: 0,
+    max: 1_000_000,
+    validationHint: '0 bis 1.000.000; 0 laesst das Modell entscheiden.',
     connectivityTestable: false,
     permission: 'ADMIN',
   },

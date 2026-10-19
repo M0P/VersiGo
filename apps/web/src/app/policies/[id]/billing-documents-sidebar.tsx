@@ -9,6 +9,7 @@ import { InlineSpinner } from '@/components/ui/loading';
 import { useI18n, formatDateDmy } from '@/i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import { useAiDataTransferConsent } from '@/hooks/use-ai-data-transfer-consent';
 import { documentTypeIcon, documentTypeKind, documentTypeLabelKey } from '@/lib/document-type';
 import { documentOriginIcon, documentOriginKind, documentOriginLabelKey } from '@/lib/documents-view';
 import {
@@ -17,6 +18,15 @@ import {
 } from '@/lib/cost-suggestion';
 
 const API_BASE = getApiBaseUrl();
+
+/**
+ * AP-25: a PAPERLESS_LINK document has no local file, so the embedded
+ * preview (which streams the stored file) can never work for it. The
+ * documents tab offers the Paperless deep link for those documents.
+ */
+function isLinkedDocument(doc: BillingDocument): boolean {
+  return doc.storageType === 'PAPERLESS_LINK';
+}
 
 /** AP-24 (§4.1): a BILLING document as delivered by the costs endpoint. */
 type BillingDocument = {
@@ -94,7 +104,15 @@ export default function BillingDocumentsSidebar({
   const [search, setSearch] = useState('');
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [aiCapable, setAiCapable] = useState(false);
+  // AP-25: the central consent given in the profile (`/settings`) suppresses
+  // the data-transfer notice. The checkbox of this action stays per action –
+  // confirming here never silently becomes a permanent consent.
+  const { acknowledged: storedTransferConsent } = useAiDataTransferConsent();
   const [transferAcknowledged, setTransferAcknowledged] = useState(false);
+
+  useEffect(() => {
+    if (storedTransferConsent) setTransferAcknowledged(true);
+  }, [storedTransferConsent]);
   const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -260,7 +278,9 @@ export default function BillingDocumentsSidebar({
 
               {aiCapable && (
                 <div style={{ margin: 'var(--versigo-space-3) 0' }}>
-                  <Alert variant="info">{t('ai.dataTransferNotice')}</Alert>
+                  {!storedTransferConsent && (
+                    <Alert variant="info">{t('ai.dataTransferNotice')}</Alert>
+                  )}
                   <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginTop: '0.5rem' }}>
                     <input
                       type="checkbox"
@@ -306,15 +326,25 @@ export default function BillingDocumentsSidebar({
                         </div>
 
                         <div className="costs-document-actions">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            aria-expanded={previewId === doc.id}
-                            onClick={() => setPreviewId(previewId === doc.id ? null : doc.id)}
-                          >
-                            {previewId === doc.id ? t('costs.hidePreview') : t('costs.showPreview')}
-                          </Button>
+                          {/* AP-25: a PAPERLESS_LINK document has no local
+                              file, so the embedded preview cannot work. The
+                              explicit note replaces a broken frame; the
+                              documents tab offers the deep link. */}
+                          {isLinkedDocument(doc) ? (
+                            <span className="costs-document-hint">
+                              {t('costs.previewInPaperlessOnly')}
+                            </span>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              aria-expanded={previewId === doc.id}
+                              onClick={() => setPreviewId(previewId === doc.id ? null : doc.id)}
+                            >
+                              {previewId === doc.id ? t('costs.hidePreview') : t('costs.showPreview')}
+                            </Button>
+                          )}
                           {aiCapable && (
                             <Button
                               type="button"
@@ -327,7 +357,7 @@ export default function BillingDocumentsSidebar({
                           )}
                         </div>
 
-                        {previewId === doc.id && (
+                        {previewId === doc.id && !isLinkedDocument(doc) && (
                           <iframe
                             className="costs-preview-frame"
                             title={`${t('costs.documentPreviewTitle')}: ${doc.fileName}`}

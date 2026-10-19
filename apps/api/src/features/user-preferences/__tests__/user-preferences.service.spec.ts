@@ -138,6 +138,19 @@ describe('UserPreferencesService', () => {
         service.setPreference('user-1', 'theme', 'blue'),
       ).rejects.toThrow(BadRequestException);
     });
+
+    // AP-25: the AI data-transfer consent is a boolean preference, so the
+    // central "accept once" option is stored per user instead of per view.
+    it('should accept the AI data-transfer consent as a boolean', async () => {
+      const consent = await service.setPreference('user-1', 'ai:dataTransferConsent', 'true');
+      expect(consent.value).toBe('true');
+    });
+
+    it('should reject a non-boolean AI data-transfer consent', async () => {
+      await expect(
+        service.setPreference('user-1', 'ai:dataTransferConsent', 'yes'),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('listPreferences', () => {

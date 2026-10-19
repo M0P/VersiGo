@@ -145,6 +145,15 @@ export interface IPaperlessAdapter {
   getDocumentMetadata(paperlessId: number): Promise<PaperlessDocumentMetadata | null>;
 
   /**
+   * AP-25: fetches the OCR text of a Paperless document.
+   *
+   * `PAPERLESS_LINK` documents have no local file, so this is the only
+   * content an AI call or a preview can use. Returns null when Paperless is
+   * disabled, the document is unreachable or it carries no usable text.
+   */
+  getDocumentContent(paperlessId: number): Promise<string | null>;
+
+  /**
    * Synchronizes metadata of a document.
    */
   syncDocument(paperlessId: number): Promise<PaperlessSyncResult>;

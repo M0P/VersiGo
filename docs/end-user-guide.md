@@ -223,7 +223,19 @@ You can additionally select up to **8 contract documents** to include; the
 selection only appears when the AI is available. A data-transfer notice is
 shown before the first AI request.
 
-Summary output is a fixed, versioned JSON format (schema version 1) that the
+You can accept that notice once and for good under **Settings → AI data
+transfer** (personal preference `ai:dataTransferConsent`). Once accepted, the
+notice is no longer shown in the policy views; the checkbox next to the AI
+action stays a *per-action* confirmation and is then pre-ticked, so you can
+still decline a single call. The summary answers in plain German and describes
+**what** is insured (persons/items, scope of benefits, exclusion, deductible),
+not just a list of figures; the whole rendered summary is limited to 2000
+characters. For documents taken from Paperless-ngx the AI receives the text
+Paperless recognised (OCR); uploads that are only stored in VersiGo still
+contribute their metadata only, because VersiGo does no text extraction of its
+own.
+
+Summary output is a fixed, versioned JSON format (schema version 2) that the
 interface renders itself – the AI never supplies HTML or Markdown that gets
 executed. Summaries stored before this format existed keep being displayed
 from their original text.
@@ -232,8 +244,10 @@ from their original text.
 
 Open a policy → **Costs**. A sidebar on the right lists the policy's
 **Billing** documents (search included, preview opens next to the costs, and
-documents already used by a cost entry are marked). On narrow screens the
-sidebar collapses into a drawer.
+documents already used by a cost entry are marked). A document that exists
+only in Paperless-ngx has no local file, so it shows a note instead of the
+preview button (use the **Documents** tab for its Paperless link). On narrow
+screens the sidebar collapses into a drawer.
 
 - If the sidebar is empty, there is a shortcut to the document classification.
 - **Cost with AI** appears only when the server reports the AI as available,

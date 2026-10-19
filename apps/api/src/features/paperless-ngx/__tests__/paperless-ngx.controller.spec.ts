@@ -18,6 +18,8 @@ describe('PaperlessController', () => {
       createTag: vi.fn(),
       listDocumentsByTag: vi.fn(),
       assignTagToDocument: vi.fn(),
+      // AP-25: OCR text (not exercised by this controller spec).
+      getDocumentContent: vi.fn(),
     };
   }
 

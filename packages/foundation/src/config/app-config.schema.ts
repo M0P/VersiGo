@@ -158,6 +158,9 @@ export const appConfigSchema = z
     AI_OPENAI_COMPAT_MODEL: z.string().default('gpt-4o-mini'),
     AI_EXTRACTION_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
     AI_MAX_RETRIES: z.coerce.number().int().min(0).default(3),
+    // AP-25: approximate input/context budget for ONE AI call.
+    // 0 = unbegrenzt (the model's own context window applies).
+    AI_MAX_INPUT_TOKENS: z.coerce.number().int().min(0).max(1_000_000).default(4096),
 
     PAPERLESS_ENABLED: booleanFromEnv.default(false),
     PAPERLESS_URL: z.string().optional(),

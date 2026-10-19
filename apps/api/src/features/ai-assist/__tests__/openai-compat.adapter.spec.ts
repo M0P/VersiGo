@@ -275,4 +275,56 @@ describe('OpenAiCompatAdapter', () => {
       reason: 'unreachable',
     });
   });
+
+  // --- AP-25: input token budget ------------------------------------------
+
+  it('shortens document content beyond the configured input token budget', async () => {
+    const settings = createMockSettings({ AI_MAX_INPUT_TOKENS: 10 });
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.post).mockReturnValue(
+      of({
+        data: {
+          id: 'chat-1',
+          model: 'gpt-4o-mini',
+          choices: [{ message: { role: 'assistant', content: '{}' }, finish_reason: 'stop' }],
+        },
+      }) as never,
+    );
+
+    await adapter.summarizeCoverage(['x'.repeat(4000)], 'policy-1');
+
+    const body = vi.mocked(httpService.post).mock.calls[0][1] as {
+      messages: { role: string; content: string }[];
+    };
+    const userContent = body.messages.find((m) => m.role === 'user')?.content ?? '';
+
+    expect(userContent.length).toBeLessThan(4000);
+    expect(userContent).not.toContain('x'.repeat(500));
+  });
+
+  it('leaves document content untouched when the budget is unlimited (0)', async () => {
+    const settings = createMockSettings({ AI_MAX_INPUT_TOKENS: 0 });
+    const adapter = new OpenAiCompatAdapter(httpService, settings);
+
+    vi.mocked(httpService.post).mockReturnValue(
+      of({
+        data: {
+          id: 'chat-1',
+          model: 'gpt-4o-mini',
+          choices: [{ message: { role: 'assistant', content: '{}' }, finish_reason: 'stop' }],
+        },
+      }) as never,
+    );
+
+    const long = 'y'.repeat(40_000);
+    await adapter.summarizeCoverage([long], 'policy-1');
+
+    const body = vi.mocked(httpService.post).mock.calls[0][1] as {
+      messages: { role: string; content: string }[];
+    };
+    const userContent = body.messages.find((m) => m.role === 'user')?.content ?? '';
+
+    expect(userContent).toContain(long);
+  });
 });

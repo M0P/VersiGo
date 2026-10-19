@@ -18,6 +18,34 @@ Ein einheitliches Provider-Interface:
 - OpenAI-kompatibler Adapter
 - Weitere kompatible Endpunkte per Basis-URL und API-Key
 
+### Dokumentinhalte der KI-Aufrufe (AP-25)
+
+Bis AP-25 wurde einem Provider nur `Datei: <name> (<mime>)` übergeben – der
+Code kommentierte das offen als „we currently have no full-text extraction“.
+Damit konnte keine Antwort etwas über den Inhalt sagen; die
+Leistungszusammenfassung wiederholte im Wesentlichen Dateinamen. Seit AP-25
+baut `AiAssistService.loadDocumentContents()` (API) bzw. die gleichnamige
+Methode im Worker den Eingabetext je Dokument:
+
+| `storageType` | Eingabe für den Provider |
+|---|---|
+| `PAPERLESS_LINK` | Paperless-OCR-Text des verknüpften Dokuments (`getDocumentContent(paperlessId)`) mit Kopfzeile `Datei: …` |
+| `INTERNAL` | weiterhin nur die Kopfzeile `Datei: …` |
+
+Die OCR-Methode existiert auf beiden Seiten (`paperless-ngx.service.ts` im API,
+`paperless-tag.client.ts` im Worker) mit identischem Vertrag: `null`, wenn
+Paperless deaktiviert/unerreichbar ist oder keinen verwendbaren Text liefert.
+Auf eine `fields=content`-Projektion wird bewusst verzichtet, weil ältere
+Paperless-Server (Legacy-Dialekt) sie ablehnen und eine abgelehnte Projektion
+wie „dieses Dokument hat keinen Text“ aussehen würde.
+
+**Bekannte Grenze:** Für `INTERNAL`-Uploads (PDF/Bild) gibt es weiterhin keine
+Textextraktion – es ist keine PDF-/OCR-Bibliothek im Projekt gebunden. Solche
+Dokumente tragen nur ihre Metadaten bei; eine Antwort kann sie deshalb nicht
+inhaltlich beschreiben. Das ist eine dokumentierte Grenze und keine stille
+Verschlechterung. Folgearbeit: Textextraktion (z. B. `pdf-parse` oder
+`unpdf`) inklusive Qualitätsprüfung an einer Stichprobe.
+
 ### Sicherheitsregeln
 - Prompts und Antworten protokollierbar, aber sensible Inhalte konfigurierbar maskiert.
 - Provider sind global deaktivierbar.
@@ -47,21 +75,32 @@ gleichen Regeln: versionierter Prompt, strikte serverseitige Validierung und
 **ein** begrenzter Wiederholungsversuch mit präzisem Repair-Hint, danach ein
 sauberer Fehlerfall – niemals stilles „Ausbessern" einer Off-Schema-Antwort.
 
-**Zusammenfassung (`COVERAGE_SUMMARY_SCHEMA_VERSION = 1`)**
+**Zusammenfassung (`COVERAGE_SUMMARY_SCHEMA_VERSION = 2`)**
 
 ```json
-{ "version": 1,
-  "sections": [{ "title": "Deckung", "items": ["…"], "note": null }],
+{ "version": 2,
+  "sections": [{ "title": "Versicherungsschutz", "items": ["…"], "note": null }],
   "hints": ["…"] }
 ```
 
 Grenzen: max. 8 Abschnitte, 12 Punkte je Abschnitt, 6 Hinweise, Titel ≤ 80,
-Punkt ≤ 300 Zeichen. Verstöße (oder Antworten außerhalb des Schemas) kosten
+Punkt ≤ 300 Zeichen sowie (ab Version 2, AP-25) **2000 Zeichen für die gesamte
+Zusammenfassung**. Verstöße (oder Antworten außerhalb des Schemas) kosten
 einen Retry, dann `AI_SUMMARY_INVALID_FORMAT`.
 Speicherung: `AiCoverageSummary.summaryJson`; `summaryMarkdown` bleibt die
 reine Textdarstellung für Altverbraucher. Zeilen vor AP-24 haben
 `summaryJson = null` und werden aus `summaryMarkdown` gerendert (keine
 Datenmigration).
+
+AP-25 (Version 2) verlangt im Prompt zusätzlich eine inhaltliche Beschreibung
+(**was** versichert ist: Personen/Sachen, Leistungsumfang, Ausschlüsse,
+Selbstbehalte) statt reiner Zahlenstichpunkte. Damit das überhaupt möglich
+ist, muss der Provider echte Dokumentinhalte sehen (siehe «Dokumentinhalte der
+KI-Aufrufe»). Das Gesamtlimit wird für jede **neu erzeugte** Antwort
+durchgesetzt; nur bereits gespeicherte Zeilen einer älteren Formatversion
+bleiben beim erneuten Lesen davon ausgenommen
+(`allowLegacyTotalLength`, sonst würden sie auf das Legacy-Rendering
+zurückfallen).
 
 **Rendering:** eigener React-Renderer für das JSON, für Alt-Texte ein
 eingeschränkter Blockparser (`# `, `## `, `- `, Absatz). Es gibt
@@ -98,11 +137,54 @@ zugewiesener Prüfumfang, keine Stichprobe). Die Prompt-Texte selbst sind
 dagegen in `coverage-summary-format.ts` / `cost-extraction-format.ts`
 versioniert und kommentiert.
 
-### Datenübermittlungshinweis (AP-24)
+### Datenübermittlungshinweis (AP-24, erweitert in AP-25)
 Vor dem ersten KI-Aufruf je Aktion bestätigt die Oberfläche den
 Datenübermittlungshinweis (`ai.dataTransferNotice`/`…Confirm`/`…Required`).
 Dieselben Schlüssel bedienen sowohl die Leistungszusammenfassung als auch der
 Kosten-Vorschlag – es gibt genau einen Hinweistext.
+
+AP-25 ergänzt eine **zentrale Zustimmung**: Die neue Nutzerpräferenz
+`ai:dataTransferConsent` (`boolean`, Katalog in
+`user-preferences.service.ts`, keine Migration nötig) merkt sich die
+Bestätigung serverseitig pro Benutzer. Ist sie `true`, wird der Warnhinweis in
+allen KI-Ansichten nicht mehr angezeigt; der Schalter liegt in `/settings`
+unter «KI-Datenübermittlung». Voreinstellung ist „nicht erteilt“ – der
+Hinweis erscheint also weiterhin, bis der Benutzer aktiv zustimmt. Ein
+fehlgeschlagener Schreibvorgang blockiert die KI-Aktion nicht, der Hinweis
+erscheint dann beim nächsten Aufruf erneut.
+
+**Abgrenzung:** Die Zustimmung in der KI-Ansicht selbst (Checkbox je Aktion)
+bleibt bewusst **pro Aktion** und wird nicht gespeichert – sonst würde eine
+Bestätigung „für diesen Aufruf“ unbemerkt zu einer dauerhaften Einwilligung.
+Nur die Profil-Option ist dauerhaft; ist sie gesetzt, gilt die Aktion in der
+KI-Ansicht als bestätigt (Checkbox vorbelegt), bleibt aber einzeln
+abwählbar.
+
+**Rollen:** Die Präferenz liegt unter derselben AP-17-Regel wie alle anderen
+Profilwerte (`@Roles(GlobalRole.USER)` am `UserPreferencesController`), also
+dürfen nur USER und ADMIN sie lesen und schreiben; READ_ONLY erhält `403`.
+Das ist konsistent, weil READ_ONLY auch keine KI-Aktion ausführen darf
+(`summarize` und `cost-suggestion` sind `@Roles(USER, ADMIN)`), es gibt für
+diese Rolle also nichts dauerhaft zu bestätigen. Der zusätzliche
+GET auf die Präferenz, den der Hook in den KI-Ansichten auslöst, wird wie
+beim Akzentfarbe-Hook (`theme-context.tsx`) bei `403`/Fehler still ignoriert –
+der Hinweis bleibt dann sichtbar.
+
+### Eingabe-Budget (AP-25)
+
+`AI_MAX_INPUT_TOKENS` (Default `4096`, `0` = unbegrenzt) begrenzt die
+Eingabelänge **eines** KI-Aufrufs. Die Zählung ist eine dokumentierte
+Näherung (≈ 4 Zeichen je Token, keine Tokenizer-Abhängigkeit, weil sich
+Ollama- und OpenAI-kompatible Modelle nicht gleich zählen lassen). Das Budget
+wird fair über alle Dokumente eines Aufrufs verteilt; ungenutztes Budget –
+auch der Rest eines gekürzten Dokuments – geht an die folgenden Dokumente
+weiter. Gekürzte Dokumente tragen einen Markierungstext, und jede Kürzung wird
+geloggt
+(`applyInputTokenBudgetWithLog`, gemeinsam für API- und Worker-Adapter).
+Es gibt damit zwei Grenzen mit unterschiedlicher Rolle:
+`AI_MAX_INPUT_TOKENS` kürzt kontrolliert und der Aufruf gelingt weiter,
+während `AI_SUMMARY_MAX_CHARS` (hartes Instanz-Limit) den Aufruf weiterhin
+ablehnt, statt still zu kürzen.
 
 ### Neue Endpunkte (AP-24)
 
@@ -344,6 +426,28 @@ Klassifikation überlebt jeden Abgleich (eigener Test).
 - Relevanz für andere Funktionen: `CONTRACT` speist die optionale
   Dokumentauswahl der KI-Leistungszusammenfassung (§3.1),
   `BILLING` die Kosten-Seitenleiste (§4.1).
+
+### Umsetzungsstand (AP-25 – OCR-Inhalt und Vorschau)
+
+- **OCR-Inhalt (`getDocumentContent`)**: `IPaperlessAdapter` und der
+  Worker-Client (`paperless-tag.client.ts`) haben je eine Methode, die den von
+  Paperless erkannten Text eines Dokuments liefert (`GET /documents/:id/`,
+  vollständiges Dokument). Rückgabe ist `null`, wenn Paperless deaktiviert,
+  unreachable oder ohne Text ist; die KI-Aufrufe behandeln das als „nur
+  Metadaten". Der Inhalt ist die einzige Quelle für `PAPERLESS_LINK`-Dokumente
+  (siehe «Dokumentinhalte der KI-Aufrufe»).
+- **Dokumentvorschau (Bugfix)**: `PAPERLESS_LINK`-Dokumente haben keine lokale
+  Datei. Bis AP-25 baute `getDocumentAndPath` trotzdem einen Pfad, `stat()`
+  scheiterte mit `ENOENT` und der Client bekam einen undurchsichtigen `500` –
+  die Antwort enthielt dabei den absoluten Speicherpfad. Jetzt lehnt
+  `GET /households/:id/policies/:pid/documents/:docId/(preview|download)`
+  solche Dokumente mit `404 DOCUMENT_NOT_STORED_LOCALLY` ab; ebenso wird ein
+  zwischenzeitlich gelöschtes lokales File als `404 DOCUMENT_FILE_MISSING`
+  beantwortet (ein `ENOENT` im Stream-Pfad wird ebenfalls zu `404`), nicht als
+  `500`.
+- **Oberfläche**: Die Kosten-Seitenleiste zeigt für `PAPERLESS_LINK`-Dokumente
+  keinen Vorschau-Button und keinen iframe mehr, sondern den Hinweis
+  `costs.previewInPaperlessOnly` (Deep-Link bietet der Reiter „Dokumente“).
 
 ## Versicherungsportale
 Technisch realistisch in Stufen:

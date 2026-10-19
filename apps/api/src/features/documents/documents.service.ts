@@ -208,6 +208,17 @@ export class DocumentsService {
       throw new NotFoundException('Document not found');
     }
 
+    // AP-25: a PAPERLESS_LINK document has no local file. Resolving a path
+    // from its id would hand out a path that cannot exist - the later stat()
+    // then failed with an ENOENT and surfaced as an opaque 500 that even
+    // contained the absolute storage path. Refuse it explicitly instead.
+    if (document.storageType === 'PAPERLESS_LINK') {
+      throw new NotFoundException({
+        code: 'DOCUMENT_NOT_STORED_LOCALLY',
+        message: 'This document is stored in Paperless-ngx and has no local file',
+      });
+    }
+
     const filePath = this.resolveSafePath(policyId, docId, docId);
     return { document, filePath };
   }

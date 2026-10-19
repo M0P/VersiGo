@@ -74,6 +74,8 @@ function createMockPaperless() {
     createTag: vi.fn(),
     listDocumentsByTag: vi.fn(),
     assignTagToDocument: vi.fn(),
+    // AP-25: OCR text of a linked document (not used by DocumentsService).
+    getDocumentContent: vi.fn(),
   };
 }
 
@@ -240,6 +242,49 @@ describe('DocumentsService', () => {
         // would fail with "Disk full" too.
         writeFileMock.mockResolvedValue(undefined);
       }
+    });
+  });
+
+  describe('getDocumentAndPath', () => {
+    // AP-25: a PAPERLESS_LINK document has no local file. Before this guard a
+    // fabricated path was returned, the stat() failed and the client got an
+    // opaque 500 including the absolute storage path.
+    it('refuses a linked document instead of returning a fabricated path', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: docId,
+        policyId,
+        fileName: 'Police.pdf',
+        mimeType: 'application/pdf',
+        storageType: 'PAPERLESS_LINK',
+        storageRef: '42',
+      });
+
+      await expect(
+        service.getDocumentAndPath(householdId, user, policyId, docId),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'DOCUMENT_NOT_STORED_LOCALLY' }),
+      });
+    });
+
+    it('returns the local path for an internal document', async () => {
+      mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
+      mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });
+      mockDb.policyDocument.findFirst.mockResolvedValue({
+        id: docId,
+        policyId,
+        fileName: 'Police.pdf',
+        mimeType: 'application/pdf',
+        storageType: 'INTERNAL',
+        storageRef: null,
+      });
+
+      const result = await service.getDocumentAndPath(householdId, user, policyId, docId);
+
+      expect(result.document.fileName).toBe('Police.pdf');
+      expect(result.filePath).toContain(policyId);
+      expect(result.filePath).toContain(docId);
     });
   });
 

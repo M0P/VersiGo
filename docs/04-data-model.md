@@ -193,9 +193,11 @@
 - model
 - summaryMarkdown
 - summaryJson (AP-24 §3.2; nullable `Json?` – validiertes, strukturiertes
-  Zusammenfassungsdokument der Format-Version 1; `null` bei Zeilen, die vor
-  AP-24 geschrieben wurden. Solche Altzeilen werden weiterhin aus
-  `summaryMarkdown` dargestellt)
+  Zusammenfassungsdokument der Format-Version 1, seit AP-25 Version 2
+  (2000-Zeichen-Gesamtlimit, inhaltliche Deckungsbeschreibung); `null` bei
+  Zeilen, die vor AP-24 geschrieben wurden. Solche Altzeilen werden weiterhin
+  aus `summaryMarkdown` dargestellt; Zeilen der Version 1 bleiben lesbar und
+  sind vom Zeichenlimit ausgenommen)
 - sourceDocumentRefsJson
 - createdAt
 

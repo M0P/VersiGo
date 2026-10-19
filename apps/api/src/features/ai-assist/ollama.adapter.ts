@@ -4,6 +4,8 @@ import { SettingsResolverService } from '@versigo/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import {
+  AI_MAX_INPUT_TOKENS_DEFAULT,
+  applyInputTokenBudgetWithLog,
   COST_EXTRACTION_SYSTEM_PROMPT,
   COVERAGE_SUMMARY_SYSTEM_PROMPT,
   type IAIAdapter,
@@ -45,6 +47,8 @@ interface OllamaRuntimeConfig {
   baseUrl: string;
   model: string;
   timeout: number;
+  /** AP-25: approximate input token budget; 0 = unbegrenzt. */
+  maxInputTokens: number;
   /** BugFix-06: HTTPS agent with certificate validation disabled (opt-in). */
   httpsAgent?: import('https').Agent;
 }
@@ -72,8 +76,22 @@ export class OllamaAdapter implements IAIAdapter {
     const model = (await this.settings.getEffectiveString('AI_OLLAMA_MODEL')) ?? 'llama3';
     const timeout =
       (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
+    const maxInputTokens =
+      (await this.settings.getEffectiveNumber('AI_MAX_INPUT_TOKENS')) ??
+      AI_MAX_INPUT_TOKENS_DEFAULT;
     const relaxedAgent = await optionalRelaxedHttpsAgent(this.settings);
-    return { baseUrl, model, timeout, ...relaxedAgent };
+    return { baseUrl, model, timeout, maxInputTokens, ...relaxedAgent };
+  }
+
+  /**
+   * AP-25: applies the configured input budget to the documents of one call.
+   * The shared helper logs a shortening, so a thinner answer is explainable.
+   */
+  private applyInputBudget(
+    documentContents: string[],
+    config: OllamaRuntimeConfig,
+  ): string[] {
+    return applyInputTokenBudgetWithLog(documentContents, config.maxInputTokens, this.logger);
   }
 
   private async chatCompletion(
@@ -149,7 +167,7 @@ export class OllamaAdapter implements IAIAdapter {
     const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       EXTRACTION_SYSTEM_PROMPT,
-      this.buildExtractionPrompt(documentContents),
+      this.buildExtractionPrompt(this.applyInputBudget(documentContents, config)),
       config,
     );
 
@@ -180,7 +198,7 @@ export class OllamaAdapter implements IAIAdapter {
     const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       COVERAGE_SUMMARY_SYSTEM_PROMPT,
-      this.buildSummarizePrompt(documentContents, options),
+      this.buildSummarizePrompt(this.applyInputBudget(documentContents, config), options),
       config,
     );
 
@@ -211,7 +229,7 @@ export class OllamaAdapter implements IAIAdapter {
     const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       COST_EXTRACTION_SYSTEM_PROMPT,
-      this.buildCostExtractionPrompt(documentContent, options),
+      this.buildCostExtractionPrompt(this.applyInputBudget([documentContent], config)[0], options),
       config,
     );
 

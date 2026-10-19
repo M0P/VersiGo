@@ -3,8 +3,13 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { DatabaseService, SettingsResolverService } from '@versigo/foundation';
 import type { IAIAdapter, AiExtractResult, AiSummarizeResult } from '@versigo/foundation';
+import {
+  AI_MAX_INPUT_TOKENS_DEFAULT,
+  applyInputTokenBudgetWithLog,
+} from '@versigo/foundation';
 import type { Prisma } from '@prisma/client';
 import axios, { AxiosError } from 'axios';
+import { PaperlessTagClient } from './paperless-tag.client';
 
 interface AiExtractionJobData {
   jobId: string;
@@ -77,7 +82,14 @@ class WorkerOllamaAdapter implements IAIAdapter {
     private readonly baseUrl: string,
     private readonly model: string,
     private readonly timeout: number,
+    /** AP-25: approximate input token budget; 0 = unbegrenzt. */
+    private readonly maxInputTokens: number,
   ) {}
+
+  /** AP-25: applies the shared input budget (and logs a shortening). */
+  private applyInputBudget(documentContents: string[]): string[] {
+    return applyInputTokenBudgetWithLog(documentContents, this.maxInputTokens, this.logger);
+  }
 
   async extractContractFacts(
     documentContents: string[],
@@ -96,7 +108,9 @@ Antworte NUR mit einem gueltigen JSON-Objekt.
 Jedes Feld muss einen confidence-Wert zwischen 0 und 1 haben.
 Antworte NUR mit JSON, keinem anderen Text.`;
 
-    const userPrompt = `Extrahiere Vertragsdaten aus folgenden Dokumenten:\n\n${documentContents
+    const userPrompt = `Extrahiere Vertragsdaten aus folgenden Dokumenten:\n\n${this.applyInputBudget(
+      documentContents,
+    )
       .map((content, i) => `--- Dokument ${i + 1} ---\n${content}`)
       .join('\n\n')}\n\nAntworte NUR mit JSON.`;
 
@@ -114,7 +128,9 @@ Antworte NUR mit JSON, keinem anderen Text.`;
     const systemPrompt = `Du fasst Versicherungsvertraege zusammen.
 Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format.`;
 
-    const userPrompt = `Fasse folgende Versicherungsdokumente zusammen:\n\n${documentContents
+    const userPrompt = `Fasse folgende Versicherungsdokumente zusammen:\n\n${this.applyInputBudget(
+      documentContents,
+    )
       .map((content, i) => `--- Dokument ${i + 1} ---\n${content}`)
       .join('\n\n')}`;
 
@@ -199,7 +215,14 @@ class WorkerOpenAiCompatAdapter implements IAIAdapter {
     private readonly model: string,
     private readonly timeout: number,
     private readonly enabled: boolean,
+    /** AP-25: approximate input token budget; 0 = unbegrenzt. */
+    private readonly maxInputTokens: number,
   ) {}
+
+  /** AP-25: applies the shared input budget (and logs a shortening). */
+  private applyInputBudget(documentContents: string[]): string[] {
+    return applyInputTokenBudgetWithLog(documentContents, this.maxInputTokens, this.logger);
+  }
 
   /**
    * BugFix-22: only the base URL is required. Many OpenAI-compatible
@@ -233,7 +256,9 @@ class WorkerOpenAiCompatAdapter implements IAIAdapter {
 Jedes Feld muss einen confidence-Wert zwischen 0 und 1 haben.
 Antworte NUR mit JSON, keinem anderen Text.`;
 
-    const userPrompt = `Extrahiere Vertragsdaten aus folgenden Dokumenten:\n\n${documentContents
+    const userPrompt = `Extrahiere Vertragsdaten aus folgenden Dokumenten:\n\n${this.applyInputBudget(
+      documentContents,
+    )
       .map((content, i) => `--- Dokument ${i + 1} ---\n${content}`)
       .join('\n\n')}\n\nAntworte NUR mit JSON.`;
 
@@ -251,7 +276,9 @@ Antworte NUR mit JSON, keinem anderen Text.`;
     const systemPrompt = `Du fasst Versicherungsvertraege zusammen.
 Erstelle eine praegnante Zusammenfassung in deutscher Sprache im Markdown-Format.`;
 
-    const userPrompt = `Fasse folgende Versicherungsdokumente zusammen:\n\n${documentContents
+    const userPrompt = `Fasse folgende Versicherungsdokumente zusammen:\n\n${this.applyInputBudget(
+      documentContents,
+    )
       .map((content, i) => `--- Dokument ${i + 1} ---\n${content}`)
       .join('\n\n')}`;
 
@@ -351,8 +378,48 @@ export class AiExtractionProcessor extends WorkerHost {
   constructor(
     private readonly db: DatabaseService,
     private readonly settings: SettingsResolverService,
+    // AP-25: OCR text of PAPERLESS_LINK documents (see loadDocumentContents).
+    private readonly paperless: PaperlessTagClient,
   ) {
     super();
+  }
+
+  /**
+   * AP-25: builds the text handed to the provider for each document.
+   *
+   * Without this the model only ever received `Datei: <name> (<mime>)` and no
+   * answer could describe the document. `PAPERLESS_LINK` documents have
+   * retrievable OCR text; an INTERNAL upload is a PDF/image without a local
+   * text extraction and therefore still contributes its metadata only (see
+   * docs/06-integrations.md).
+   */
+  private async loadDocumentContents(
+    documents: {
+      fileName: string;
+      mimeType: string | null;
+      storageType: string;
+      storageRef: string | null;
+    }[],
+  ): Promise<string[]> {
+    return Promise.all(
+      documents.map(async (doc) => {
+        const header = `Datei: ${doc.fileName} (${doc.mimeType ?? 'unbekannt'})`;
+        if (doc.storageType !== 'PAPERLESS_LINK' || !doc.storageRef) return header;
+
+        const paperlessId = Number(doc.storageRef);
+        if (!Number.isInteger(paperlessId) || paperlessId <= 0) return header;
+
+        const text = await this.paperless.getDocumentContent(paperlessId).catch(() => null);
+        if (!text) {
+          this.logger.warn(
+            `Document ${doc.fileName}: no OCR text available from Paperless (${paperlessId})`,
+          );
+          return header;
+        }
+
+        return `${header}\n--- Inhalt (OCR aus Paperless) ---\n${text}`;
+      }),
+    );
   }
 
   /**
@@ -370,6 +437,10 @@ export class AiExtractionProcessor extends WorkerHost {
     const provider = (await this.settings.getEffectiveString('AI_PROVIDER')) ?? 'ollama';
     const timeout =
       (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
+    // AP-25: same resolution as in the API adapters (UI > .env > default).
+    const maxInputTokens =
+      (await this.settings.getEffectiveNumber('AI_MAX_INPUT_TOKENS')) ??
+      AI_MAX_INPUT_TOKENS_DEFAULT;
 
     switch (provider) {
       case 'openai-compat': {
@@ -386,6 +457,7 @@ export class AiExtractionProcessor extends WorkerHost {
           timeout,
           // BugFix-22: the API key is optional, only the base URL is required.
           baseUrl.length > 0,
+          maxInputTokens,
         );
       }
       case 'ollama':
@@ -394,7 +466,7 @@ export class AiExtractionProcessor extends WorkerHost {
           (await this.settings.getEffectiveString('AI_OLLAMA_BASE_URL')) ?? 'http://localhost:11434'
         ).replace(/\/+$/, '');
         const model = (await this.settings.getEffectiveString('AI_OLLAMA_MODEL')) ?? 'llama3';
-        return new WorkerOllamaAdapter(baseUrl, model, timeout);
+        return new WorkerOllamaAdapter(baseUrl, model, timeout, maxInputTokens);
       }
     }
   }
@@ -415,9 +487,7 @@ export class AiExtractionProcessor extends WorkerHost {
         where: { id: { in: documentIds }, archivedAt: null, aiProcessingExcluded: false },
       });
 
-      const documentContents = documents.map(
-        (doc) => `Datei: ${doc.fileName} (${doc.mimeType ?? 'unbekannt'})`,
-      );
+      const documentContents = await this.loadDocumentContents(documents);
 
       if (documentContents.length === 0) {
         await this.db.aiExtractionJob.update({

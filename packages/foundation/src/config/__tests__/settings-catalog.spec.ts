@@ -75,6 +75,40 @@ describe('settings-catalog', () => {
     expect(restartKeys).toContain('OIDC_ENABLED');
   });
 
+  // AP-25: the AI input budget is a runtime setting; "0 = unbegrenzt" must be
+  // a legal value, otherwise the admin UI cannot express the opt-out.
+  it('catalogues the AI input token budget as an unlimited-capable runtime setting', () => {
+    const definition = getSettingDefinition('AI_MAX_INPUT_TOKENS');
+
+    expect(definition).toBeDefined();
+    expect(definition?.category).toBe('runtime');
+    expect(definition?.type).toBe('number');
+    expect(definition?.defaultValue).toBe(4096);
+    expect(definition?.min).toBe(0);
+    expect(getUiConfigurableKeys()).toContain('AI_MAX_INPUT_TOKENS');
+    expect(() =>
+      parseAppConfig({
+        DATABASE_URL: 'postgresql://u:p@localhost:5432/versigo',
+        REDIS_URL: 'redis://localhost:6379',
+        SETTINGS_ENCRYPTION_KEY: 'a'.repeat(64),
+        SESSION_SECRET: 'a'.repeat(32),
+        AI_MAX_INPUT_TOKENS: '0',
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects an AI input token budget above the documented maximum', () => {
+    expect(() =>
+      parseAppConfig({
+        DATABASE_URL: 'postgresql://u:p@localhost:5432/versigo',
+        REDIS_URL: 'redis://localhost:6379',
+        SETTINGS_ENCRYPTION_KEY: 'a'.repeat(64),
+        SESSION_SECRET: 'a'.repeat(32),
+        AI_MAX_INPUT_TOKENS: '1000001',
+      }),
+    ).toThrow();
+  });
+
   it('provides a description for every UI-configurable key', () => {
     for (const definition of SETTINGS_CATALOG) {
       expect(definition.description.length, `${definition.key} without description`).toBeGreaterThan(20);

@@ -8,6 +8,7 @@ import { Alert } from '../../../components/ui/alert';
 import { useI18n, type Translator } from '../../../i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
+import { useAiDataTransferConsent } from '@/hooks/use-ai-data-transfer-consent';
 import {
   isCoverageSummaryDocument,
   legacyMarkdownBlocks,
@@ -213,7 +214,15 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
   // AP-24 (§3.1): optional document selection + data transfer consent.
   const [contractDocuments, setContractDocuments] = useState<DocumentOption[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  // AP-25: the central consent given in the profile (`/settings`) suppresses
+  // the data-transfer notice. The checkbox of this action stays per action –
+  // confirming here never silently becomes a permanent consent.
+  const { acknowledged: storedTransferConsent } = useAiDataTransferConsent();
   const [transferAcknowledged, setTransferAcknowledged] = useState(false);
+
+  useEffect(() => {
+    if (storedTransferConsent) setTransferAcknowledged(true);
+  }, [storedTransferConsent]);
   // Documents the API could not use; the user decides whether to continue.
   const [skippedDocuments, setSkippedDocuments] = useState<SkippedDocumentInfo[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -676,9 +685,13 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
         <Card>
           <h2>{t('ai.title')}</h2>
           <p className="text-muted">{t('ai.noSummary')}</p>
-          <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
-            <Alert variant="info">{t('ai.dataTransferNotice')}</Alert>
-          </div>
+          {/* AP-25: the central consent from the profile suppresses the
+              notice; the per-action checkbox still decides this call. */}
+          {!storedTransferConsent && (
+            <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
+              <Alert variant="info">{t('ai.dataTransferNotice')}</Alert>
+            </div>
+          )}
           {actionError && (
             <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
               <Alert variant="danger">{actionError}</Alert>
@@ -733,7 +746,9 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
           <details style={{ marginTop: 'var(--versigo-space-4)' }}>
             <summary>{t('ai.regenerateWithSelection')}</summary>
             <div style={{ marginTop: 'var(--versigo-space-3)' }}>
-              <Alert variant="info">{t('ai.dataTransferNotice')}</Alert>
+              {!storedTransferConsent && (
+                <Alert variant="info">{t('ai.dataTransferNotice')}</Alert>
+              )}
               {renderPicker()}
               {renderActions(false)}
             </div>
@@ -755,9 +770,11 @@ export default function CoverageSummarySection({ householdId, policyId }: Props)
         <Card>
           <h2>{t('ai.title')}</h2>
           <p style={{ color: 'var(--versigo-danger)' }}>{viewState.message}</p>
-          <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
-            <Alert variant="info">{t('ai.dataTransferNotice')}</Alert>
-          </div>
+          {!storedTransferConsent && (
+            <div style={{ marginBottom: 'var(--versigo-space-3)' }}>
+              <Alert variant="info">{t('ai.dataTransferNotice')}</Alert>
+            </div>
+          )}
           {renderPicker()}
           {renderActions(false)}
         </Card>

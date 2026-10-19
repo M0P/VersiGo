@@ -20,10 +20,11 @@ import {
  * for the background sync (the worker app cannot import the API feature and
  * must not pull the Nest HTTP module graph into its bundle).
  *
- * Only the three operations the sync actually needs are implemented:
- * tag lookup, paginated document lookup by tag and additive tag assignment.
- * Failure kinds map 1:1 onto the API adapter's result types so the sync
- * semantics stay identical.
+ * Only the operations the worker actually needs are implemented:
+ * tag lookup, paginated document lookup by tag, additive tag assignment and
+ * (AP-25) the OCR text of a document, which the AI extraction sends to the
+ * provider for a `PAPERLESS_LINK` document. Failure kinds map 1:1 onto the
+ * API adapter's result types so the sync semantics stay identical.
  */
 
 export type TagLookupErrorKind = 'NOT_FOUND' | 'AUTH_FAILED' | 'UNREACHABLE' | 'NOT_CONFIGURED';
@@ -201,6 +202,32 @@ export class PaperlessTagClient {
     } catch {
       return {};
     }
+  }
+
+  /**
+   * AP-25: OCR text of one document – the only content an AI extraction can
+   * use for a `PAPERLESS_LINK` document, because such a document has no
+   * local file. Mirrors the API adapter's `getDocumentContent` (same
+   * contract): null when Paperless is disabled, the document is unreachable
+   * or carries no usable text.
+   *
+   * The complete document is requested: a `fields=content` projection is
+   * rejected by older Paperless servers and a rejected projection would look
+   * like "this document has no text".
+   *
+   * No separate `isConfigured()` check (unlike `getTag()` below): `request()`
+   * already returns `null` for a disabled/unconfigured Paperless, which is
+   * exactly the "no content available" answer this method has to give.
+   */
+  async getDocumentContent(paperlessId: number): Promise<string | null> {
+    const res = await this.request('GET', `/documents/${paperlessId}/`);
+    if (!res || res.status !== 200) return null;
+
+    const content = (res.data as { content?: unknown } | null)?.content;
+    if (typeof content !== 'string') return null;
+
+    const text = content.trim();
+    return text.length > 0 ? text : null;
   }
 
   async getTag(tagId: number): Promise<TagLookupResult> {

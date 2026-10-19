@@ -139,11 +139,28 @@ export class DocumentsController {
       stream.on('error', (err) => {
         this.logger.error(`${disposition} stream error for doc ${docId}: ${err.message}`);
         stream.destroy();
-        if (!res.headersSent) res.status(500).end();
+        if (res.headersSent) return;
+        // The file can disappear between stat() and the read (deletion while
+        // the preview is open). Without this branch the client would get an
+        // empty 500 and the log the only hint.
+        res
+          .status((err as NodeJS.ErrnoException).code === 'ENOENT' ? 404 : 500)
+          .end();
       });
       stream.pipe(res);
     } catch (err) {
       if (err instanceof NotFoundException) throw err;
+      // The database row can exist while the stored file is gone (incomplete
+      // upload, manual deletion in the storage volume, restore without data).
+      // Reporting that as an unhandled 500 leaks the absolute storage path in
+      // the response body and gives the client nothing to act on.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        this.logger.warn(`${disposition} file missing on disk for doc ${docId}`);
+        throw new NotFoundException({
+          code: 'DOCUMENT_FILE_MISSING',
+          message: 'The stored file for this document is no longer available',
+        });
+      }
       this.logger.error(`${disposition} failed for doc ${docId}: ${(err as Error).message}`);
       throw err;
     }

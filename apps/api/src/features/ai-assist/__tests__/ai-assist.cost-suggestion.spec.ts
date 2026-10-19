@@ -56,6 +56,14 @@ function createMockAuthService() {
   };
 }
 
+/**
+ * AP-25: the service reads the OCR text of `PAPERLESS_LINK` documents from
+ * Paperless. A null answer keeps the metadata-only behaviour.
+ */
+function createMockPaperless() {
+  return { getDocumentContent: vi.fn().mockResolvedValue(null) };
+}
+
 describe('AiAssistService.extractCostSuggestion (AP-24 §4.2)', () => {
   const householdId = 'household-1';
   const userId = 'user-1';
@@ -72,6 +80,7 @@ describe('AiAssistService.extractCostSuggestion (AP-24 §4.2)', () => {
 
   let mockDb: ReturnType<typeof createMockDb>;
   let extractCostFromDocument: ReturnType<typeof vi.fn>;
+  let adapterRef: unknown;
   let service: AiAssistService;
 
   beforeEach(() => {
@@ -90,12 +99,14 @@ describe('AiAssistService.extractCostSuggestion (AP-24 §4.2)', () => {
       extractCostFromDocument,
       healthCheck: vi.fn(),
     };
+    adapterRef = adapter;
     service = new AiAssistService(
       mockDb as never,
       createMockRegistry(adapter) as never,
       createMockSettings(true) as never,
       createMockAuthService() as never,
       { add: vi.fn() } as never,
+      createMockPaperless() as never,
     );
   });
 
@@ -119,6 +130,72 @@ describe('AiAssistService.extractCostSuggestion (AP-24 §4.2)', () => {
     expect(result.existingEntries).toHaveLength(1);
     expect(result.model).toBe('test-model');
     expect(result.providerKey).toBe('test');
+  });
+
+  /**
+   * AP-25: a `PAPERLESS_LINK` document has no local file – its content lives
+   * in Paperless. Without the OCR text the provider would only see a file
+   * name and could never read an amount out of it.
+   */
+  it('passes the Paperless OCR text of a linked document to the adapter', async () => {
+    const paperless = {
+      getDocumentContent: vi.fn().mockResolvedValue('Rechnungsbetrag 128,40 EUR'),
+    };
+    const linkedService = new AiAssistService(
+      mockDb as never,
+      createMockRegistry(adapterRef!) as never,
+      createMockSettings(true) as never,
+      createMockAuthService() as never,
+      { add: vi.fn() } as never,
+      paperless as never,
+    );
+
+    mockDb.policyDocument.findFirst.mockResolvedValue({
+      id: documentId,
+      fileName: 'rechnung.pdf',
+      mimeType: 'application/pdf',
+      documentDate: null,
+      aiProcessingExcluded: false,
+      storageType: 'PAPERLESS_LINK',
+      storageRef: '42',
+    });
+    extractCostFromDocument.mockResolvedValue({ costJson: validCostJson(), model: 'test-model' });
+    mockDb.policyCostEntry.findMany.mockResolvedValue([]);
+
+    await linkedService.extractCostSuggestion(householdId, user, policyId, documentId);
+
+    expect(paperless.getDocumentContent).toHaveBeenCalledWith(42);
+    expect(extractCostFromDocument.mock.calls[0][0]).toContain('Rechnungsbetrag 128,40 EUR');
+  });
+
+  it('falls back to the file name when Paperless has no OCR text', async () => {
+    const paperless = { getDocumentContent: vi.fn().mockResolvedValue(null) };
+    const linkedService = new AiAssistService(
+      mockDb as never,
+      createMockRegistry(adapterRef!) as never,
+      createMockSettings(true) as never,
+      createMockAuthService() as never,
+      { add: vi.fn() } as never,
+      paperless as never,
+    );
+
+    mockDb.policyDocument.findFirst.mockResolvedValue({
+      id: documentId,
+      fileName: 'rechnung.pdf',
+      mimeType: 'application/pdf',
+      documentDate: null,
+      aiProcessingExcluded: false,
+      storageType: 'PAPERLESS_LINK',
+      storageRef: '42',
+    });
+    extractCostFromDocument.mockResolvedValue({ costJson: validCostJson(), model: 'test-model' });
+    mockDb.policyCostEntry.findMany.mockResolvedValue([]);
+
+    await linkedService.extractCostSuggestion(householdId, user, policyId, documentId);
+
+    expect(extractCostFromDocument.mock.calls[0][0]).toBe(
+      'Datei: rechnung.pdf (application/pdf)',
+    );
   });
 
   it('retries once with a repair hint on an off-schema answer, then fails cleanly', async () => {
@@ -172,6 +249,7 @@ describe('AiAssistService.extractCostSuggestion (AP-24 §4.2)', () => {
       createMockSettings(true) as never,
       createMockAuthService() as never,
       { add: vi.fn() } as never,
+      createMockPaperless() as never,
     );
 
     await expect(

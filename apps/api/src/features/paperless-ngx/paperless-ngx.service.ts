@@ -29,6 +29,11 @@ interface PaperlessApiDocument {
   modified: string;
   /** BugFix-21: reported by Paperless; may be absent on legacy servers. */
   mime_type?: string | null;
+  /**
+   * AP-25: OCR text recognised by Paperless. Only present when the full
+   * document is requested; absent on servers that do not expose it.
+   */
+  content?: string | null;
 }
 
 interface PaperlessApiCorrespondent {
@@ -341,6 +346,32 @@ export class PaperlessNgxService implements IPaperlessAdapter {
       // BugFix-21: only a real string counts as a MIME type.
       mimeType: typeof doc.mime_type === 'string' ? doc.mime_type : null,
     };
+  }
+
+  /**
+   * AP-25: OCR text of a document.
+   *
+   * A PAPERLESS_LINK document has no local file – its content exists only in
+   * Paperless. This text is what an AI call (contract facts, coverage
+   * summary, cost extraction) and the preview actually work with; without it
+   * the model only ever sees a file name.
+   *
+   * Deliberately the full document is requested: a `fields=` projection is
+   * not supported by older Paperless servers (legacy dialect) and a rejected
+   * projection would look like "this document has no text".
+   *
+   * Returns null when Paperless is disabled, the document cannot be fetched
+   * or Paperless reports no usable text (an unrecognised scan stays an empty
+   * answer instead of an error).
+   */
+  async getDocumentContent(paperlessId: number): Promise<string | null> {
+    if (!(await this.isConfigured())) return null;
+
+    const doc = await this.get<PaperlessApiDocument>(`/documents/${paperlessId}/`);
+    if (!doc || typeof doc.content !== 'string') return null;
+
+    const text = doc.content.trim();
+    return text.length > 0 ? text : null;
   }
 
   async syncDocument(paperlessId: number): Promise<PaperlessSyncResult> {

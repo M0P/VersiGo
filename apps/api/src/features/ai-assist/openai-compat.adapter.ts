@@ -4,6 +4,8 @@ import { SettingsResolverService } from '@versigo/foundation';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import {
+  AI_MAX_INPUT_TOKENS_DEFAULT,
+  applyInputTokenBudgetWithLog,
   COST_EXTRACTION_SYSTEM_PROMPT,
   COVERAGE_SUMMARY_SYSTEM_PROMPT,
   type IAIAdapter,
@@ -65,6 +67,8 @@ interface OpenAiRuntimeConfig {
   model: string;
   timeout: number;
   configured: boolean;
+  /** AP-25: approximate input token budget; 0 = unbegrenzt. */
+  maxInputTokens: number;
   /** BugFix-06: HTTPS agent with disabled certificate validation (opt-in). */
   httpsAgent?: import('https').Agent;
 }
@@ -111,6 +115,9 @@ export class OpenAiCompatAdapter implements IAIAdapter {
     const model = (await this.settings.getEffectiveString('AI_OPENAI_COMPAT_MODEL')) ?? 'gpt-4o-mini';
     const timeout =
       (await this.settings.getEffectiveNumber('AI_EXTRACTION_TIMEOUT_MS')) ?? 60000;
+    const maxInputTokens =
+      (await this.settings.getEffectiveNumber('AI_MAX_INPUT_TOKENS')) ??
+      AI_MAX_INPUT_TOKENS_DEFAULT;
     // Only the base URL is required; the API key is optional (see JSDoc).
     const configured = baseUrl.length > 0;
     const relaxedAgent = await optionalRelaxedHttpsAgent(this.settings);
@@ -122,7 +129,18 @@ export class OpenAiCompatAdapter implements IAIAdapter {
       );
     }
 
-    return { baseUrl, apiKey, model, timeout, configured, ...relaxedAgent };
+    return { baseUrl, apiKey, model, timeout, maxInputTokens, configured, ...relaxedAgent };
+  }
+
+  /**
+   * AP-25: applies the configured input budget to the documents of one call.
+   * The shared helper logs a shortening, so a thinner answer is explainable.
+   */
+  private applyInputBudget(
+    documentContents: string[],
+    config: OpenAiRuntimeConfig,
+  ): string[] {
+    return applyInputTokenBudgetWithLog(documentContents, config.maxInputTokens, this.logger);
   }
 
   /** Bearer header only when a key is configured (an empty `Bearer ` trips some gateways). */
@@ -202,7 +220,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
     const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       EXTRACTION_SYSTEM_PROMPT,
-      this.buildExtractionPrompt(documentContents),
+      this.buildExtractionPrompt(this.applyInputBudget(documentContents, config)),
       config,
     );
 
@@ -233,7 +251,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
     const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       COVERAGE_SUMMARY_SYSTEM_PROMPT,
-      this.buildSummarizePrompt(documentContents, options),
+      this.buildSummarizePrompt(this.applyInputBudget(documentContents, config), options),
       config,
     );
 
@@ -264,7 +282,7 @@ export class OpenAiCompatAdapter implements IAIAdapter {
     const config = await this.runtimeConfig();
     const raw = await this.chatCompletion(
       COST_EXTRACTION_SYSTEM_PROMPT,
-      this.buildCostExtractionPrompt(documentContent, options),
+      this.buildCostExtractionPrompt(this.applyInputBudget([documentContent], config)[0], options),
       config,
     );
 

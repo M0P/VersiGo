@@ -2,7 +2,8 @@
 
 > Status: **AP-17** – Versionierter Konfigurationskatalog (Allowlist), zentrale
 > Prioritätsauflösung, Admin-UI, Profil-UI, Audit und Dokumentation.
-> Katalogversion: `SETTINGS_CATALOG_VERSION = 2`.
+> Katalogversion: `SETTINGS_CATALOG_VERSION = 3`.
+> Version 3 (AP-25): `AI_MAX_INPUT_TOKENS` ergänzt.
 
 ## Ziel
 
@@ -81,6 +82,7 @@ Konfigurationswerte, Secrets, Metadaten oder Änderungsmöglichkeiten preis.
 | `AI_OPENAI_COMPAT_MODEL` | string | runtime | `gpt-4o-mini` | frei |
 | `AI_EXTRACTION_TIMEOUT_MS` | number | runtime | `60000` | 1.000–600.000 |
 | `AI_MAX_RETRIES` | number | runtime | `3` | 0–10 |
+| `AI_MAX_INPUT_TOKENS` | number | runtime | `4096` | 0–1.000.000; `0` = unbegrenzt; Näherung (ca. 4 Zeichen je Token), kalibriert für lateinische Schrift – andere Schriftsysteme brauchen mehr Token je Zeichen, dort wirkt das Limit strenger |
 
 #### Paperless-ngx
 

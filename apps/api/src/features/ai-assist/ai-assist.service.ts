@@ -1,11 +1,16 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   ForbiddenException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import {
+  PAPERLESS_ADAPTER,
+  type IPaperlessAdapter,
+} from '../paperless-ngx/paperless-ngx.interface';
 import {
   DatabaseService,
   SettingsResolverService,
@@ -130,9 +135,15 @@ function isSupportedSummaryType(mimeType: string | null): boolean {
  * AP-24 (or by a newer version) are never trusted blindly – an unreadable
  * document degrades to the legacy Markdown rendering instead of breaking the
  * whole section.
+ *
+ * AP-25: `allowLegacyTotalLength` exempts a stored row that was written
+ * before the total character budget existed. A freshly generated answer is
+ * measured against the budget (see `validateCoverageSummary`).
  */
 function readStoredSummary(value: Prisma.JsonValue): CoverageSummaryDocument | null {
-  const result = validateCoverageSummary(JSON.stringify(value));
+  const result = validateCoverageSummary(JSON.stringify(value), {
+    allowLegacyTotalLength: true,
+  });
   return result.ok ? result.value : null;
 }
 
@@ -146,7 +157,56 @@ export class AiAssistService {
     private readonly settings: SettingsResolverService,
     private readonly authService: AuthService,
     @InjectQueue(AI_EXTRACTION_QUEUE) private readonly extractionQueue: Queue,
+    // AP-25: source of the OCR text of PAPERLESS_LINK documents.
+    @Inject(PAPERLESS_ADAPTER) private readonly paperless: IPaperlessAdapter,
   ) {}
+
+  /**
+   * AP-25: builds the text handed to the provider for each document.
+   *
+   * Until now only `Datei: <name> (<mime>)` was sent, so the model never saw
+   * any content – a summary could only restate file names and could not say
+   * what is insured. Documents linked from Paperless do have retrievable
+   * text: Paperless stores the OCR result of every document it indexed.
+   *
+   * An INTERNAL upload is a PDF/image without a local text extraction, so it
+   * still contributes its metadata only. That gap is deliberate and
+   * documented (see docs/06-integrations.md); inventing content or sending
+   * binary data to the provider would be worse.
+   */
+  private async loadDocumentContents(
+    documents: {
+      fileName: string;
+      mimeType: string | null;
+      storageType: string;
+      storageRef: string | null;
+    }[],
+  ): Promise<string[]> {
+    return Promise.all(
+      documents.map(async (doc) => {
+        const header = `Datei: ${doc.fileName} (${doc.mimeType ?? 'unbekannt'})`;
+
+        if (doc.storageType !== 'PAPERLESS_LINK' || !doc.storageRef) return header;
+
+        const paperlessId = Number(doc.storageRef);
+        if (!Number.isInteger(paperlessId) || paperlessId <= 0) {
+          this.logger.warn(`Document ${doc.fileName}: unusable Paperless reference ignored`);
+          return header;
+        }
+
+        const text = await this.paperless.getDocumentContent(paperlessId).catch(() => null);
+        if (!text) {
+          // Paperless unreachable or no OCR text: the name is all we have.
+          this.logger.warn(
+            `Document ${doc.fileName}: no OCR text available from Paperless (${paperlessId})`,
+          );
+          return header;
+        }
+
+        return `${header}\n--- Inhalt (OCR aus Paperless) ---\n${text}`;
+      }),
+    );
+  }
 
   private async assertAiEnabled(): Promise<void> {
     const enabled = await this.settings.getEffectiveBoolean('AI_ENABLED');
@@ -350,11 +410,10 @@ export class AiAssistService {
       where: { policyId, archivedAt: null, aiProcessingExcluded: false },
     });
 
-    // Since we currently have no full-text extraction from files,
-    // we simulate the document contents with metadata
-    const documentContents = documents.map(
-      (doc) => `Datei: ${doc.fileName} (${doc.mimeType ?? 'unbekannt'})`,
-    );
+    // AP-25: real content where it exists (Paperless OCR); metadata for
+    // uploads without a local text extraction. Before this the model only
+    // ever received file names, so no answer could describe a coverage.
+    const documentContents = await this.loadDocumentContents(documents);
 
     const result = await adapter.extractContractFacts(documentContents, policyId);
     if (!result) return null;
@@ -397,7 +456,13 @@ export class AiAssistService {
     policyId: string,
     options?: SummarizeOptions,
   ): Promise<{
-    documents: { id: string; fileName: string; mimeType: string | null }[];
+    documents: {
+      id: string;
+      fileName: string;
+      mimeType: string | null;
+      storageType: string;
+      storageRef: string | null;
+    }[];
     skipped: SummarizeSkippedDocument[];
   }> {
     const explicit = options?.documentIds;
@@ -407,6 +472,8 @@ export class AiAssistService {
       fileName: string;
       mimeType: string | null;
       aiProcessingExcluded: boolean;
+      storageType: string;
+      storageRef: string | null;
     }[];
 
     if (explicit && explicit.length > 0) {
@@ -426,7 +493,14 @@ export class AiAssistService {
           archivedAt: null,
           documentClass: 'CONTRACT',
         },
-        select: { id: true, fileName: true, mimeType: true, aiProcessingExcluded: true },
+        select: {
+          id: true,
+          fileName: true,
+          mimeType: true,
+          aiProcessingExcluded: true,
+          storageType: true,
+          storageRef: true,
+        },
       });
 
       const foundIds = new Set(found.map((doc) => doc.id));
@@ -443,7 +517,14 @@ export class AiAssistService {
     } else {
       candidates = await this.db.policyDocument.findMany({
         where: { policyId, archivedAt: null, aiProcessingExcluded: false },
-        select: { id: true, fileName: true, mimeType: true, aiProcessingExcluded: true },
+        select: {
+          id: true,
+          fileName: true,
+          mimeType: true,
+          aiProcessingExcluded: true,
+          storageType: true,
+          storageRef: true,
+        },
       });
 
       if (candidates.length > AI_SUMMARY_MAX_DOCUMENTS) {
@@ -460,7 +541,13 @@ export class AiAssistService {
     // (the adapter reports that as null) instead of turning it into an error.
     if (candidates.length === 0) return { documents: [], skipped: [] };
 
-    const documents: { id: string; fileName: string; mimeType: string | null }[] = [];
+    const documents: {
+      id: string;
+      fileName: string;
+      mimeType: string | null;
+      storageType: string;
+      storageRef: string | null;
+    }[] = [];
     const skipped: SummarizeSkippedDocument[] = [];
 
     for (const doc of candidates) {
@@ -471,7 +558,13 @@ export class AiAssistService {
       } else if (!isSupportedSummaryType(doc.mimeType)) {
         skipped.push({ id: doc.id, fileName: doc.fileName, reason: 'UNSUPPORTED_TYPE' });
       } else {
-        documents.push({ id: doc.id, fileName: doc.fileName, mimeType: doc.mimeType });
+        documents.push({
+          id: doc.id,
+          fileName: doc.fileName,
+          mimeType: doc.mimeType,
+          storageType: doc.storageType,
+          storageRef: doc.storageRef,
+        });
       }
     }
 
@@ -523,9 +616,9 @@ export class AiAssistService {
 
     const adapter: IAIAdapter = await this.providerRegistry.getAdapter();
 
-    const documentContents = selection.documents.map(
-      (doc) => `Datei: ${doc.fileName} (${doc.mimeType ?? 'unbekannt'})`,
-    );
+    // AP-25: real content where it exists (Paperless OCR); metadata for
+    // uploads without a local text extraction.
+    const documentContents = await this.loadDocumentContents(selection.documents);
 
     // AP-24 (§3.1): the size bound is checked before anything leaves the
     // instance. It is reported, never resolved by quietly cutting content.
@@ -630,7 +723,15 @@ export class AiAssistService {
 
     const document = await this.db.policyDocument.findFirst({
       where: { id: documentId, policyId, archivedAt: null, documentClass: 'BILLING' },
-      select: { id: true, fileName: true, mimeType: true, documentDate: true, aiProcessingExcluded: true },
+      select: {
+        id: true,
+        fileName: true,
+        mimeType: true,
+        documentDate: true,
+        aiProcessingExcluded: true,
+        storageType: true,
+        storageRef: true,
+      },
     });
 
     if (!document) {
@@ -653,10 +754,11 @@ export class AiAssistService {
       throw new ServiceUnavailableException('AI_COST_EXTRACTION_UNSUPPORTED');
     }
 
-    // Existing behaviour of the AI feature: documents are represented by
-    // their metadata until a full-text extraction exists. Passwords, storage
-    // references and file content never leave the instance.
-    const documentContent = `Datei: ${document.fileName} (${document.mimeType ?? 'unbekannt'})`;
+    // AP-25: real content where it exists (Paperless OCR); metadata for
+    // uploads without a local text extraction. Passwords and storage
+    // references never leave the instance; the OCR text does, which is
+    // exactly what the data-transfer notice covers.
+    const documentContent = (await this.loadDocumentContents([document]))[0];
 
     if (documentContent.length > AI_COST_EXTRACTION_MAX_CHARS) {
       throw new BadRequestException({

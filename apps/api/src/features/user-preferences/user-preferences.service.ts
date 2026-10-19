@@ -12,7 +12,7 @@ import type { UserPreferenceResponseDto } from './dto/user-preferences.dto';
  */
 export const USER_PREFERENCES_VERSION = 1;
 
-export type UserPreferenceValueType = 'hexColour' | 'themeMode';
+export type UserPreferenceValueType = 'hexColour' | 'themeMode' | 'boolean';
 
 export interface UserPreferenceDefinition {
   type: UserPreferenceValueType;
@@ -28,9 +28,18 @@ export const USER_PREFERENCE_CATALOG: Readonly<Record<string, UserPreferenceDefi
     type: 'themeMode',
     description: 'Display mode: light, dark or system.',
   },
+  // AP-25: central consent to transmit document contents to the AI provider.
+  // Stored per user so the warning does not have to be confirmed again for
+  // every AI action in every policy.
+  'ai:dataTransferConsent': {
+    type: 'boolean',
+    description:
+      'Whether the user has accepted the transfer of document contents to the AI provider.',
+  },
 } as const;
 
 const THEME_MODES = ['light', 'dark', 'system'] as const;
+const BOOLEAN_VALUES = ['true', 'false'] as const;
 
 /**
  * Manages user-scoped key-value preferences.
@@ -71,6 +80,14 @@ export class UserPreferencesService {
         if (!THEME_MODES.includes(value as (typeof THEME_MODES)[number])) {
           throw new BadRequestException(
             `Value for '${key}' must be one of: ${THEME_MODES.join(', ')}`,
+          );
+        }
+        break;
+      }
+      case 'boolean': {
+        if (!BOOLEAN_VALUES.includes(value as (typeof BOOLEAN_VALUES)[number])) {
+          throw new BadRequestException(
+            `Value for '${key}' must be one of: ${BOOLEAN_VALUES.join(', ')}`,
           );
         }
         break;

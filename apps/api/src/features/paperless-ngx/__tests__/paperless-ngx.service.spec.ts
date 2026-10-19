@@ -1056,4 +1056,74 @@ describe('PaperlessNgxService', () => {
       });
     });
   });
+
+  // AP-25: OCR text of a linked document – the only content an AI call or a
+  // preview can show for a PAPERLESS_LINK document (there is no local file).
+  describe('getDocumentContent', () => {
+    function documentResponse(content: string | null | undefined) {
+      return of({
+        data: {
+          id: 42,
+          title: 'Versicherungsschein',
+          tags: [],
+          correspondent: null,
+          document_type: null,
+          notes: null,
+          created: '2024-01-15T10:00:00Z',
+          modified: '2024-06-20T12:00:00Z',
+          mime_type: 'application/pdf',
+          content,
+        },
+      });
+    }
+
+    it('returns the OCR text reported by Paperless', async () => {
+      mockHttp.get = vi.fn().mockReturnValue(documentResponse('Deckungssumme 10.000.000 EUR'));
+
+      await expect(service.getDocumentContent(42)).resolves.toBe('Deckungssumme 10.000.000 EUR');
+      expect(mockHttp.get).toHaveBeenCalledWith(
+        'http://paperless:8000/api/documents/42/',
+        expect.any(Object),
+      );
+    });
+
+    it('returns null for an empty OCR text', async () => {
+      mockHttp.get = vi.fn().mockReturnValue(documentResponse('   '));
+
+      await expect(service.getDocumentContent(42)).resolves.toBeNull();
+    });
+
+    it('returns null when Paperless is not configured', async () => {
+      const disabled = new PaperlessNgxService(
+        mockHttp,
+        createMockSettings(configuredValues({ PAPERLESS_ENABLED: false })),
+      );
+
+      await expect(disabled.getDocumentContent(42)).resolves.toBeNull();
+      expect(mockHttp.get).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the document cannot be fetched', async () => {
+      mockHttp.get = vi.fn().mockReturnValue(
+        throwError(
+          () =>
+            new AxiosError('Not Found', 'ERR_BAD_REQUEST', undefined, undefined, {
+              data: {},
+              status: 404,
+              statusText: 'Not Found',
+              headers: {},
+              config: {},
+            } as AxiosResponse),
+        ),
+      );
+
+      await expect(service.getDocumentContent(42)).resolves.toBeNull();
+    });
+
+    it('tolerates a server that does not report a content field at all', async () => {
+      mockHttp.get = vi.fn().mockReturnValue(documentResponse(undefined));
+
+      await expect(service.getDocumentContent(42)).resolves.toBeNull();
+    });
+  });
 });

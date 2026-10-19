@@ -12,6 +12,7 @@ import { NAV_SECTIONS } from '../../components/ui/nav-config';
 import { AppearanceSettings } from '../../components/ui/appearance-settings';
 import { LanguageSelector } from '../../components/ui/language-selector';
 import { useCurrentUser } from '../../hooks/use-current-user';
+import { useAiDataTransferConsent } from '../../hooks/use-ai-data-transfer-consent';
 import { formatDate, useI18n } from '../../i18n';
 
 import { getApiBaseUrl } from '@/lib/runtime-config';
@@ -40,6 +41,8 @@ export default function SettingsPage(): ReactElement {
   const { t, language } = useI18n();
 
   const [profile, setProfile] = useState<Profile | null>(null);
+  const { acknowledged: transferAcknowledged, setAcknowledged: setTransferAcknowledged } =
+    useAiDataTransferConsent();
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -380,6 +383,31 @@ export default function SettingsPage(): ReactElement {
                 {saving ? t('settings.savingProfile') : t('settings.saveProfile')}
               </Button>
             </form>
+          </Card>
+
+          {/* AP-25: central consent to transmit document contents to the AI
+              provider – confirmed once here instead of in every policy and
+              every view that offers an AI action. USER/ADMIN only, like every
+              other preference (`@Roles(GlobalRole.USER)`); a READ_ONLY session
+              never reaches this branch (see the early return above) and can
+              perform no AI action either. */}
+          <Card style={{ marginTop: 'var(--versigo-space-6)' }}>
+            <CardHeader>
+              <SectionHeader title={t('settings.aiConsentTitle')} />
+            </CardHeader>
+            <p style={{ marginBottom: 'var(--versigo-space-3)' }}>
+              {t('settings.aiConsentBody')}
+            </p>
+            <label
+              style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}
+            >
+              <input
+                type="checkbox"
+                checked={transferAcknowledged}
+                onChange={(event) => setTransferAcknowledged(event.target.checked)}
+              />
+              <span>{t('settings.aiConsentLabel')}</span>
+            </label>
           </Card>
 
           {/* BugFix-16: change the local password. Always rendered – for an
