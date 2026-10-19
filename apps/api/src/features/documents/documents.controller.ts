@@ -152,8 +152,9 @@ export class DocumentsController {
       if (err instanceof NotFoundException) throw err;
       // The database row can exist while the stored file is gone (incomplete
       // upload, manual deletion in the storage volume, restore without data).
-      // Reporting that as an unhandled 500 leaks the absolute storage path in
-      // the response body and gives the client nothing to act on.
+      // As an unhandled error this surfaces as a generic 500 ("Internal server
+      // error") and tells the client nothing; the absolute path of the missing
+      // file stays in the server log. Answer with a machine-readable 404.
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         this.logger.warn(`${disposition} file missing on disk for doc ${docId}`);
         throw new NotFoundException({

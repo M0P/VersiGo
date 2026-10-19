@@ -247,8 +247,9 @@ describe('DocumentsService', () => {
 
   describe('getDocumentAndPath', () => {
     // AP-25: a PAPERLESS_LINK document has no local file. Before this guard a
-    // fabricated path was returned, the stat() failed and the client got an
-    // opaque 500 including the absolute storage path.
+    // fabricated path was returned and the stat() failed with ENOENT; the
+    // client got an opaque 500 ("Internal server error") instead of a usable
+    // error code.
     it('refuses a linked document instead of returning a fabricated path', async () => {
       mockDb.householdMembership.findUnique.mockResolvedValue({ householdId, userId, role: 'MEMBER' });
       mockDb.insurancePolicy.findFirst.mockResolvedValue({ id: policyId, householdId });

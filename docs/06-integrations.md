@@ -438,8 +438,10 @@ Klassifikation überlebt jeden Abgleich (eigener Test).
   (siehe «Dokumentinhalte der KI-Aufrufe»).
 - **Dokumentvorschau (Bugfix)**: `PAPERLESS_LINK`-Dokumente haben keine lokale
   Datei. Bis AP-25 baute `getDocumentAndPath` trotzdem einen Pfad, `stat()`
-  scheiterte mit `ENOENT` und der Client bekam einen undurchsichtigen `500` –
-  die Antwort enthielt dabei den absoluten Speicherpfad. Jetzt lehnt
+  scheiterte mit `ENOENT` und der Client bekam einen undurchsichtigen `500`
+  („Internal server error", die Voreinstellung von Nest für einen rohen
+  Fehler) ohne verwertbaren Fehlercode – der absolute Pfad stand nur im
+  Server-Log. Jetzt lehnt
   `GET /households/:id/policies/:pid/documents/:docId/(preview|download)`
   solche Dokumente mit `404 DOCUMENT_NOT_STORED_LOCALLY` ab; ebenso wird ein
   zwischenzeitlich gelöschtes lokales File als `404 DOCUMENT_FILE_MISSING`

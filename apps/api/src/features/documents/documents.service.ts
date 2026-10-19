@@ -208,10 +208,11 @@ export class DocumentsService {
       throw new NotFoundException('Document not found');
     }
 
-    // AP-25: a PAPERLESS_LINK document has no local file. Resolving a path
-    // from its id would hand out a path that cannot exist - the later stat()
-    // then failed with an ENOENT and surfaced as an opaque 500 that even
-    // contained the absolute storage path. Refuse it explicitly instead.
+    // AP-25: a PAPERLESS_LINK document has no local file. A path resolved from
+    // its id can never exist, so the later stat() failed with ENOENT and the
+    // preview answered with an opaque 500 ("Internal server error", Nest's
+    // default for a raw error) instead of a usable error code. Refuse it
+    // explicitly instead.
     if (document.storageType === 'PAPERLESS_LINK') {
       throw new NotFoundException({
         code: 'DOCUMENT_NOT_STORED_LOCALLY',
